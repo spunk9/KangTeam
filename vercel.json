@@ -5,6 +5,10 @@
   "functions": {
     "api/*.js": {
       "includeFiles": "data/catalog.json"
+    },
+    "api/album/*.js": {
+      "maxDuration": 60,
+      "includeFiles": "data/catalog.json"
     }
   },
   "rewrites": [

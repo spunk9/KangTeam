@@ -333,8 +333,10 @@
   function renderPrices() {
     var target = $('#prices-content');
     if (!target || !window.KangPricing) return;
-    target.innerHTML = KangPricing.groups.map(function (group) {
-      return '<article class="price-card"><h2>' + esc(group.title) + '</h2><ul>' + group.items.map(function (entry) {
+    target.innerHTML = KangPricing.groups.map(function (group, index) {
+      return '<article class="price-card">' +
+        '<div class="price-card-head"><span>PRECIOS KANG TEAM</span><span>' + String(index + 1).padStart(2, '0') + '</span></div>' +
+        '<h2>' + esc(group.title) + '</h2><ul>' + group.items.map(function (entry) {
         return '<li><span>' + esc(entry[0]) + '</span><strong>' + esc(KangPricing.money(entry[1])) + '</strong></li>';
       }).join('') + '</ul></article>';
     }).join('');
@@ -1340,6 +1342,7 @@
     state.selectedSize = sizes.indexOf('M') !== -1 ? 'M' : (sizes[0] || 'S');
 
     renderProduct();
+    renderGallery();
 
     if (!modal.classList.contains('is-open')) {
       state.returnFocus = document.activeElement;
@@ -1419,8 +1422,8 @@
     if (!main || !item) return;
 
     var path = state.gallery[state.galleryIndex] || '';
-    main.innerHTML = '<div class="img-skeleton"></div>' +
-      imgTag(photoUrl(path, 'big'), item.title, { eager: true }) +
+    main.innerHTML = imgTag(photoUrl(path, 'big'), item.title, { eager: true }) +
+      '<div class="img-skeleton" aria-hidden="true"></div>' +
       '<button class="product-zoom" id="product-zoom" type="button" aria-label="Ampliar imagen">' +
       '<svg><use href="#i-zoom"/></svg></button>';
 
