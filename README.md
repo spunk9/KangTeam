@@ -7,7 +7,7 @@ Incluye catálogo filtrable por equipo, temporada, liga y tipo de prenda, person
 camisetas (nombre, dorsal y parches), carrito y solicitud de pedido por email o WhatsApp.
 
 - **7.534 prendas · 508 equipos** (se actualiza solo cada 6 horas).
-- Sin dependencias externas: Node.js puro, HTML, CSS y JavaScript.
+- Usa Nodemailer para el envío de pedidos por Gmail SMTP.
 - Pensado para Node.js 14.17 o superior.
 
 ---
