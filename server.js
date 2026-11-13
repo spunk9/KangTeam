@@ -16,6 +16,7 @@ var pricing = require('./public/js/pricing');
 util.loadEnv(path.join(__dirname, '.env'));
 
 var ROOT = __dirname;
+var IS_VERCEL = !!process.env.VERCEL;
 var PUBLIC_DIR = path.join(ROOT, 'public');
 var DATA_DIR = path.join(ROOT, 'data');
 var CATALOG_FILE = path.join(DATA_DIR, 'catalog.json');
@@ -83,6 +84,7 @@ function catalogIsStale() {
 }
 
 function refreshIfNeeded() {
+  if (IS_VERCEL) return;
   if (syncModule.state.running || !catalogIsStale()) return;
   console.log('Catálogo desactualizado; sincronizando en segundo plano…');
   syncModule.runSync({}).then(function () {
@@ -391,7 +393,16 @@ function orderToHtml(order) {
   '</div>';
 }
 
-function saveOrder(order) {
+async function saveOrder(order) {
+  if (IS_VERCEL) {
+    var blob = await import('@vercel/blob');
+    await blob.put('orders/' + order.id + '.json', JSON.stringify(order), {
+      access: 'private',
+      addRandomSuffix: false,
+      contentType: 'application/json; charset=utf-8'
+    });
+    return;
+  }
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
   util.writeJsonAtomic(path.join(ORDERS_DIR, order.id + '.json'), order);
   fs.appendFileSync(path.join(ORDERS_DIR, 'orders.jsonl'), JSON.stringify({
@@ -553,8 +564,10 @@ function serveImage(req, res, pathname) {
     timeout: 20000
   }).then(function (result) {
     var buffer = result.buffer;
-    fs.mkdirSync(path.dirname(diskPath), { recursive: true });
-    fs.writeFileSync(diskPath, buffer);
+    if (!IS_VERCEL) {
+      fs.mkdirSync(path.dirname(diskPath), { recursive: true });
+      fs.writeFileSync(diskPath, buffer);
+    }
     delete imageInFlight[relative];
     return buffer;
   }).catch(function (err) {
@@ -578,20 +591,24 @@ async function getAlbum(id) {
   if (albumMemory[id] && now - albumMemory[id].time < 7 * 86400000) return albumMemory[id].data;
 
   var cacheFile = path.join(ALBUM_CACHE_DIR, id + '.json');
-  try {
-    var stat = fs.statSync(cacheFile);
-    if (now - stat.mtimeMs < 7 * 86400000) {
-      var cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      albumMemory[id] = { time: stat.mtimeMs, data: cached };
-      return cached;
-    }
-  } catch (e) {}
+  if (!IS_VERCEL) {
+    try {
+      var stat = fs.statSync(cacheFile);
+      if (now - stat.mtimeMs < 7 * 86400000) {
+        var cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        albumMemory[id] = { time: stat.mtimeMs, data: cached };
+        return cached;
+      }
+    } catch (e) {}
+  }
 
   var html = await yupoo.fetchWithRetries(yupoo.BASE + '/albums/' + id + '?uid=1', { timeout: 25000 }, 2);
   var album = yupoo.parseAlbum(html);
   album.images = (album.images || []).slice(0, 16);
-  fs.mkdirSync(ALBUM_CACHE_DIR, { recursive: true });
-  util.writeJsonAtomic(cacheFile, album);
+  if (!IS_VERCEL) {
+    fs.mkdirSync(ALBUM_CACHE_DIR, { recursive: true });
+    util.writeJsonAtomic(cacheFile, album);
+  }
   albumMemory[id] = { time: now, data: album };
   return album;
 }
@@ -669,6 +686,9 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/sync' && req.method === 'POST') {
+    if (IS_VERCEL) {
+      return sendJson(res, 503, { error: 'En Vercel, sincroniza el catálogo localmente y publica una nueva versión.' }, req);
+    }
     var remote = req.socket.remoteAddress || '';
     var isLocal = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
     var token = req.headers['x-admin-token'] || parsed.query.token;
@@ -706,7 +726,7 @@ async function handle(req, res) {
       var payload = JSON.parse(raw);
       var order = validateOrder(payload);
 
-      saveOrder(order);
+      await saveOrder(order);
       var delivery = await notifyOrder(order);
       var text = orderToText(order);
       var whatsappUrl = STORE.whatsapp
@@ -719,7 +739,7 @@ async function handle(req, res) {
       console.log('Pedido', order.id, '·', order.customer.name, '·', order.totalItems, 'art. · email:', delivery.email, '· wa:', delivery.whatsapp);
       return sendJson(res, 200, {
         ok: true,
-        order: { id: order.id, createdAt: order.createdAt },
+        order: { id: order.id, createdAt: order.createdAt, totalPriceCents: order.totalPriceCents },
         delivery: delivery,
         whatsappUrl: whatsappUrl,
         mailtoUrl: mailtoUrl,
@@ -739,18 +759,22 @@ async function handle(req, res) {
   return sendText(res, 405, 'Método no permitido');
 }
 
-var server = http.createServer(function (req, res) {
+function handleRequest(req, res) {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  handle(req, res).catch(function (err) {
+  return handle(req, res).catch(function (err) {
     console.error('Error no controlado:', err);
     if (!res.headersSent) sendJson(res, 500, { error: 'Error interno' }, req);
     else res.end();
   });
-});
+}
+
+var server = http.createServer(handleRequest);
+module.exports = { handleRequest: handleRequest };
 
 loadCatalogFromDisk();
 
+if (require.main === module) {
 server.listen(PORT, function () {
   console.log('');
   console.log('  ⚽  ' + STORE.name + ' · catálogo online');
@@ -769,10 +793,11 @@ server.listen(PORT, function () {
     setTimeout(refreshIfNeeded, 3000);
   }
 
-  setInterval(refreshIfNeeded, 30 * 60 * 1000);
+  if (!IS_VERCEL) setInterval(refreshIfNeeded, 30 * 60 * 1000);
 });
 
 process.on('SIGINT', function () {
   console.log('\nCerrando…');
   server.close(function () { process.exit(0); });
 });
+}

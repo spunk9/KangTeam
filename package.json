@@ -11,9 +11,10 @@
     "sync:force": "node scripts/sync.js --force"
   },
   "engines": {
-    "node": ">=14.17"
+    "node": ">=20.0.0"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.0",
     "nodemailer": "^7.0.13"
   },
   "license": "UNLICENSED"

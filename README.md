@@ -211,6 +211,17 @@ data/cache/            Caché de imágenes y álbumes
 
 ## Despliegue
 
+### Vercel
+
+1. Importa este repositorio en Vercel con la raíz del repositorio como directorio del proyecto. `vercel.json` publica `public/` como contenido estático y enruta `/api/*` y `/img/*` a funciones Node.js.
+2. Crea una tienda **Vercel Blob privada** desde la pestaña Storage del proyecto. Al conectarla al proyecto, Vercel configura la autenticación del SDK. Los pedidos se guardan como `orders/<ID>.json`; no se guardan en el sistema de archivos temporal de la función.
+3. Añade en Project Settings → Environment Variables `STORE_NAME`, `STORE_WHATSAPP`, `STORE_EMAIL`, `ORDER_TO`, `GMAIL_USER` y `GMAIL_APP_PASSWORD`. La contraseña de aplicación se introduce en Vercel, nunca en Git.
+4. Despliega `main`. El catálogo incluido en `data/catalog.json` es de solo lectura en Vercel; para actualizarlo, sincronízalo localmente y publica el cambio en Git.
+
+Vercel no ejecuta la sincronización periódica del servidor. La caché de imágenes y álbumes es temporal y se vuelve a generar cuando se necesita.
+
+### Otros servidores
+
 - Usa un proceso persistente (`pm2`, systemd, Docker…) y mantén `data/` en un volumen
   que no se borre entre despliegues.
 - Sirve la app detrás de HTTPS.
