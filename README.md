@@ -19,7 +19,10 @@ camisetas (nombre, dorsal y parches), carrito y solicitud de pedido por email o 
 Copy-Item .env.example .env
 notepad .env
 
-# 2. Arrancar
+# 2. Instalar dependencia de email
+npm install
+
+# 3. Arrancar
 npm start
 ```
 
