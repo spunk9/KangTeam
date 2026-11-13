@@ -5,15 +5,12 @@
   "functions": {
     "api/*.js": {
       "includeFiles": "data/catalog.json"
-    },
-    "api/img/*.js": {
-      "includeFiles": "data/catalog.json"
     }
   },
   "rewrites": [
     {
-      "source": "/img/:path*",
-      "destination": "/api/img/:path*"
+      "source": "/img/:folder/:hash/:filename",
+      "destination": "/api/img?folder=:folder&hash=:hash&filename=:filename"
     }
   ]
 }
