@@ -1,0 +1,63 @@
+name: Actualizar catálogo
+
+on:
+  schedule:
+    # Ejecutar cada 6 horas, con minutos distintos de :00 para evitar horas punta.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Sincronizar catálogo desde Yupoo
+        run: npm run sync
+
+      - name: Descartar cambios si solo cambió la fecha de generación
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const { execFileSync } = require('child_process');
+          const current = JSON.parse(fs.readFileSync('data/catalog.json', 'utf8'));
+          const previous = JSON.parse(execFileSync('git', ['show', 'HEAD:data/catalog.json'], { encoding: 'utf8' }));
+          const sameContent = JSON.stringify(current.items) === JSON.stringify(previous.items)
+            && current.meta.source === previous.meta.source
+            && current.meta.store === previous.meta.store
+            && current.meta.total === previous.meta.total
+            && current.meta.pages === previous.meta.pages;
+          if (sameContent) {
+            execFileSync('git', ['checkout', 'HEAD', '--', 'data/catalog.json']);
+            console.log('El catálogo no cambió; no se creará ningún commit.');
+          }
+          NODE
+
+      - name: Publicar cambios del catálogo
+        run: |
+          if git diff --quiet -- data/catalog.json; then
+            echo "Sin cambios en el catálogo."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/catalog.json
+          git commit -m "Actualizar catálogo automáticamente"
+          git push
