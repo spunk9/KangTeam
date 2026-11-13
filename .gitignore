@@ -1,0 +1,15 @@
+node_modules/
+.env
+.npm-cache/
+.npm-global/
+
+# Caché regenerable
+data/cache/
+
+# Pedidos reales de clientes: nunca subir al repositorio
+data/orders/
+
+# Logs y temporales
+*.log
+.DS_Store
+Thumbs.db
