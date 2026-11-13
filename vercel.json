@@ -6,8 +6,14 @@
     "api/*.js": {
       "includeFiles": "data/catalog.json"
     },
-    "img/*.js": {
+    "api/img/*.js": {
       "includeFiles": "data/catalog.json"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/img/:path*",
+      "destination": "/api/img/:path*"
+    }
+  ]
 }
