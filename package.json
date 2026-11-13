@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "build": "node --check server.js && node --check scripts/sync.js && node --check public/js/app.js && node --check public/js/pricing.js",
+    "lint": "node --check server.js && node --check lib/parse.js && node --check lib/teams.js && node --check lib/util.js && node --check lib/yupoo.js && node --check scripts/sync.js && node --check public/js/app.js && node --check public/js/pricing.js",
     "sync": "node scripts/sync.js",
     "sync:force": "node scripts/sync.js --force"
   },
@@ -14,7 +16,6 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@vercel/blob": "^2.9.0",
     "nodemailer": "^7.0.13"
   },
   "license": "UNLICENSED"

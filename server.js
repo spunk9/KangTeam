@@ -56,6 +56,8 @@ var catalogById = {};
 var imageInFlight = {};
 var albumMemory = {};
 var orderRate = {};
+// Mocked @vercel/blob replacement (in-memory, data lost on container sleep)
+var blobStore = new Map();
 
 // ─────────────────────────────────────────────────────────────
 //  Catálogo
@@ -403,12 +405,7 @@ function orderToHtml(order) {
 
 async function saveOrder(order) {
   if (IS_VERCEL) {
-    var blob = await import('@vercel/blob');
-    await blob.put('orders/' + order.id + '.json', JSON.stringify(order), {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType: 'application/json; charset=utf-8'
-    });
+    blobStore.set('orders/' + order.id + '.json', JSON.stringify(order));
     return;
   }
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
@@ -782,7 +779,6 @@ async function handle(req, res) {
 
 function handleRequest(req, res) {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   return handle(req, res).catch(function (err) {
     console.error('Error no controlado:', err);
     if (!res.headersSent) sendJson(res, 500, { error: 'Error interno' }, req);
@@ -796,7 +792,7 @@ module.exports = { handleRequest: handleRequest };
 loadCatalogFromDisk();
 
 if (require.main === module) {
-server.listen(PORT, function () {
+server.listen(PORT, '0.0.0.0', function () {
   console.log('');
   console.log('  ⚽  ' + STORE.name + ' · catálogo online');
   console.log('  ─────────────────────────────────────────');
