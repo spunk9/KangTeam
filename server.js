@@ -405,8 +405,19 @@ function orderToHtml(order) {
 
 async function saveOrder(order) {
   if (IS_VERCEL) {
-    blobStore.set('orders/' + order.id + '.json', JSON.stringify(order));
-    return;
+    try {
+      var blob = await import('@vercel/blob');
+      await blob.put('orders/' + order.id + '.json', JSON.stringify(order), {
+        access: 'private',
+        addRandomSuffix: false,
+        contentType: 'application/json; charset=utf-8'
+      });
+      return;
+    } catch (err) {
+      if (process.env.BLOB_READ_WRITE_TOKEN) throw err;
+      blobStore.set('orders/' + order.id + '.json', JSON.stringify(order));
+      return;
+    }
   }
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
   util.writeJsonAtomic(path.join(ORDERS_DIR, order.id + '.json'), order);

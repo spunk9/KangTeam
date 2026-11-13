@@ -62,6 +62,10 @@
     selectedSize: '',
     qty: 1,
     patches: 'No',
+    customName: '',
+    customNumber: '',
+    sizeGuideOpen: false,
+    sizeGuideTab: 'adult',
     cart: [],
     lastOrder: null,
     overlayCount: 0,
@@ -154,6 +158,137 @@
 
   function flagLabel(value) { return FLAG_LABELS[value] || value; }
 
+  var ADULT_SIZE_GUIDE = [
+    { size: 'S', chest: '96–100', length: '70', height: '165–172', weight: '60–68 kg' },
+    { size: 'M', chest: '100–104', length: '72', height: '172–177', weight: '68–75 kg' },
+    { size: 'L', chest: '104–108', length: '74', height: '177–182', weight: '75–83 kg' },
+    { size: 'XL', chest: '108–112', length: '76', height: '182–187', weight: '83–90 kg' },
+    { size: '2XL', chest: '112–116', length: '78', height: '187–192', weight: '90–98 kg' },
+    { size: '3XL', chest: '116–122', length: '80', height: '190–196', weight: '98–106 kg', extra: '+3,00 €' },
+    { size: '4XL', chest: '122–128', length: '82', height: '192–200', weight: '106–115 kg', extra: '+3,00 €' },
+    { size: '5XL', chest: '128–134', length: '84', height: '195–205', weight: '+115 kg' }
+  ];
+
+  var KIDS_SIZE_GUIDE = [
+    { size: '10', age: '1–2 años', height: '80–88', chest: '54–58' },
+    { size: '12', age: '2 años', height: '88–94', chest: '58–62' },
+    { size: '14', age: '2–3 años', height: '94–100', chest: '62–66' },
+    { size: '16', age: '3–4 años', height: '95–105', chest: '66–70' },
+    { size: '18', age: '4–5 años', height: '105–115', chest: '70–74' },
+    { size: '20', age: '6–7 años', height: '115–125', chest: '74–78' },
+    { size: '22', age: '7–8 años', height: '125–135', chest: '78–82' },
+    { size: '24', age: '9–10 años', height: '135–145', chest: '82–86' },
+    { size: '26', age: '10–11 años', height: '145–155', chest: '86–90' },
+    { size: '28', age: '12–13 años', height: '155–165', chest: '90–94' },
+    { size: '30', age: '13–14 años', height: '165–170', chest: '94–98' }
+  ];
+
+  function isKidsItem(item) {
+    if (!item) return false;
+    if (/^\d{1,2}-\d{1,2}$/.test(String(item.sizeRange || ''))) return true;
+    return Array.isArray(item.flags) && item.flags.indexOf('kids') !== -1;
+  }
+
+  function sizeGuideRow(size) {
+    var key = String(size || '').toUpperCase();
+    for (var i = 0; i < KIDS_SIZE_GUIDE.length; i++) {
+      if (KIDS_SIZE_GUIDE[i].size === key) return { kind: 'kids', row: KIDS_SIZE_GUIDE[i] };
+    }
+    for (var j = 0; j < ADULT_SIZE_GUIDE.length; j++) {
+      if (ADULT_SIZE_GUIDE[j].size === key) return { kind: 'adult', row: ADULT_SIZE_GUIDE[j] };
+    }
+    return null;
+  }
+
+  function sizeFitHintText(size, item) {
+    var match = sizeGuideRow(size);
+    if (!match) return '';
+    if (match.kind === 'kids') {
+      return 'Talla ' + match.row.size + ' · Edad aprox. ' + match.row.age + ' · Altura ' + match.row.height + ' cm · Pecho ' + match.row.chest + ' cm';
+    }
+    var parts = ['Talla ' + match.row.size, 'Pecho ' + match.row.chest + ' cm', 'Largo ' + match.row.length + ' cm', 'Altura ' + match.row.height + ' cm'];
+    if (item && Array.isArray(item.flags) && item.flags.indexOf('player') !== -1) {
+      parts.push('Corte Player ajustado');
+    }
+    if (match.row.extra) {
+      parts.push('Suplemento ' + match.row.extra);
+    }
+    return parts.join(' · ');
+  }
+
+  function cleanTitle(item) {
+    if (!item || !item.title) return '';
+    if (item._cleanTitle) return item._cleanTitle;
+    var text = String(item.title)
+      .replace(/T恤/g, ' Camiseta ')
+      .replace(/Polo衫/gi, ' Polo ')
+      .replace(/黑色/g, ' Negro ')
+      .replace(/白色/g, ' Blanco ');
+
+    text = text
+      .replace(/^[A-Z]?\d{3,6}#\s*/i, '')
+      .replace(/[-–—]?\s*[\u3040-\u30ff\u4e00-\u9fff]+[\w\u3040-\u30ff\u4e00-\u9fff-]*/g, ' ')
+      .replace(/\b口\d+\b/g, ' ')
+      .replace(/\bsize\s*:?\s*\d{1,2}\s*[-–]\s*\d{1,2}\b/ig, ' ')
+      .replace(/\b(?:10|12|14|16|18|20|22|24|26|28|30)\s*[-–]\s*(?:10|12|14|16|18|20|22|24|26|28|30)\b/g, ' ')
+      .replace(/\b(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)\s*[-–]\s*(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)\b/ig, ' ')
+      .replace(/\b(?:two-stars|top quality|best quality|in stock|ready stock|1:1)\b/ig, ' ')
+      .replace(/\b(2[0-9])(2[0-9])\b/g, function (full, a, b) {
+        return parseInt(b, 10) === parseInt(a, 10) + 1 ? a + '/' + b : full;
+      })
+      .replace(/\bM-U\b/g, 'Manchester United')
+      .replace(/\bGK-/ig, 'Portero ');
+
+    var subTraining = item.subcategory && !/^Niños\s*·/i.test(item.subcategory) ? item.subcategory : 'Conjunto Entrenamiento';
+    text = text
+      .replace(/\bFull\s+Zip(?:per)?\s+Hooded\s+Windbreaker\s+Set\b/ig, 'Conjunto Cortavientos Capucha')
+      .replace(/\bWindbreaker\s+Set\b/ig, 'Conjunto Cortavientos')
+      .replace(/\bWindbreaker\b/ig, 'Cortavientos')
+      .replace(/\bTraining\s+Suit\s+Set\b/ig, 'Chándal Entrenamiento')
+      .replace(/\bTraining\s+Suit\b/ig, 'Chándal Entrenamiento')
+      .replace(/\bTraining\s+Wear\b/ig, subTraining)
+      .replace(/\bTracksuit\b/ig, 'Chándal')
+      .replace(/\bPlayer\s+Version\b/ig, 'Versión Jugador')
+      .replace(/\bLong[-\s]?Sleeved?\b/ig, 'Manga Larga')
+      .replace(/\bLong\s+Sleeves\b/ig, 'Manga Larga')
+      .replace(/\bShort[-\s]?Sleeved?\b/ig, 'Manga Corta')
+      .replace(/\bWomen'?s\b/ig, 'Mujer')
+      .replace(/\bKids\s+Kit\b/ig, 'Niños')
+      .replace(/\bKids\b/ig, 'Niños')
+      .replace(/\bGoalkeeper\b/ig, 'Portero')
+      .replace(/\bSpecial\s+Edition\b/ig, 'Edición Especial')
+      .replace(/\bAnniversary\s+Edition\b/ig, 'Edición Aniversario')
+      .replace(/\bCommemorative\s+Edition\b/ig, 'Edición Conmemorativa')
+      .replace(/\bThird\s+Away\b/ig, '3ª Equipación')
+      .replace(/\bThird\b/ig, '3ª Equipación')
+      .replace(/\bFourth\b/ig, '4ª Equipación')
+      .replace(/\bHome\b/ig, '1ª Equipación')
+      .replace(/\bAway\b/ig, '2ª Equipación')
+      .replace(/\bRetro\s+Jersey\b/ig, 'Camiseta Retro')
+      .replace(/\bBasketball\s+Jersey\b/ig, 'Camiseta Baloncesto')
+      .replace(/\bBasketball\s+Shorts\b/ig, 'Pantalón Baloncesto')
+      .replace(/\bT-Shirt\b/ig, 'Camiseta')
+      .replace(/\bJersey\b/ig, 'Camiseta')
+      .replace(/\bKit\b/ig, 'Equipación')
+      .replace(/\bPOLO\b/g, 'Polo');
+
+    text = text
+      .replace(/\b(1ª|2ª|3ª|4ª)\s+Equipación\s+(?:([^·]+?)\s+)?Camiseta\s+Retro\b/gi, '$1 Equipación $2 Retro')
+      .replace(/\b(1ª|2ª|3ª|4ª)\s+Equipación\s+(?:([^·]+?)\s+)?Camiseta\b/gi, '$1 Equipación $2')
+      .replace(/\s*[-–—|]+\s*$/g, '')
+      .replace(/^\s*[-–—|]+\s*/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    item._cleanTitle = text || item.title;
+    return item._cleanTitle;
+  }
+
+  function itemBasePriceCents(item) {
+    if (!window.KangPricing || !item) return 2500;
+    return KangPricing.calculate(item, {}).basePriceCents;
+  }
+
   function formatDate(value) {
     if (!value) return '—';
     try {
@@ -245,7 +380,8 @@
     state.items.forEach(function (item) {
       item.collection = item.collection || 'equipaciones';
       item.source = item.source || 'minkang';
-      item._search = normalize([item.team, item.title, item.season, item.league, typeLabel(item.type), item.subcategory, DEPARTMENT_LABELS[item.department] || ''].join(' '));
+      var display = cleanTitle(item);
+      item._search = normalize([item.team, item.title, display, item.season, item.league, typeLabel(item.type), item.subcategory, DEPARTMENT_LABELS[item.department] || ''].join(' '));
       var team = state.teams.get(item.team);
       if (!team) {
         team = { name: item.team, league: item.league || 'Otras ligas', count: 0, seasons: new Map(), cover: item.cover, sample: item };
@@ -489,10 +625,12 @@
     if (feature) {
       var heroItem = chosen.filter(function (item) { return item.custom && item.seasonGroup === '26/27'; })[0] || chosen[0];
       if (heroItem) {
+        var heroTitle = cleanTitle(heroItem);
+        var heroPrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(heroItem)) : '';
         feature.innerHTML = '<div class="hero-feature-card">' +
           '<div class="hero-badge">NUEVO<span>26/27</span></div>' +
-          '<div class="hero-feature-img">' + imgTag(coverUrl(heroItem, 'medium'), heroItem.title, { eager: true }) + '</div>' +
-          '<div class="hero-feature-meta"><div><span>' + esc(heroItem.team) + ' · ' + esc(heroItem.season) + '</span><strong>' + esc(heroItem.title) + '</strong></div><svg><use href="#i-arrow"/></svg></div>' +
+          '<div class="hero-feature-img">' + imgTag(coverUrl(heroItem, 'medium'), heroTitle, { eager: true }) + '</div>' +
+          '<div class="hero-feature-meta"><div><span>' + esc(heroItem.team) + ' · ' + esc(heroItem.season) + (heroPrice ? ' · ' + esc(heroPrice) : '') + '</span><strong>' + esc(heroTitle) + '</strong></div><svg><use href="#i-arrow"/></svg></div>' +
           '</div>';
         feature.style.cursor = 'pointer';
         feature.onclick = function () { openProduct(heroItem.id); };
@@ -559,16 +697,25 @@
     if (item.flags && item.flags.indexOf('retro') !== -1) badges += '<span class="badge badge-light">Retro</span>';
     if (item.flags && item.flags.indexOf('kids') !== -1) badges += '<span class="badge">Niños</span>';
 
+    var title = cleanTitle(item);
+    var baseCents = itemBasePriceCents(item);
+    var priceText = window.KangPricing ? KangPricing.money(baseCents) : '';
+    var hasSpecialSize = /(?:3XL|4XL)/.test(String(item.sizeRange || ''));
+    var priceMeta = item.custom
+      ? '+2 € nombre/dorsal · +1 € parche'
+      : (hasSpecialSize ? '3XL/4XL +3 €' : 'Tallas ' + (item.sizeRange || 'S-2XL'));
+
     return '<article class="card" data-product="' + esc(item.id) + '">' +
       '<div class="card-media">' +
-        '<button class="card-open" type="button" aria-label="Ver ' + esc(item.title) + '"></button>' +
-        imgTag(coverUrl(item, 'small'), item.title) +
+        '<button class="card-open" type="button" aria-label="Ver ' + esc(title) + '"></button>' +
+        imgTag(coverUrl(item, 'small'), title) +
         '<div class="card-badges" aria-hidden="true">' + badges + '</div>' +
-        '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(item.title) + '"><svg><use href="#i-plus"/></svg></button>' +
+        '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(title) + '"><svg><use href="#i-plus"/></svg></button>' +
       '</div>' +
       '<div class="card-body">' +
         '<div class="card-kicker"><span>' + esc(item.team) + '</span><span>' + esc(item.season) + '</span></div>' +
-        '<h3 class="card-title">' + esc(item.title) + '</h3>' +
+        '<h3 class="card-title" title="' + esc(item.title) + '">' + esc(title) + '</h3>' +
+        (priceText ? '<div class="card-price-row"><strong class="card-price">' + esc(priceText) + '</strong><span class="card-price-note">' + esc(priceMeta) + '</span></div>' : '') +
         '<div class="card-foot"><span class="type-label">' + esc(item.subcategory || typeLabel(item.type)) + '</span>' +
           (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Nombre + dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
         '</div>' +
@@ -1415,6 +1562,8 @@
     state.patches = 'No';
     state.customName = '';
     state.customNumber = '';
+    state.sizeGuideOpen = false;
+    state.sizeGuideTab = isKidsItem(item) ? 'kids' : 'adult';
 
     var sizes = expandSizes(item.sizeRange);
     state.selectedSize = sizes.indexOf('M') !== -1 ? 'M' : (sizes[0] || 'S');
@@ -1522,6 +1671,137 @@
     renderGallery();
   }
 
+  function currentProductPricing() {
+    var item = state.product;
+    if (!item || !window.KangPricing) return { basePriceCents: 2500, nameNumberCents: 0, patchesCents: 0, sizeSurchargeCents: 0, unitPriceCents: 2500 };
+    var name = item.custom ? String(state.customName || '').trim().toUpperCase().slice(0, 14) : '';
+    var number = item.custom ? String(state.customNumber || '').replace(/\D/g, '').slice(0, 2) : '';
+    var patches = item.custom ? state.patches : 'No';
+    return KangPricing.calculate(item, {
+      name: name,
+      number: number,
+      patches: patches,
+      size: state.selectedSize
+    });
+  }
+
+  function renderPriceBreakdownHtml() {
+    var item = state.product;
+    if (!item || !window.KangPricing) return '';
+    var calc = currentProductPricing();
+    var qty = Math.max(1, parseInt(state.qty, 10) || 1);
+    var totalCents = calc.unitPriceCents * qty;
+    var selectedPatches = state.patches === 'No' ? [] : state.patches.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+    var hasSpecialSizes = /(?:3XL|4XL)/.test(String(item.sizeRange || ''));
+
+    var rows = [];
+    rows.push('<div class="price-breakdown-row"><span>Precio base (' + esc(item.subcategory || typeLabel(item.type)) + ')</span><strong>' + esc(KangPricing.money(calc.basePriceCents)) + '</strong></div>');
+
+    if (item.custom) {
+      rows.push('<div class="price-breakdown-row' + (calc.nameNumberCents ? ' is-active' : ' is-muted') + '">' +
+        '<span>Nombre y dorsal</span>' +
+        '<strong>' + (calc.nameNumberCents ? '+' + esc(KangPricing.money(calc.nameNumberCents)) : 'Opcional (+2,00 €)') + '</strong></div>');
+      rows.push('<div class="price-breakdown-row' + (calc.patchesCents ? ' is-active' : ' is-muted') + '">' +
+        '<span>Parches' + (selectedPatches.length ? ' (' + selectedPatches.length + ')' : '') + '</span>' +
+        '<strong>' + (calc.patchesCents ? '+' + esc(KangPricing.money(calc.patchesCents)) : 'Opcional (+1,00 €/ud.)') + '</strong></div>');
+    }
+
+    if (calc.sizeSurchargeCents > 0) {
+      rows.push('<div class="price-breakdown-row is-active"><span>Suplemento talla especial (' + esc(state.selectedSize) + ')</span><strong>+' + esc(KangPricing.money(calc.sizeSurchargeCents)) + '</strong></div>');
+    } else if (hasSpecialSizes) {
+      rows.push('<div class="price-breakdown-row is-muted"><span>Tallas especiales (3XL / 4XL)</span><strong>Opcional (+3,00 €)</strong></div>');
+    }
+
+    if (qty > 1) {
+      rows.push('<div class="price-breakdown-row is-active"><span>Cantidad (' + qty + ' × ' + esc(KangPricing.money(calc.unitPriceCents)) + ')</span><strong>' + esc(KangPricing.money(totalCents)) + '</strong></div>');
+    }
+
+    return '<div class="product-price-head">' +
+        '<div><span class="product-price-label">' + (qty > 1 ? 'Total (' + qty + ' uds.)' : 'Precio total') + '</span>' +
+        '<strong class="product-price-main">' + esc(KangPricing.money(totalCents)) + '</strong></div>' +
+        (qty > 1 ? '<span class="product-price-unit">' + esc(KangPricing.money(calc.unitPriceCents)) + ' / ud.</span>' : (calc.unitPriceCents > calc.basePriceCents ? '<span class="product-price-unit">Base ' + esc(KangPricing.money(calc.basePriceCents)) + '</span>' : '<span class="product-price-unit">Sin extras</span>')) +
+      '</div>' +
+      '<div class="price-breakdown">' + rows.join('') + '</div>';
+  }
+
+  function updateProductPricing() {
+    var box = $('#product-price-box');
+    if (box) box.innerHTML = renderPriceBreakdownHtml();
+    var addBtn = $('#product-add');
+    if (addBtn && window.KangPricing) {
+      var calc = currentProductPricing();
+      var qty = Math.max(1, parseInt(state.qty, 10) || 1);
+      addBtn.innerHTML = 'Añadir al carrito · ' + esc(KangPricing.money(calc.unitPriceCents * qty)) + ' <svg><use href="#i-cart"/></svg>';
+    }
+  }
+
+  function renderSizeGuideHtml() {
+    var item = state.product;
+    var available = item ? expandSizes(item.sizeRange) : [];
+    var tab = state.sizeGuideTab === 'kids' ? 'kids' : 'adult';
+    var isKids = tab === 'kids';
+
+    var tableRows = isKids ? KIDS_SIZE_GUIDE.map(function (row) {
+      var isAvailable = available.indexOf(row.size) !== -1;
+      var isCurrent = state.selectedSize === row.size;
+      var cls = (isCurrent ? 'is-current' : '') + (isAvailable ? ' is-available' : ' is-unavailable');
+      return '<tr class="' + cls.trim() + '"' + (isAvailable ? ' data-guide-size="' + esc(row.size) + '" title="Seleccionar talla ' + esc(row.size) + '"' : '') + '>' +
+        '<td><strong>' + esc(row.size) + '</strong></td>' +
+        '<td>' + esc(row.age) + '</td>' +
+        '<td>' + esc(row.height) + ' cm</td>' +
+        '<td>' + esc(row.chest) + ' cm</td>' +
+      '</tr>';
+    }).join('') : ADULT_SIZE_GUIDE.map(function (row) {
+      var isAvailable = available.indexOf(row.size) !== -1;
+      var isCurrent = state.selectedSize === row.size;
+      var cls = (isCurrent ? 'is-current' : '') + (isAvailable ? ' is-available' : ' is-unavailable');
+      return '<tr class="' + cls.trim() + '"' + (isAvailable ? ' data-guide-size="' + esc(row.size) + '" title="Seleccionar talla ' + esc(row.size) + '"' : '') + '>' +
+        '<td><strong>' + esc(row.size) + '</strong>' + (row.extra ? ' <small>' + esc(row.extra) + '</small>' : '') + '</td>' +
+        '<td>' + esc(row.chest) + ' cm</td>' +
+        '<td>' + esc(row.length) + ' cm</td>' +
+        '<td>' + esc(row.height) + ' cm</td>' +
+        '<td>' + esc(row.weight) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    var headers = isKids
+      ? '<tr><th>Talla</th><th>Edad aprox.</th><th>Altura</th><th>Pecho</th></tr>'
+      : '<tr><th>Talla</th><th>Pecho</th><th>Largo</th><th>Altura</th><th>Peso</th></tr>';
+
+    var note = isKids
+      ? 'Medidas orientativas (±2 cm). Si el niño está entre dos tallas, elige la superior para mayor comodidad.'
+      : 'Medidas orientativas (±2 cm). En Versión Jugador (Player), el corte es más entallado: si dudas entre dos tallas, sube una. Tallas 3XL y 4XL suman +3,00 €.';
+
+    return '<div class="size-guide-head">' +
+        '<div class="size-guide-tabs" role="tablist" aria-label="Guía de tallas">' +
+          '<button type="button" role="tab" aria-selected="' + (!isKids) + '" class="' + (!isKids ? 'is-active' : '') + '" data-guide-tab="adult">Adulto (S–5XL)</button>' +
+          '<button type="button" role="tab" aria-selected="' + isKids + '" class="' + (isKids ? 'is-active' : '') + '" data-guide-tab="kids">Niños (10–30)</button>' +
+        '</div>' +
+        '<span class="size-guide-legend">Toca una talla disponible para elegirla</span>' +
+      '</div>' +
+      '<div class="size-guide-table-wrap">' +
+        '<table class="size-guide-table"><thead>' + headers + '</thead><tbody>' + tableRows + '</tbody></table>' +
+      '</div>' +
+      '<p class="size-guide-note">' + esc(note) + '</p>';
+  }
+
+  function updateSizeGuidePanel() {
+    var panel = $('#size-guide-panel');
+    var toggle = $('#size-guide-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', state.sizeGuideOpen ? 'true' : 'false');
+    if (!panel) return;
+    panel.hidden = !state.sizeGuideOpen;
+    if (state.sizeGuideOpen) panel.innerHTML = renderSizeGuideHtml();
+  }
+
+  function updateSizeHints() {
+    var hint = $('#size-hint');
+    if (hint) hint.textContent = state.selectedSize;
+    var fit = $('#size-fit-hint');
+    if (fit) fit.textContent = sizeFitHintText(state.selectedSize, state.product);
+    if (state.sizeGuideOpen) updateSizeGuidePanel();
+  }
+
   function renderProduct() {
     var item = state.product;
     var info = $('#product-info');
@@ -1569,27 +1849,39 @@
       '<div class="not-customizable"><svg><use href="#i-shirt"/></svg>' +
         '<span>Esta prenda no admite nombre ni dorsal. Solo necesitas elegir la talla.</span></div>';
 
+    var title = cleanTitle(item);
+    var fitText = sizeFitHintText(state.selectedSize, item);
+
     info.innerHTML =
       '<div class="product-info-top">' +
         '<span class="product-league">' + esc(item.league || 'Catálogo') + '</span>' +
         '<span class="product-season">' + esc(seasonLabel(item.seasonGroup)) + '</span>' +
         (item.custom ? '<span class="product-tag is-accent">Personalizable</span>' : '') +
       '</div>' +
-      '<h2 id="product-title">' + esc(item.title) + '</h2>' +
+      '<h2 id="product-title">' + esc(title) + '</h2>' +
       '<p class="product-team">' + esc(item.team) + ' · ' + esc(item.season) + ' · Tallas ' + esc(item.sizeRange) + '</p>' +
+      '<p class="product-supplier-ref"><span>Ref. proveedor:</span> ' + esc(item.title) + '</p>' +
       '<div class="product-tags">' + tags + '</div>' +
-      '<p class="field-label">Talla <span id="size-hint">' + esc(state.selectedSize) + '</span></p>' +
+      '<div class="product-price-box" id="product-price-box">' + renderPriceBreakdownHtml() + '</div>' +
+      '<div class="size-head-row">' +
+        '<p class="field-label">Talla <span id="size-hint">' + esc(state.selectedSize) + '</span></p>' +
+        '<button type="button" class="size-guide-toggle" id="size-guide-toggle" aria-expanded="' + (state.sizeGuideOpen ? 'true' : 'false') + '" aria-controls="size-guide-panel"><svg><use href="#i-ruler"/></svg> Guía de tallas</button>' +
+      '</div>' +
       '<div class="size-list" id="size-list">' + sizeButtons + '</div>' +
+      '<p class="size-fit-hint" id="size-fit-hint">' + esc(fitText) + '</p>' +
+      '<div class="size-guide-panel" id="size-guide-panel"' + (state.sizeGuideOpen ? '' : ' hidden') + '>' + (state.sizeGuideOpen ? renderSizeGuideHtml() : '') + '</div>' +
       customPanel +
       '<div class="product-add-row">' +
         '<div class="qty">' +
           '<button type="button" data-qty="-1" aria-label="Quitar una unidad"><svg><use href="#i-minus"/></svg></button>' +
-          '<span id="product-qty">1</span>' +
+          '<span id="product-qty">' + esc(state.qty) + '</span>' +
           '<button type="button" data-qty="1" aria-label="Añadir una unidad"><svg><use href="#i-plus"/></svg></button>' +
         '</div>' +
         '<button class="btn btn-primary" id="product-add" type="button">Añadir al carrito <svg><use href="#i-cart"/></svg></button>' +
       '</div>' +
       '<p class="product-disclaimer">Sin pago online. Confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>';
+
+    updateProductPricing();
   }
 
   function selectSize(size) {
@@ -1597,8 +1889,8 @@
     $$('#product-info .size-btn').forEach(function (button) {
       button.classList.toggle('is-active', button.getAttribute('data-size') === size);
     });
-    var hint = $('#size-hint');
-    if (hint) hint.textContent = size;
+    updateSizeHints();
+    updateProductPricing();
   }
 
   function selectPatch(value) {
@@ -1613,18 +1905,36 @@
       option.classList.toggle('is-active', active);
       option.setAttribute('aria-pressed', String(active));
     });
+    updateProductPricing();
   }
 
   function changeProductQty(delta) {
     state.qty = Math.min(30, Math.max(1, state.qty + delta));
     var qty = $('#product-qty');
     if (qty) qty.textContent = String(state.qty);
+    updateProductPricing();
   }
 
   function bindProductEvents() {
     var info = $('#product-info');
     if (info) {
       info.addEventListener('click', function (event) {
+        if (event.target.closest('#size-guide-toggle')) {
+          state.sizeGuideOpen = !state.sizeGuideOpen;
+          updateSizeGuidePanel();
+          return;
+        }
+        var guideTab = event.target.closest('[data-guide-tab]');
+        if (guideTab) {
+          state.sizeGuideTab = guideTab.getAttribute('data-guide-tab') === 'kids' ? 'kids' : 'adult';
+          updateSizeGuidePanel();
+          return;
+        }
+        var guideSize = event.target.closest('[data-guide-size]');
+        if (guideSize) {
+          selectSize(guideSize.getAttribute('data-guide-size'));
+          return;
+        }
         var size = event.target.closest('[data-size]');
         if (size) {
           selectSize(size.getAttribute('data-size'));
@@ -1646,10 +1956,12 @@
       info.addEventListener('input', function (event) {
         if (event.target.id === 'custom-name') {
           state.customName = event.target.value.slice(0, 14);
+          updateProductPricing();
         } else if (event.target.id === 'custom-number') {
           var cleaned = event.target.value.replace(/\D/g, '').slice(0, 2);
           if (event.target.value !== cleaned) event.target.value = cleaned;
           state.customNumber = cleaned;
+          updateProductPricing();
         }
       });
     }
@@ -1714,7 +2026,7 @@
     saveCart();
     updateCartUI();
     closeProduct();
-    toast(item.title + ' añadido al carrito');
+    toast(cleanTitle(item) + ' añadido al carrito');
     setTimeout(openCart, 200);
   }
 
@@ -1764,11 +2076,12 @@
       if (line.patches && line.patches !== 'No') customs += '<span>Parches: ' + esc(line.patches) + '</span>';
 
       var prices = linePricing(line, item);
+      var displayTitle = cleanTitle(item);
       return '<article class="cart-item" data-cart-line="' + esc(line.key) + '">' +
         '<div class="cart-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
         '<div class="cart-item-copy">' +
           '<span class="cart-team">' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
-          '<h4>' + esc(item.title) + '</h4>' +
+          '<h4 title="' + esc(item.title) + '">' + esc(displayTitle) + '</h4>' +
           '<div class="cart-custom">' + customs + '</div>' +
           '<div class="cart-line-price">' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: <strong>' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</strong></div>' +
           '<div class="cart-item-foot">'+
@@ -1892,9 +2205,10 @@
       if (line.number) detail += ' #' + line.number;
       if (line.patches && line.patches !== 'No') detail += ' · ' + line.patches;
       var prices = linePricing(line, item);
+      var displayTitle = cleanTitle(item);
       return '<div class="summary-item">' +
         '<img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy">' +
-        '<div class="summary-item-copy"><strong>' + esc(item.title) + '</strong><span>' + esc(detail) + '</span><span>' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: ' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</span></div>' +
+        '<div class="summary-item-copy"><strong title="' + esc(item.title) + '">' + esc(displayTitle) + '</strong><span>' + esc(detail) + '</span><span>' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: ' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</span></div>' +
       '</div>';
     }).join('');
   }
