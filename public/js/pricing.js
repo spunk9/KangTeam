@@ -13,31 +13,93 @@
     { title: 'Personalización & Extras', items: [['Personalización (nombre y número)',200],['Parche (por unidad)',100],['Suplemento Talla Especial (3XL / 4XL)',300]] }
   ];
   function baseCents(product) {
-    var t = String(product.title || '').toLowerCase(), type = String(product.type || '').toLowerCase();
+    product = product || {};
+    var t = String(product.title || '').toLowerCase();
+    var sub = String(product.subcategory || '').toLowerCase();
+    var type = String(product.type || '').toLowerCase();
     var flags = product.flags || [];
     function hasFlag(flag) { return Array.isArray(flags) ? flags.indexOf(flag) !== -1 : !!flags[flag]; }
-    if (/\bnba\b|basketball/.test(t) || /nba/i.test(product.league || '')) return 3900;
-    if (/long padded|padded long|long coat|long puffer/.test(t)) return /set|complete|suit|conjunto/.test(t) ? 8900 : 7500;
-    if (/padded|puffer|acolchad/.test(t)) return /long|set|complete|conjunto/.test(t) ? 7500 : 6000;
-    if (/windbreaker/.test(t) && /set|suit|complete|conjunto/.test(t)) return 5500;
-    if (/windbreaker|cortavientos/.test(t) || type === 'jacket') return 4500;
-    var kids = hasFlag('kids') || /kids|kid |junior|youth|infantil|child/.test(t);
+
+    var isRetro = hasFlag('retro') || /\bretro\b|\bvintage\b/.test(t);
+    var isPlayer = hasFlag('player') || /player\s+version|player\s+issue/.test(t);
+    var kids = hasFlag('kids') ||
+      product.audience === 'kids' ||
+      /^\d{1,2}-\d{1,2}$/.test(String(product.sizeRange || '')) ||
+      /^niños\b/.test(sub) ||
+      /\b(kids?|youth|infantil|child|children)\b/.test(t) ||
+      (/\bjunior\b/.test(t) && !/\b(?:boca|argentinos)\s+juniors\b/.test(t));
+
+    // 1. Subcategorías exactas (colección GXG primavera / invierno)
+    if (sub) {
+      if (sub.indexOf('niños') !== -1 || (kids && type === 'training')) {
+        if (sub.indexOf('pantalón largo') !== -1) return 4200; // Chándal Completo Niño (Chaqueta + Pantalón largo)
+        return 3000; // Traje Entrenamiento Niño (Corto)
+      }
+      if (sub.indexOf('chaleco + pantalón corto') !== -1 || sub.indexOf('manga corta + pantalón corto') !== -1) return 3500;
+      if (sub.indexOf('polo + pantalón largo') !== -1) return 4000;
+      if (sub.indexOf('media cremallera + pantalón largo') !== -1) return 4900;
+      if (sub.indexOf('cremallera completa + pantalón largo') !== -1 || sub.indexOf('con capucha + pantalón largo') !== -1) return 5500;
+      if (sub.indexOf('cortavientos') !== -1 || sub.indexOf('softshell') !== -1) return 4500;
+      if (sub.indexOf('sudadera') !== -1) return 5500;
+      if (sub.indexOf('chaleco acolchado') !== -1 || sub.indexOf('chaqueta acolchada') !== -1) {
+        if (/\blong\b|\blargo\b/.test(t) && /\b(set|suit|complete|conjunto)\b/.test(t)) return 8900;
+        if (/\blong\b|\blargo\b|\b(set|suit|complete|conjunto)\b/.test(t)) return 7500;
+        return 6000;
+      }
+      if (sub.indexOf('entrenamiento sin escudo') !== -1) {
+        if (/full[\s-]?zip|hooded|hoodie/.test(t)) return 5500;
+        if (/vest|sleeveless|short sleeve/.test(t) && /short/.test(t)) return 3500;
+        return 4900;
+      }
+    }
+
+    // 2. Baloncesto / NBA (solo camisetas, no pantalones cortos)
+    if ((/\bnba\b|basketball/.test(t) || /nba/i.test(product.league || '')) && type !== 'shorts' && !/\bshorts?\b/.test(t)) {
+      return 3900;
+    }
+
+    // 3. Abrigos e invierno (acolchados / plumas / puffer / down)
+    var isPadded = /padded|puffer|acolchad|\bdown\s+jacket\b|\bvest\s+down\b|\bcotton\s+gilet\b|\bparka\b/.test(t);
+    var isLongCoat = /long\s+(?:padded|puffer|coat|down|parka)|(?:padded|puffer|down)\s+long/.test(t);
+    if (isLongCoat) {
+      return /\b(set|complete|suit|conjunto)\b/.test(t) ? 8900 : 7500;
+    }
+    if (isPadded) {
+      return /\b(set|complete|suit|conjunto)\b/.test(t) ? 7500 : 6000;
+    }
+
+    // 4. Cortavientos y chaquetas
+    if (/\bwindbreaker\b|\bcortavientos\b/.test(t) && /\b(set|suit|complete|conjunto)\b/.test(t)) return 5500;
+    if (/\bwindbreaker\b|\bcortavientos\b|\bsoftshell\b/.test(t) || type === 'jacket') return 4500;
+
+    // 5. Infantil
     if (kids) {
-      if (/tracksuit|track suit|training suit|chandal|chaqueta/.test(t) && /long|full|complete|set|suit|pant/.test(t)) return 4200;
-      if (/training|entrenamiento/.test(t)) return 3000;
+      if ((type === 'training' || /\b(tracksuit|track\s*suit|training\s*suit|chandal|chaqueta)\b/.test(t)) && /\b(long|full|complete|largo|pant|trouser)\b/.test(t)) {
+        return 4200;
+      }
+      if (type === 'training' || (/\b(training|entrenamiento)\b/.test(t) && /\b(kit|suit|wear|clothes|set)\b/.test(t))) return 3000;
       return 2500;
     }
-    if (/polo/.test(t) && /pant|trouser|long/.test(t)) return 4000;
-    if (/retro|vintage/.test(t) || hasFlag('retro') || hasFlag('player') || /player version/.test(t)) return 2900;
-    if (/full zip|full zipper|full-zip|hooded|hoodie/.test(t) && /training|tracksuit|track suit|suit/.test(t)) return 5500;
-    if (/half zip|half-zip|quarter zip|1\/2 zip|1\/4 zip/.test(t)) return 4900;
-    if (/training suit|tracksuit|track suit|suit set/.test(t) || type === 'training') return 4900;
-    if (/vest|sleeveless|short sleeve/.test(t) && /short/.test(t)) return 3500;
-    if (/set/.test(t) && /shirt|jersey|short/.test(t)) return 2700;
-    if (type === 'polo') return 4000;
-    if (type === 'jersey' || type === 'casual') return 2500;
-    if (type === 'shorts') return 2700;
-    if (type === 'hoodie') return 5500;
+
+    // 6. Entrenamiento, chándals y sudaderas adulto
+    if (/\bpolo\b/.test(t) && /\b(training\s+(?:suit|wear)|tracksuit|track\s*suit|pant|trouser|pantal[oó]n)\b/.test(t)) return 4000;
+    if (/\b(full[\s-]?zip|full\s+zipper|hooded)\b/.test(t) && (type === 'training' || type === 'hoodie' || /\b(training|tracksuit|track\s*suit|suit)\b/.test(t))) return 5500;
+    if (type === 'hoodie' || /\b(hoodie|sweatshirt)\b/.test(t)) return 5500;
+    if (/\b(half[\s-]?zip|quarter\s+zip|1\/2\s*zip|1\/4\s*zip)\b/.test(t)) return 4900;
+    if (type === 'training' && (/\b(vest|sleeveless)\b/.test(t) || (/\bshort\s+sleeve\b/.test(t) && /\bshort\b/.test(t)))) return 3500;
+    if (type === 'training' || /\b(training\s+suit|tracksuit|track\s*suit|suit\s+set)\b/.test(t)) return 4900;
+
+    // 7. Conjuntos cortos adulto (camiseta + pantalón corto)
+    if (/\b(set|suit|kit)\b/.test(t) && /\b(shirt|jersey|t-shirt|tee)\b/.test(t) && /\bshorts\b/.test(t)) return 2700;
+    if (/\bshorts\b/.test(t) && /\b(t-shirt|tee|shirt|jersey)\b/.test(t)) return 2700;
+
+    // 8. Camisetas (Fan 25€, Player/Retro 29€), polos individuales y pantalones cortos
+    if (type === 'shorts') return 2500;
+    if (type === 'jersey' || type === 'polo' || type === 'casual' || type === 'other') {
+      if (isRetro || isPlayer) return 2900;
+      return 2500;
+    }
+
     return 2500;
   }
   function calculate(product, options) {
