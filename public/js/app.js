@@ -1465,25 +1465,26 @@
         '" data-size="' + esc(size) + '">' + esc(size) + '</button>';
     }).join('');
 
+    var selectedPatches = state.patches === 'No' ? [] : state.patches.split(',').map(function (patch) { return patch.trim(); });
     var patches = ['No', 'Liga', 'Champions', 'Mundial', 'Copa'].map(function (patch) {
-      return '<label class="patch-option' + (state.patches === patch ? ' is-active' : '') + '" data-patch="' + esc(patch) + '">' +
-        '<input type="radio" name="product-patches" value="' + esc(patch) + '"' + (state.patches === patch ? ' checked' : '') + '>' +
-        '<svg><use href="#i-check"/></svg>' + esc(patch) + '</label>';
+      var active = patch === 'No' ? selectedPatches.length === 0 : selectedPatches.indexOf(patch) !== -1;
+      return '<button type="button" class="patch-option' + (active ? ' is-active' : '') + '" data-patch="' + esc(patch) + '" aria-pressed="' + active + '">' +
+        '<svg><use href="#i-check"/></svg>' + (patch === 'No' ? 'Sin parches' : esc(patch)) + '</button>';
     }).join('');
 
     var customPanel = item.custom ?
       '<div class="custom-panel">' +
         '<div class="custom-panel-head"><strong>Nombre y dorsal</strong>' +
-          '<span><svg><use href="#i-spark"/></svg> Personalización</span></div>' +
+          '<span><svg><use href="#i-spark"/></svg> +2,00 €</span></div>' +
         '<div class="custom-fields">' +
           '<label class="field"><span>Nombre</span>' +
             '<input type="text" id="custom-name" maxlength="14" placeholder="TU NOMBRE" autocomplete="off" style="text-transform:uppercase" value="' + esc(state.customName) + '"></label>' +
           '<label class="field"><span>Dorsal</span>' +
             '<input type="text" id="custom-number" maxlength="2" inputmode="numeric" placeholder="10" autocomplete="off" value="' + esc(state.customNumber) + '"></label>' +
         '</div>' +
-        '<p class="field-label" style="margin-top:14px">Parches <span>Opcional</span></p>' +
+        '<p class="field-label" style="margin-top:14px">Parches <span>+1,00 € / ud. · Opcional</span></p>' +
         '<div class="patch-row" id="patch-row">' + patches + '</div>' +
-        '<p class="custom-note"><svg><use href="#i-shield"/></svg> El nombre se imprime en mayúsculas. El dorsal debe ser un número del 0 al 99.</p>' +
+        '<p class="custom-note"><svg><use href="#i-shield"/></svg> Nombre y dorsal: +2,00 € por prenda. Cada parche añade 1,00 €. El nombre se imprime en mayúsculas y el dorsal debe ser del 0 al 99.</p>' +
       '</div>' :
       '<div class="not-customizable"><svg><use href="#i-shirt"/></svg>' +
         '<span>Esta prenda no admite nombre ni dorsal. Solo necesitas elegir la talla.</span></div>';
@@ -1521,12 +1522,16 @@
   }
 
   function selectPatch(value) {
-    state.patches = value;
+    var selected = state.patches === 'No' ? [] : state.patches.split(',').map(function (patch) { return patch.trim(); });
+    if (value === 'No') selected = [];
+    else if (selected.indexOf(value) === -1) selected.push(value);
+    else selected = selected.filter(function (patch) { return patch !== value; });
+    state.patches = selected.length ? selected.join(', ') : 'No';
     $$('#product-info .patch-option').forEach(function (option) {
-      var active = option.getAttribute('data-patch') === value;
+      var patch = option.getAttribute('data-patch');
+      var active = patch === 'No' ? selected.length === 0 : selected.indexOf(patch) !== -1;
       option.classList.toggle('is-active', active);
-      var input = option.querySelector('input');
-      if (input) input.checked = active;
+      option.setAttribute('aria-pressed', String(active));
     });
   }
 

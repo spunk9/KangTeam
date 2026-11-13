@@ -266,8 +266,16 @@ function validateOrder(payload) {
     }
 
     var patch = product.custom ? sanitizeShort(raw.patches, 40) : '';
-    if (patch && ['No', 'Liga', 'Champions', 'Mundial', 'Copa', 'Personalizado'].indexOf(patch) === -1) {
-      patch = sanitizeShort(patch, 40);
+    if (!patch) patch = 'No';
+    if (patch !== 'No') {
+      var allowedPatches = ['Liga', 'Champions', 'Mundial', 'Copa', 'Personalizado'];
+      var selectedPatches = [];
+      patch.split(',').forEach(function (value) {
+        value = value.trim();
+        if (allowedPatches.indexOf(value) === -1) throw new Error('Parche no válido');
+        if (selectedPatches.indexOf(value) === -1) selectedPatches.push(value);
+      });
+      patch = selectedPatches.join(', ') || 'No';
     }
 
     var price = pricing.calculate(product, { name: customName, number: customNumber, patches: patch, size: size });
