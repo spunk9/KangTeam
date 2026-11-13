@@ -991,7 +991,7 @@ svg { display: block; }
   flex-direction: column;
   justify-content: center;
   height: 46px;
-  padding: 5px 36px 5px 13px;
+  padding: 5px 12px 5px 13px;
   border: 1px solid var(--line);
   border-radius: 11px;
   background: var(--surface);
@@ -1018,7 +1018,8 @@ svg { display: block; }
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  max-width: 150px;
+  width: 100%;
+  max-width: none;
   cursor: pointer;
   padding: 0;
   line-height: 1.2;
@@ -1039,7 +1040,8 @@ svg { display: block; }
   font-weight: 700;
   flex: none;
 }
-.btn-filter svg { width: 16px; height: 16px; }
+.btn-filter svg { width: 16px; height: 16px; pointer-events: none; }
+.btn-filter .filter-count { pointer-events: none; }
 .filter-count {
   min-width: 18px;
   height: 18px;
@@ -1779,7 +1781,7 @@ svg { display: block; }
 
 /* Tarifas y precios del carrito */
 .prices-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; padding-top:28px; padding-bottom:64px; }
-.price-card { border:1px solid var(--line,#e7e4dc); border-radius:16px; background:var(--paper,#fff); padding:22px 24px; }
+.price-card { border:1px solid var(--line,#e7e4dc); border-radius:16px; background:var(--paper,#fff); color:var(--ink,#0a0c0f); padding:22px 24px; }
 .price-card h2 { margin:0 0 14px; font-size:20px; }
 .price-card ul { list-style:none; padding:0; margin:0; }
 .price-card li { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:11px 0; border-top:1px solid var(--line,#e7e4dc); font-size:14px; line-height:1.45; }

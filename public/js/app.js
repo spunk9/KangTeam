@@ -898,92 +898,162 @@
 
   // ── Opciones de filtro ───────────────────────────────────
 
-  function leagueOptionsHtml(allLabel) {
-    var rows = Array.from(state.leagues.entries()).sort(function (a, b) { return b[1] - a[1]; });
+  function itemsForFacet(excludedFilter) {
+    var q = normalize(state.filters.q);
+    return state.items.filter(function (item) {
+      if (excludedFilter !== 'team' && state.filters.team && item.team !== state.filters.team) return false;
+      if (excludedFilter !== 'league' && state.filters.league && item.league !== state.filters.league) return false;
+      if (excludedFilter !== 'season' && state.filters.season && item.seasonGroup !== state.filters.season) return false;
+      if (excludedFilter !== 'type' && state.filters.type && item.type !== state.filters.type) return false;
+      if (excludedFilter !== 'q' && q && item._search.indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
+  function countFacet(items, key) {
+    var counts = Object.create(null);
+    items.forEach(function (item) {
+      var value = item[key];
+      if (value === undefined || value === null || value === '') return;
+      counts[value] = (counts[value] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function withSelectedFacet(counts, key) {
+    var selected = state.filters[key];
+    if (selected && counts[selected] === undefined) counts[selected] = 0;
+    return counts;
+  }
+
+  function leagueOptionsHtml(allLabel, items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet('league'), 'league'), 'league');
+    var rows = Object.keys(counts).map(function (name) { return [name, counts[name]]; }).sort(function (a, b) {
+      return b[1] - a[1] || a[0].localeCompare(b[0], 'es');
+    });
     return '<option value="">' + esc(allLabel) + '</option>' + rows.map(function (row) {
       return '<option value="' + esc(row[0]) + '">' + esc(row[0]) + ' (' + fmt(row[1]) + ')</option>';
     }).join('');
   }
 
-  function teamOptionsHtml(allLabel) {
-    var byLeague = {};
-    Array.from(state.teams.values())
-      .sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); })
-      .forEach(function (team) {
-        var league = team.league || 'Otras ligas';
-        if (!byLeague[league]) byLeague[league] = [];
-        byLeague[league].push(team);
-      });
+  function teamOptionsHtml(allLabel, items) {
+    var byLeague = Object.create(null);
+    (items || itemsForFacet('team')).forEach(function (item) {
+      var league = item.league || 'Otras ligas';
+      var name = item.team || 'Otros';
+      if (!byLeague[league]) byLeague[league] = Object.create(null);
+      byLeague[league][name] = (byLeague[league][name] || 0) + 1;
+    });
+
+    var selectedTeam = state.filters.team;
+    if (selectedTeam) {
+      var selectedData = state.teams.get(selectedTeam);
+      var selectedLeague = selectedData ? selectedData.league : 'Otras ligas';
+      if (!byLeague[selectedLeague]) byLeague[selectedLeague] = Object.create(null);
+      if (byLeague[selectedLeague][selectedTeam] === undefined) byLeague[selectedLeague][selectedTeam] = 0;
+    }
 
     var leagues = Object.keys(byLeague).sort(function (a, b) {
+      var countA = Object.keys(byLeague[a]).reduce(function (sum, name) { return sum + byLeague[a][name]; }, 0);
+      var countB = Object.keys(byLeague[b]).reduce(function (sum, name) { return sum + byLeague[b][name]; }, 0);
       if (a === 'Selecciones') return -1;
       if (b === 'Selecciones') return 1;
-      return byLeague[b].length - byLeague[a].length;
+      return countB - countA || a.localeCompare(b, 'es');
     });
 
     return '<option value="">' + esc(allLabel) + '</option>' + leagues.map(function (league) {
-      return '<optgroup label="' + esc(league) + '">' + byLeague[league].map(function (team) {
-        return '<option value="' + esc(team.name) + '">' + esc(team.name) + ' (' + fmt(team.count) + ')</option>';
+      var teams = Object.keys(byLeague[league]).sort(function (a, b) { return a.localeCompare(b, 'es'); });
+      return '<optgroup label="' + esc(league) + '">' + teams.map(function (name) {
+        return '<option value="' + esc(name) + '">' + esc(name) + ' (' + fmt(byLeague[league][name]) + ')</option>';
       }).join('') + '</optgroup>';
     }).join('');
   }
 
-  function seasonOptionsHtml() {
-    var keys = SEASON_ORDER.filter(function (key) { return state.seasons.has(key); });
+  function seasonOptionsHtml(items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet('season'), 'seasonGroup'), 'season');
+    var keys = Object.keys(counts).sort(function (a, b) {
+      var ai = SEASON_ORDER.indexOf(a), bi = SEASON_ORDER.indexOf(b);
+      if (ai === -1) ai = SEASON_ORDER.length;
+      if (bi === -1) bi = SEASON_ORDER.length;
+      return ai - bi || a.localeCompare(b, 'es');
+    });
     return '<option value="">Todas las temporadas</option>' + keys.map(function (key) {
-      return '<option value="' + esc(key) + '">' + esc(seasonLabel(key)) + ' (' + fmt(state.seasons.get(key)) + ')</option>';
+      return '<option value="' + esc(key) + '">' + esc(seasonLabel(key)) + ' (' + fmt(counts[key]) + ')</option>';
     }).join('');
   }
 
-  function typeOptionsHtml() {
-    var rows = Array.from(state.types.entries()).sort(function (a, b) { return b[1] - a[1]; });
+  function typeOptionsHtml(items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet('type'), 'type'), 'type');
+    var rows = Object.keys(counts).map(function (type) { return [type, counts[type]]; }).sort(function (a, b) {
+      return b[1] - a[1] || a[0].localeCompare(b[0], 'es');
+    });
     return '<option value="">Todos los tipos</option>' + rows.map(function (row) {
       return '<option value="' + esc(row[0]) + '">' + esc(typeLabel(row[0])) + ' (' + fmt(row[1]) + ')</option>';
     }).join('');
   }
 
-  function seasonChipsHtml() {
-    var keys = SEASON_ORDER.filter(function (key) { return state.seasons.has(key); });
+  function seasonChipsHtml(items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet('season'), 'seasonGroup'), 'season');
+    var keys = Object.keys(counts).sort(function (a, b) {
+      var ai = SEASON_ORDER.indexOf(a), bi = SEASON_ORDER.indexOf(b);
+      if (ai === -1) ai = SEASON_ORDER.length;
+      if (bi === -1) bi = SEASON_ORDER.length;
+      return ai - bi || a.localeCompare(b, 'es');
+    });
     return '<button type="button" data-season="">Todas</button>' + keys.map(function (key) {
       return '<button type="button" data-season="' + esc(key) + '">' + esc(seasonLabel(key)) + '</button>';
     }).join('');
   }
 
-  function typeChipsHtml() {
-    var rows = Array.from(state.types.entries()).sort(function (a, b) { return b[1] - a[1]; });
+  function typeChipsHtml(items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet('type'), 'type'), 'type');
+    var rows = Object.keys(counts).map(function (type) { return [type, counts[type]]; }).sort(function (a, b) {
+      return b[1] - a[1] || a[0].localeCompare(b[0], 'es');
+    });
     return '<button type="button" data-type="">Todos</button>' + rows.map(function (row) {
       return '<button type="button" data-type="' + esc(row[0]) + '">' + esc(typeLabel(row[0])) + '</button>';
     }).join('');
   }
 
   function populateFilterOptions() {
-    var fill = function (id, html) {
-      var el = document.getElementById(id);
-      if (el) el.innerHTML = html;
-    };
-
-    fill('filter-league', leagueOptionsHtml('Todas las ligas'));
-    fill('filter-team', teamOptionsHtml('Todos los equipos'));
-    fill('filter-season', seasonOptionsHtml());
-    fill('filter-type', typeOptionsHtml());
-
     var body = $('#filters-drawer-body');
     if (body) {
       body.innerHTML =
         '<label class="searchbox"><svg><use href="#i-search"/></svg>' +
           '<input type="search" id="drawer-search" placeholder="Busca una prenda o equipo…" autocomplete="off"></label>' +
         '<p class="filter-section-title">Temporada</p>' +
-        '<div class="filter-chips" id="drawer-seasons">' + seasonChipsHtml() + '</div>' +
+        '<div class="filter-chips" id="drawer-seasons"></div>' +
         '<p class="filter-section-title">Tipo de prenda</p>' +
-        '<div class="filter-chips" id="drawer-types">' + typeChipsHtml() + '</div>' +
-        '<label class="select-wrap"><span>Liga</span><select id="drawer-league">' + leagueOptionsHtml('Todas las ligas') + '</select><svg><use href="#i-chevron"/></svg></label>' +
-        '<label class="select-wrap"><span>Equipo</span><select id="drawer-team">' + teamOptionsHtml('Todos los equipos') + '</select><svg><use href="#i-chevron"/></svg></label>';
+        '<div class="filter-chips" id="drawer-types"></div>' +
+        '<label class="select-wrap"><span>Liga</span><select id="drawer-league"></select><svg><use href="#i-chevron"/></svg></label>' +
+        '<label class="select-wrap"><span>Equipo</span><select id="drawer-team"></select><svg><use href="#i-chevron"/></svg></label>';
     }
 
     syncFilterInputs();
   }
 
+  function refreshFilterOptions() {
+    if (!state.items.length) return;
+    var options = [
+      ['filter-league', leagueOptionsHtml('Todas las ligas', itemsForFacet('league'))],
+      ['drawer-league', leagueOptionsHtml('Todas las ligas', itemsForFacet('league'))],
+      ['filter-team', teamOptionsHtml('Todos los equipos', itemsForFacet('team'))],
+      ['drawer-team', teamOptionsHtml('Todos los equipos', itemsForFacet('team'))],
+      ['filter-season', seasonOptionsHtml(itemsForFacet('season'))],
+      ['filter-type', typeOptionsHtml(itemsForFacet('type'))]
+    ];
+    options.forEach(function (entry) {
+      var select = document.getElementById(entry[0]);
+      if (select) select.innerHTML = entry[1];
+    });
+    var seasons = $('#drawer-seasons');
+    if (seasons) seasons.innerHTML = seasonChipsHtml(itemsForFacet('season'));
+    var types = $('#drawer-types');
+    if (types) types.innerHTML = typeChipsHtml(itemsForFacet('type'));
+  }
+
   function syncFilterInputs() {
+    refreshFilterOptions();
     var search = $('#catalog-search');
     if (search && document.activeElement !== search) search.value = state.filters.q;
 
