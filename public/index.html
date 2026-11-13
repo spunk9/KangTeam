@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KANG Team · Catálogo de camisetas, chándals y equipaciones</title>
+  <meta name="description" content="Catálogo online de camisetas, chándals y chaquetas de fútbol. Personaliza tu camiseta con nombre, dorsal y parches. Pedidos por WhatsApp o email.">
+  <meta name="theme-color" content="#0a0c0f">
+  <meta property="og:title" content="KANG Team · Viste tu pasión">
+  <meta property="og:description" content="Más de 7.500 prendas de tus equipos. Personaliza nombre, dorsal y parches.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=20261113-9">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16.2 16.2 4.3 4.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><path d="M4 5h2l2.2 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.6L21 8H7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10.5" cy="20" r="1.3" fill="currentColor"/><circle cx="18" cy="20" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M20 12H5m6-6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-whatsapp" viewBox="0 0 24 24"><path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 8.3c.3-.6.6-.6 1-.6h.4c.2 0 .4.1.5.5l.8 1.8c.1.3 0 .5-.2.7l-.6.7c-.2.2-.2.4-.1.6.4.8 1.2 1.6 2.1 2 .2.1.4 0 .6-.1l.7-.7c.2-.2.4-.3.7-.2l1.8.9c.3.1.4.3.4.6 0 .8-.5 1.5-1.2 1.7-.8.3-1.9.2-3.6-.7a11 11 0 0 1-3.6-3.4c-.8-1.4-1-2.5-.8-3.3.1-.5.3-.8.6-1Z" fill="currentColor"/></symbol>
+    <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.7" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10m-7 6h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" fill="currentColor"/><rect x="14" y="4" width="6" height="6" rx="1" fill="currentColor"/><rect x="4" y="14" width="6" height="6" rx="1" fill="currentColor"/><rect x="14" y="14" width="6" height="6" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4M11 8v6m-3-3h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M8 4 4 6l1.5 5L8 10v10h8V10l2.5 1L20 6l-4-2a4 4 0 0 1-8 0Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.6L19.5 10l-5.6 1.4L12 17l-1.9-5.6L4.5 10l5.6-1.4L12 3Z" fill="currentColor"/></symbol>
+  </svg>
+
+  <div class="announcement" id="announcement">
+    <div class="announcement-track">
+      <span>Personaliza tu camiseta con nombre, dorsal y parches</span><i>·</i>
+      <span>Catálogo actualizado automáticamente</span><i>·</i>
+      <span>Pedidos por WhatsApp o email</span><i>·</i>
+      <span>Más de 7.500 prendas de tus equipos</span><i>·</i>
+    </div>
+  </div>
+
+  <header class="site-header" id="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#/">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 44"><path d="M20 1 38 8v14c0 10-7.5 17.5-18 21C9.5 39.5 2 32 2 22V8L20 1Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 12v20M20 22l8-8M20 22l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-copy">
+          <span class="brand-word">KANG<span>TEAM</span></span>
+          <span class="brand-tag">Catálogo online</span>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="Navegación principal">
+        <a href="#/" data-nav="home">Inicio</a>
+        <a href="#/catalogo" data-nav="catalog">Catálogo</a>
+        <a href="#/equipos" data-nav="teams">Equipos</a>
+        <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="icon-btn header-search-link" href="#/catalogo?focus=search" aria-label="Buscar en el catálogo">
+          <svg><use href="#i-search"/></svg>
+        </a>
+        <button class="icon-btn cart-btn" id="cart-open" type="button" aria-label="Abrir carrito">
+          <svg><use href="#i-cart"/></svg>
+          <span class="cart-count" id="cart-count">0</span>
+        </button>
+        <button class="icon-btn menu-btn" id="menu-open" type="button" aria-label="Abrir menú" aria-expanded="false">
+          <svg><use href="#i-menu"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ══════════════════════ INICIO ══════════════════════ -->
+    <section class="view" id="view-home" aria-label="Inicio">
+      <div class="hero">
+        <div class="hero-collage" id="hero-collage" aria-hidden="true"></div>
+        <div class="hero-scrim" aria-hidden="true"></div>
+        <div class="container hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Nueva temporada 26/27</p>
+            <h1 class="hero-title">VISTE TU<br><em>PASIÓN</em></h1>
+            <p class="hero-sub">Camisetas, chándals y chaquetas de tus equipos. Elige tu talla, pon tu nombre y dorsal, y añade los parches. Nosotros nos encargamos del resto.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#/catalogo">Explorar catálogo <svg><use href="#i-arrow"/></svg></a>
+              <a class="btn btn-ghost" href="#/equipos">Buscar mi equipo</a>
+            </div>
+            <div class="hero-stats">
+              <div><strong id="stat-total">7.500</strong><span>prendas</span></div>
+              <div><strong id="stat-teams">500</strong><span>equipos</span></div>
+              <div><strong>26/27</strong><span>nueva temporada</span></div>
+            </div>
+          </div>
+          <div class="hero-feature" id="hero-feature" aria-hidden="true"></div>
+        </div>
+        <div class="hero-marquee" aria-hidden="true">
+          <div class="marquee-track" id="marquee-track"></div>
+        </div>
+      </div>
+
+      <section class="section section-seasons">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Colecciones</p>
+              <h2>Encuentra tu temporada</h2>
+            </div>
+            <a class="text-link" href="#/catalogo">Ver todo <svg><use href="#i-arrow"/></svg></a>
+          </div>
+          <div class="season-cards" id="home-seasons"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Recién llegado</p>
+              <h2>Lo nuevo de la 26/27</h2>
+            </div>
+            <a class="text-link" href="#/catalogo?temporada=26%2F27">Ver temporada <svg><use href="#i-arrow"/></svg></a>
+          </div>
+          <div class="rail" id="home-new"></div>
+        </div>
+      </section>
+
+      <section class="section section-teams-home">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Los más buscados</p>
+              <h2>Elige tu equipo</h2>
+            </div>
+            <a class="text-link" href="#/equipos">Todos los equipos <svg><use href="#i-arrow"/></svg></a>
+          </div>
+          <div class="team-grid team-grid-home" id="home-teams"></div>
+        </div>
+      </section>
+
+      <section class="section custom-banner-section">
+        <div class="container">
+          <div class="custom-banner">
+            <div class="custom-banner-copy">
+              <p class="eyebrow eyebrow-light">Personalización</p>
+              <h2>TU NOMBRE.<br>TU DORSAL.<br><em>TUS REGLAS.</em></h2>
+              <p>Las camisetas se personalizan con el nombre y el número que quieras. Añade también los parches de tu competición y hazla única.</p>
+              <ul class="check-list">
+                <li><svg><use href="#i-check"/></svg> Nombre y dorsal incluidos</li>
+                <li><svg><use href="#i-check"/></svg> Parches de Liga, Champions, Mundial o Copa</li>
+                <li><svg><use href="#i-check"/></svg> Tallas desde la S hasta la 5XL</li>
+              </ul>
+              <a class="btn btn-light" href="#/catalogo?tipo=jersey">Personalizar una camiseta <svg><use href="#i-arrow"/></svg></a>
+            </div>
+            <div class="custom-banner-visual" aria-hidden="true">
+              <div class="jersey-preview">
+                <div class="jersey-shirt">
+                  <span class="jersey-name" id="preview-name">TU NOMBRE</span>
+                  <span class="jersey-number" id="preview-number">10</span>
+                  <span class="jersey-brand">KANG</span>
+                </div>
+                <div class="jersey-shadow"></div>
+                <span class="floating-tag tag-1">NOMBRE</span>
+                <span class="floating-tag tag-2">DORSAL</span>
+                <span class="floating-tag tag-3">PARCHES</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Así de fácil</p>
+              <h2>De la grada a tu armario</h2>
+            </div>
+          </div>
+          <div class="steps">
+            <article class="step-card">
+              <span class="step-num">01</span>
+              <svg class="step-icon"><use href="#i-search"/></svg>
+              <h3>Encuentra tu prenda</h3>
+              <p>Filtra por equipo, temporada, liga o tipo de prenda. Más de 7.500 referencias actualizadas.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-num">02</span>
+              <svg class="step-icon"><use href="#i-shirt"/></svg>
+              <h3>Personalízala</h3>
+              <p>Elige talla y añade nombre, dorsal y parches en las camisetas. En chándals y chaquetas, solo la talla.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-num">03</span>
+              <svg class="step-icon"><use href="#i-whatsapp"/></svg>
+              <h3>Envía tu pedido</h3>
+              <p>Confirma el carrito y te llega el pedido por WhatsApp o email. Te respondemos con precio y disponibilidad.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="container">
+          <div class="cta-strip">
+            <div>
+              <p class="eyebrow eyebrow-light">¿No encuentras algo?</p>
+              <h2>Dínoslo y lo buscamos.</h2>
+            </div>
+            <a class="btn btn-primary" id="cta-whatsapp" href="#/como-funciona">Contactar <svg><use href="#i-arrow"/></svg></a>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ══════════════════════ CATÁLOGO ══════════════════════ -->
+    <section class="view" id="view-catalog" aria-label="Catálogo" hidden>
+      <div class="page-head">
+        <div class="container">
+          <p class="eyebrow">Catálogo completo</p>
+          <h1>Toda la colección,<br><em>equipo a equipo.</em></h1>
+          <p class="page-lead" id="catalog-lead">Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.</p>
+        </div>
+      </div>
+
+      <div class="catalog-toolbar" id="catalog-toolbar">
+        <div class="container toolbar-inner">
+          <label class="searchbox" for="catalog-search">
+            <svg><use href="#i-search"/></svg>
+            <input type="search" id="catalog-search" placeholder="Busca un equipo o una camiseta…" autocomplete="off">
+            <kbd>⌘K</kbd>
+          </label>
+
+          <button class="btn-filter" id="filters-open" type="button" aria-expanded="false">
+            <svg><use href="#i-filter"/></svg>
+            Filtros <span class="filter-count" id="filter-count">0</span>
+          </button>
+
+          <div class="filters" id="catalog-filters">
+            <label class="select-wrap">
+              <span>Liga</span>
+              <select id="filter-league"><option value="">Todas</option></select>
+              <svg><use href="#i-chevron"/></svg>
+            </label>
+            <label class="select-wrap">
+              <span>Equipo</span>
+              <select id="filter-team"><option value="">Todos</option></select>
+              <svg><use href="#i-chevron"/></svg>
+            </label>
+            <label class="select-wrap">
+              <span>Temporada</span>
+              <select id="filter-season"><option value="">Todas</option></select>
+              <svg><use href="#i-chevron"/></svg>
+            </label>
+            <label class="select-wrap">
+              <span>Tipo</span>
+              <select id="filter-type"><option value="">Todos</option></select>
+              <svg><use href="#i-chevron"/></svg>
+            </label>
+            <button class="btn-clear" id="filters-clear" type="button">Limpiar</button>
+          </div>
+
+          <div class="view-switch" role="group" aria-label="Vista del catálogo">
+            <button type="button" data-view="teams" class="is-active" aria-pressed="true" title="Agrupado por equipos">
+              <svg><use href="#i-layers"/></svg><span>Equipos</span>
+            </button>
+            <button type="button" data-view="grid" aria-pressed="false" title="Cuadrícula">
+              <svg><use href="#i-grid"/></svg><span>Cuadrícula</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="container catalog-body">
+        <div class="catalog-meta">
+          <p id="results-count">Cargando catálogo…</p>
+          <div class="sort-wrap">
+            <label for="sort-select">Ordenar por</label>
+            <select id="sort-select">
+              <option value="new">Novedades</option>
+              <option value="team">Equipo A-Z</option>
+              <option value="season">Temporada</option>
+              <option value="name">Nombre A-Z</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="active-filters" id="active-filters"></div>
+        <div id="catalog-results" class="catalog-results"></div>
+        <div class="load-more-wrap" id="load-more-wrap" hidden>
+          <button class="btn btn-outline" id="load-more" type="button">Cargar más <span id="load-more-count"></span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ EQUIPOS ══════════════════════ -->
+    <section class="view" id="view-teams" aria-label="Equipos" hidden>
+      <div class="page-head">
+        <div class="container">
+          <p class="eyebrow">Explora por equipo</p>
+          <h1>Tu equipo.<br><em>Tu historia.</em></h1>
+          <p class="page-lead">Más de 500 equipos y selecciones, ordenados por liga. Entra en el tuyo y descubre todas sus temporadas.</p>
+        </div>
+      </div>
+
+      <div class="container teams-body">
+        <div class="teams-tools">
+          <label class="searchbox" for="teams-search">
+            <svg><use href="#i-search"/></svg>
+            <input type="search" id="teams-search" placeholder="Busca tu equipo…" autocomplete="off">
+          </label>
+          <label class="select-wrap select-wrap-inline">
+            <span>Liga</span>
+            <select id="teams-league"><option value="">Todas las ligas</option></select>
+            <svg><use href="#i-chevron"/></svg>
+          </label>
+        </div>
+        <div id="teams-results" class="teams-results"></div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════ CÓMO FUNCIONA ══════════════════════ -->
+    <section class="view" id="view-how" aria-label="Cómo funciona" hidden>
+      <div class="page-head">
+        <div class="container">
+          <p class="eyebrow">Sin complicaciones</p>
+          <h1>Del catálogo<br><em>a tu puerta.</em></h1>
+          <p class="page-lead">Este es un catálogo de pedido asistido: eliges tus prendas, las personalizas y nos envías el pedido. Te confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>
+        </div>
+      </div>
+
+      <div class="container how-body">
+        <div class="how-grid">
+          <article class="how-card">
+            <span class="how-num">01</span>
+            <h2>Elige y filtra</h2>
+            <p>Navega por equipo, temporada, liga o tipo de prenda. Cada ficha incluye las fotos reales del catálogo del proveedor.</p>
+          </article>
+          <article class="how-card">
+            <span class="how-num">02</span>
+            <h2>Personaliza</h2>
+            <p>En las camisetas puedes poner el nombre (hasta 14 caracteres), el dorsal (0-99) y los parches. En chándals, chaquetas y polos solo se elige la talla.</p>
+          </article>
+          <article class="how-card">
+            <span class="how-num">03</span>
+            <h2>Confirma el pedido</h2>
+            <p>Al enviar el carrito, el pedido se guarda y se nos notifica. Recibirás la confirmación por WhatsApp o email con el precio final y el envío.</p>
+          </article>
+        </div>
+
+        <div class="faq">
+          <h2>Preguntas frecuentes</h2>
+          <details>
+            <summary>¿Cómo sé qué talla elegir?<svg><use href="#i-chevron"/></svg></summary>
+            <p>Las tallas disponibles aparecen en cada prenda según el catálogo (S-4XL, S-XXL, tallas infantiles 16-28…). Si dudas entre dos tallas, escríbenos y te ayudamos.</p>
+          </details>
+          <details>
+            <summary>¿Las camisetas llevan nombre y dorsal?<svg><use href="#i-chevron"/></svg></summary>
+            <p>Sí. En las camisetas puedes añadir nombre y dorsal sin coste adicional indicado en el catálogo; el precio final se confirma al enviar el pedido. En chándals y chaquetas no aplica.</p>
+          </details>
+          <details>
+            <summary>¿Qué son los parches?<svg><use href="#i-chevron"/></svg></summary>
+            <p>Son los escudos de competición que se añaden a las mangas o al pecho (Liga, Champions, Mundial, Copa…). Puedes seleccionar el tipo al personalizar la camiseta.</p>
+          </details>
+          <details>
+            <summary>¿Cómo se paga?<svg><use href="#i-chevron"/></svg></summary>
+            <p>No hay pago online. Primero confirmamos disponibilidad, precio y gastos de envío por WhatsApp o email. Después te indicamos los métodos de pago disponibles.</p>
+          </details>
+          <details>
+            <summary>¿Cuánto tarda el envío?<svg><use href="#i-chevron"/></svg></summary>
+            <p>El plazo depende del artículo y del destino. Te damos una estimación con la confirmación del pedido. Los artículos personalizados pueden tardar algo más.</p>
+          </details>
+        </div>
+
+        <div class="contact-card" id="contact-card">
+          <div>
+            <p class="eyebrow eyebrow-light">Atención directa</p>
+            <h2>¿Hablamos?</h2>
+            <p>Escríbenos por WhatsApp para consultar stock, tallas, personalización o cualquier prenda que no veas en el catálogo.</p>
+          </div>
+          <div class="contact-actions">
+            <a class="btn btn-whatsapp" id="contact-whatsapp" href="#"><svg><use href="#i-whatsapp"/></svg> WhatsApp</a>
+            <a class="btn btn-ghost" id="contact-email" href="#"><svg><use href="#i-mail"/></svg> Email</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-main">
+      <div class="footer-brand">
+        <a class="brand" href="#/">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 44"><path d="M20 1 38 8v14c0 10-7.5 17.5-18 21C9.5 39.5 2 32 2 22V8L20 1Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 12v20M20 22l8-8M20 22l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          </span>
+          <span class="brand-copy"><span class="brand-word">KANG<span>TEAM</span></span><span class="brand-tag">Catálogo online</span></span>
+        </a>
+        <p>Camisetas, chándals y equipaciones de tus equipos. Personaliza tu prenda y recíbela donde quieras.</p>
+        <div class="footer-social" id="footer-social"></div>
+      </div>
+      <nav class="footer-nav" aria-label="Enlaces del pie">
+        <div>
+          <h3>Catálogo</h3>
+          <a href="#/catalogo">Todas las prendas</a>
+          <a href="#/catalogo?temporada=26%2F27">Temporada 26/27</a>
+          <a href="#/catalogo?tipo=jersey">Camisetas</a>
+          <a href="#/catalogo?tipo=training">Chándals</a>
+          <a href="#/catalogo?tipo=jacket">Chaquetas</a>
+        </div>
+        <div>
+          <h3>Ayuda</h3>
+          <a href="#/como-funciona">Cómo funciona</a>
+          <a href="#/como-funciona">Tallas y personalización</a>
+          <a href="#/como-funciona">Envíos</a>
+          <a href="#/como-funciona">Preguntas frecuentes</a>
+        </div>
+        <div>
+          <h3>Contacto</h3>
+          <a href="" id="footer-whatsapp">WhatsApp</a>
+          <a href="" id="footer-email">Email</a>
+          <a href="https://minkang.x.yupoo.com/categories/712891" target="_blank" rel="noopener">Catálogo original</a>
+        </div>
+      </nav>
+    </div>
+    <div class="container footer-bottom">
+      <p>© <span id="year"></span> KANG Team. Catálogo de pedido asistido. No se realiza ningún cobro online.</p>
+      <p class="sync-note"><span class="pulse-dot"></span> <span id="sync-note">Sincronizando catálogo…</span></p>
+    </div>
+  </footer>
+
+  <!-- ══════════════════════ MOBILE MENU ══════════════════════ -->
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <div class="mobile-menu-head">
+      <span class="brand-word">KANG<span>TEAM</span></span>
+      <button class="icon-btn" id="menu-close" type="button" aria-label="Cerrar menú"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <nav aria-label="Menú móvil">
+      <a href="#/" data-nav="home">Inicio</a>
+      <a href="#/catalogo" data-nav="catalog">Catálogo</a>
+      <a href="#/equipos" data-nav="teams">Equipos</a>
+      <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
+    </nav>
+    <div class="mobile-menu-foot">
+      <p>Personaliza tu camiseta con nombre, dorsal y parches.</p>
+      <a class="btn btn-primary" href="#/catalogo">Explorar catálogo <svg><use href="#i-arrow"/></svg></a>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ FILTERS DRAWER (móvil) ══════════════════════ -->
+  <div class="drawer-backdrop" id="filters-backdrop" hidden></div>
+  <aside class="filters-drawer" id="filters-drawer" aria-hidden="true" aria-label="Filtros">
+    <div class="drawer-head">
+      <h2>Filtros</h2>
+      <button class="icon-btn" id="filters-close" type="button" aria-label="Cerrar filtros"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="filters-drawer-body" id="filters-drawer-body"></div>
+    <div class="drawer-foot">
+      <button class="btn btn-outline" id="filters-reset" type="button">Limpiar</button>
+      <button class="btn btn-primary" id="filters-apply" type="button">Ver resultados</button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ CARRITO ══════════════════════ -->
+  <div class="drawer-backdrop" id="cart-backdrop" hidden></div>
+  <aside class="cart-drawer" id="cart-drawer" aria-hidden="true" aria-label="Carrito de la compra">
+    <div class="drawer-head">
+      <div>
+        <p class="eyebrow">Tu pedido</p>
+        <h2>Carrito <span id="cart-title-count">(0)</span></h2>
+      </div>
+      <button class="icon-btn" id="cart-close" type="button" aria-label="Cerrar carrito"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="cart-body" id="cart-body"></div>
+    <div class="cart-foot" id="cart-foot" hidden>
+      <div class="cart-total">
+        <span>Artículos</span>
+        <strong id="cart-total-items">0</strong>
+      </div>
+      <p class="cart-note"><svg><use href="#i-shield"/></svg> Sin pago online. Confirmamos precio y envío contigo.</p>
+      <button class="btn btn-primary btn-block" id="checkout-open" type="button">Solicitar pedido <svg><use href="#i-arrow"/></svg></button>
+      <button class="btn-link" id="cart-empty-btn" type="button">Vaciar carrito</button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ PRODUCTO ══════════════════════ -->
+  <div class="modal-backdrop" id="product-backdrop" hidden></div>
+  <section class="product-modal" id="product-modal" role="dialog" aria-modal="true" aria-labelledby="product-title" aria-hidden="true">
+    <button class="icon-btn modal-close" id="product-close" type="button" aria-label="Cerrar ficha"><svg><use href="#i-close"/></svg></button>
+    <div class="product-layout">
+      <div class="product-gallery">
+        <div class="product-main-img" id="product-main-img">
+          <div class="img-skeleton"></div>
+        </div>
+        <div class="product-thumbs" id="product-thumbs"></div>
+      </div>
+      <div class="product-info" id="product-info"></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════ CHECKOUT ══════════════════════ -->
+  <div class="modal-backdrop" id="checkout-backdrop" hidden></div>
+  <section class="modal checkout-modal" id="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-title" aria-hidden="true">
+    <button class="icon-btn modal-close" id="checkout-close" type="button" aria-label="Cerrar"><svg><use href="#i-close"/></svg></button>
+    <div id="checkout-content"></div>
+  </section>
+
+  <!-- ══════════════════════ LIGHTBOX ══════════════════════ -->
+  <div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+    <button class="icon-btn lightbox-close" id="lightbox-close" type="button" aria-label="Cerrar imagen"><svg><use href="#i-close"/></svg></button>
+    <img id="lightbox-img" alt="">
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <noscript>
+    <div class="noscript">Este catálogo necesita JavaScript para mostrar las prendas y el carrito. Actívalo en tu navegador.</div>
+  </noscript>
+
+  <script src="/js/app.js?v=20261113-9" defer></script>
+</body>
+</html>
