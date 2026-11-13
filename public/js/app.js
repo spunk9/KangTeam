@@ -330,6 +330,24 @@
     return { path: path, params: new URLSearchParams(parts[1] || '') };
   }
 
+  function renderPrices() {
+    var target = $('#prices-content');
+    if (!target || !window.KangPricing) return;
+    target.innerHTML = KangPricing.groups.map(function (group) {
+      return '<article class="price-card"><h2>' + esc(group.title) + '</h2><ul>' + group.items.map(function (entry) {
+        return '<li><span>' + esc(entry[0]) + '</span><strong>' + esc(KangPricing.money(entry[1])) + '</strong></li>';
+      }).join('') + '</ul></article>';
+    }).join('');
+  }
+
+  function linePricing(line, item) {
+    return KangPricing.calculate(item, line);
+  }
+
+  function cartPriceCents() {
+    return state.cart.reduce(function (sum, line) { var item = state.byId.get(line.id); return sum + (item ? linePricing(line, item).unitPriceCents * (parseInt(line.qty,10)||0) : 0); }, 0);
+  }
+
   function navigate(path) {
     if (('#' + path) === location.hash) renderRoute(true);
     else location.hash = path;
@@ -337,7 +355,7 @@
 
   function renderRoute(scroll) {
     var route = parseRoute();
-    var routeKeys = { '/': 'home', '/catalogo': 'catalog', '/equipos': 'teams', '/como-funciona': 'how' };
+    var routeKeys = { '/': 'home', '/catalogo': 'catalog', '/equipos': 'teams', '/como-funciona': 'how', '/precios': 'prices' };
     state.route = routeKeys[route.path] || 'home';
 
     $$('.view').forEach(function (view) { view.hidden = true; });
@@ -371,6 +389,10 @@
     } else if (route.path === '/como-funciona') {
       viewId = 'view-how';
       navKey = 'how';
+    } else if (route.path === '/precios') {
+      viewId = 'view-prices';
+      navKey = 'prices';
+      renderPrices();
     }
 
     var view = document.getElementById(viewId);
@@ -1553,6 +1575,8 @@
     if (titleCount) titleCount.textContent = '(' + total + ')';
     var totalEl = $('#cart-total-items');
     if (totalEl) totalEl.textContent = total + (total === 1 ? ' artículo' : ' artículos');
+    var priceEl = $('#cart-total-price');
+    if (priceEl) priceEl.textContent = KangPricing.money(cartPriceCents());
     var foot = $('#cart-foot');
     if (foot) foot.hidden = total === 0;
     renderCartBody();
@@ -1581,13 +1605,15 @@
       if (line.number) customs += '<span>#' + esc(line.number) + '</span>';
       if (line.patches && line.patches !== 'No') customs += '<span>Parches: ' + esc(line.patches) + '</span>';
 
+      var prices = linePricing(line, item);
       return '<article class="cart-item" data-cart-line="' + esc(line.key) + '">' +
         '<div class="cart-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
         '<div class="cart-item-copy">' +
           '<span class="cart-team">' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
           '<h4>' + esc(item.title) + '</h4>' +
           '<div class="cart-custom">' + customs + '</div>' +
-          '<div class="cart-item-foot">' +
+          '<div class="cart-line-price">' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: <strong>' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</strong></div>' +
+          '<div class="cart-item-foot">'+
             '<div class="qty">' +
               '<button type="button" data-cart-dec aria-label="Quitar una unidad"><svg><use href="#i-minus"/></svg></button>' +
               '<span>' + esc(line.qty) + '</span>' +
@@ -1707,9 +1733,10 @@
       if (line.name) detail += ' · ' + line.name;
       if (line.number) detail += ' #' + line.number;
       if (line.patches && line.patches !== 'No') detail += ' · ' + line.patches;
+      var prices = linePricing(line, item);
       return '<div class="summary-item">' +
         '<img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy">' +
-        '<div class="summary-item-copy"><strong>' + esc(item.title) + '</strong><span>' + esc(detail) + '</span></div>' +
+        '<div class="summary-item-copy"><strong>' + esc(item.title) + '</strong><span>' + esc(detail) + '</span><span>' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: ' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</span></div>' +
       '</div>';
     }).join('');
   }
@@ -1724,7 +1751,7 @@
       '<div class="checkout-form-wrap">' +
         '<p class="eyebrow">Último paso</p>' +
         '<h2 id="checkout-title">Confirma tu pedido</h2>' +
-        '<p class="checkout-sub">Déjanos tus datos y te escribimos para confirmar disponibilidad, precio y envío. Sin pago online.</p>' +
+        '<p class="checkout-sub">Déjanos tus datos y te escribimos para confirmar disponibilidad y envío. Sin pago online.</p>' +
         '<form id="checkout-form" novalidate>' +
           '<div class="form-error" id="checkout-error" role="alert"></div>' +
           '<div class="form-grid">' +
@@ -1744,10 +1771,10 @@
         '<div class="summary-items">' + cartSummaryHtml() + '</div>' +
         '<div class="summary-totals">' +
           '<div><span>Artículos</span><strong>' + total + '</strong></div>' +
-          '<div><span>Personalización</span><strong>Incluida</strong></div>' +
-          '<div><span>Precio</span><strong>Por confirmar</strong></div>' +
+          '<div><span>Envío</span><strong>Por confirmar</strong></div>' +
+          '<div><span>Total del pedido</span><strong>' + esc(KangPricing.money(cartPriceCents())) + '</strong></div>' +
         '</div>' +
-        '<p class="summary-note">Te responderemos con el precio final, la disponibilidad y los gastos de envío. Puedes añadir o quitar prendas antes de enviar.</p>' +
+        '<p class="summary-note">Los gastos de envío se confirman aparte. Puedes añadir o quitar prendas antes de enviar.</p>' +
       '</aside>' +
     '</div>';
   }
@@ -1893,7 +1920,8 @@
     content.innerHTML = '<div class="success-panel">' +
       '<div class="success-icon"><svg><use href="#i-check"/></svg></div>' +
       '<h2 id="checkout-title" tabindex="-1">Pedido recibido</h2>' +
-      '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido y te contactaremos para confirmar disponibilidad, precio y envío.</p>' +
+      '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido y te contactaremos para confirmar disponibilidad y envío.</p>' +
+      (data && data.order ? '<p class="success-total">Total del pedido: <strong>' + esc(KangPricing.money(data.order.totalPriceCents)) + '</strong> · envío por confirmar</p>' : '') +
       '<span class="order-ref">PEDIDO ' + esc(id) + '</span>' +
       '<div class="success-actions">' +
         '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Enviar por WhatsApp</a>' +

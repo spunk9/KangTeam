@@ -11,6 +11,7 @@ var urlLib = require('url');
 var util = require('./lib/util');
 var yupoo = require('./lib/yupoo');
 var syncModule = require('./scripts/sync');
+var pricing = require('./public/js/pricing');
 
 util.loadEnv(path.join(__dirname, '.env'));
 
@@ -267,6 +268,7 @@ function validateOrder(payload) {
       patch = sanitizeShort(patch, 40);
     }
 
+    var price = pricing.calculate(product, { name: customName, number: customNumber, patches: patch, size: size });
     return {
       position: index + 1,
       id: product.id,
@@ -279,6 +281,9 @@ function validateOrder(payload) {
       name: customName,
       number: customNumber,
       patches: patch,
+      priceBreakdown: price,
+      unitPriceCents: price.unitPriceCents,
+      lineTotalCents: price.unitPriceCents * qty,
       image: product.cover ? '/img' + product.cover + '/small.jpg' : ''
     };
   });
@@ -288,7 +293,8 @@ function validateOrder(payload) {
     createdAt: new Date().toISOString(),
     customer: { name: name, phone: phone, email: email, city: city, notes: notes },
     items: cleanItems,
-    totalItems: cleanItems.reduce(function (sum, item) { return sum + item.qty; }, 0)
+    totalItems: cleanItems.reduce(function (sum, item) { return sum + item.qty; }, 0),
+    totalPriceCents: cleanItems.reduce(function (sum, item) { return sum + item.lineTotalCents; }, 0)
   };
 }
 
@@ -326,6 +332,8 @@ function orderToText(order) {
     lines.push('Número: ' + (item.number || '—'));
     lines.push('Parches: ' + patchLabel(item.patches));
     lines.push('Cantidad: ' + item.qty);
+    lines.push('Precio unidad: ' + pricing.money(item.unitPriceCents));
+    lines.push('Subtotal: ' + pricing.money(item.lineTotalCents));
     lines.push('');
   });
   lines.push('── CLIENTE ──');
@@ -336,6 +344,8 @@ function orderToText(order) {
   if (order.customer.notes) lines.push('Notas: ' + order.customer.notes);
   lines.push('');
   lines.push('Total artículos: ' + order.totalItems);
+  lines.push('TOTAL DEL PEDIDO: ' + pricing.money(order.totalPriceCents));
+  lines.push('Gastos de envío: por confirmar');
   return lines.join('\n');
 }
 
@@ -353,6 +363,8 @@ function orderToHtml(order) {
       '</td>' +
       '<td style="padding:10px 12px;border-bottom:1px solid #eee">' + escapeHtml(patchLabel(item.patches)) + '</td>' +
       '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center">' + item.qty + '</td>' +
+      '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right">' + escapeHtml(pricing.money(item.unitPriceCents)) + '</td>' +
+      '<td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right">' + escapeHtml(pricing.money(item.lineTotalCents)) + '</td>' +
     '</tr>';
   }).join('');
 
@@ -363,9 +375,10 @@ function orderToHtml(order) {
       '<thead><tr style="background:#f4f2ec;text-align:left">' +
         '<th style="padding:10px 12px">Artículo</th><th style="padding:10px 12px">Talla</th>' +
         '<th style="padding:10px 12px">Nombre / Dorsal</th><th style="padding:10px 12px">Parches</th>' +
-        '<th style="padding:10px 12px">Uds.</th>' +
+        '<th style="padding:10px 12px">Uds.</th><th style="padding:10px 12px">Precio unidad</th><th style="padding:10px 12px">Subtotal</th>' +
       '</tr></thead><tbody>' + rows + '</tbody>' +
     '</table>' +
+    '<p style="text-align:right;font-size:18px"><strong>Total del pedido: ' + escapeHtml(pricing.money(order.totalPriceCents)) + '</strong><br><span style="font-size:12px;color:#777">Gastos de envío por confirmar</span></p>' +
     '<h2 style="font-size:16px;margin:24px 0 8px">Cliente</h2>' +
     '<p style="font-size:14px;line-height:1.6;margin:0">' +
       '<strong>' + escapeHtml(order.customer.name) + '</strong><br>' +
@@ -386,8 +399,9 @@ function saveOrder(order) {
     createdAt: order.createdAt,
     customer: order.customer,
     totalItems: order.totalItems,
+      totalPriceCents: order.totalPriceCents,
     items: order.items.map(function (i) {
-      return { title: i.title, size: i.size, name: i.name, number: i.number, patches: i.patches, qty: i.qty };
+      return { title: i.title, size: i.size, name: i.name, number: i.number, patches: i.patches, qty: i.qty, unitPriceCents: i.unitPriceCents, lineTotalCents: i.lineTotalCents };
     })
   }) + '\n', 'utf8');
 }

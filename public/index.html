@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261113-9">
+  <link rel="stylesheet" href="/css/styles.css?v=20261113-10">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -69,6 +69,7 @@
         <a href="#/catalogo" data-nav="catalog">Catálogo</a>
         <a href="#/equipos" data-nav="teams">Equipos</a>
         <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
+        <a href="#/precios" data-nav="prices">Precios</a>
       </nav>
 
       <div class="header-actions">
@@ -334,13 +335,19 @@
       </div>
     </section>
 
+    <!-- TARIFAS -->
+    <section class="view" id="view-prices" aria-label="Precios" hidden>
+      <div class="page-head"><div class="container"><p class="eyebrow">Precios claros</p><h1>Tarifas<br><em>de prendas y extras.</em></h1><p class="page-lead">Consulta los precios por tipo de producto. El envío se confirma según el destino.</p></div></div>
+      <div class="container prices-grid" id="prices-content"></div>
+    </section>
+
     <!-- ══════════════════════ CÓMO FUNCIONA ══════════════════════ -->
     <section class="view" id="view-how" aria-label="Cómo funciona" hidden>
       <div class="page-head">
         <div class="container">
           <p class="eyebrow">Sin complicaciones</p>
           <h1>Del catálogo<br><em>a tu puerta.</em></h1>
-          <p class="page-lead">Este es un catálogo de pedido asistido: eliges tus prendas, las personalizas y nos envías el pedido. Te confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>
+          <p class="page-lead">Este es un catálogo de pedido asistido: eliges tus prendas, las personalizas y nos envías el pedido. Te confirmamos disponibilidad y gastos de envío por WhatsApp o email.</p>
         </div>
       </div>
 
@@ -359,7 +366,7 @@
           <article class="how-card">
             <span class="how-num">03</span>
             <h2>Confirma el pedido</h2>
-            <p>Al enviar el carrito, el pedido se guarda y se nos notifica. Recibirás la confirmación por WhatsApp o email con el precio final y el envío.</p>
+            <p>Al enviar el carrito, el pedido se guarda y se nos notifica. Recibirás la confirmación por WhatsApp o email con la disponibilidad y el envío.</p>
           </article>
         </div>
 
@@ -371,7 +378,7 @@
           </details>
           <details>
             <summary>¿Las camisetas llevan nombre y dorsal?<svg><use href="#i-chevron"/></svg></summary>
-            <p>Sí. En las camisetas puedes añadir nombre y dorsal sin coste adicional indicado en el catálogo; el precio final se confirma al enviar el pedido. En chándals y chaquetas no aplica.</p>
+            <p>Sí. En las camisetas puedes añadir nombre y dorsal por un suplemento de 4,00 € si añades nombre o dorsal. En chándals y chaquetas no aplica.</p>
           </details>
           <details>
             <summary>¿Qué son los parches?<svg><use href="#i-chevron"/></svg></summary>
@@ -426,6 +433,7 @@
         <div>
           <h3>Ayuda</h3>
           <a href="#/como-funciona">Cómo funciona</a>
+          <a href="#/precios">Precios</a>
           <a href="#/como-funciona">Tallas y personalización</a>
           <a href="#/como-funciona">Envíos</a>
           <a href="#/como-funciona">Preguntas frecuentes</a>
@@ -455,6 +463,7 @@
       <a href="#/catalogo" data-nav="catalog">Catálogo</a>
       <a href="#/equipos" data-nav="teams">Equipos</a>
       <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
+      <a href="#/precios" data-nav="prices">Precios</a>
     </nav>
     <div class="mobile-menu-foot">
       <p>Personaliza tu camiseta con nombre, dorsal y parches.</p>
@@ -492,7 +501,8 @@
         <span>Artículos</span>
         <strong id="cart-total-items">0</strong>
       </div>
-      <p class="cart-note"><svg><use href="#i-shield"/></svg> Sin pago online. Confirmamos precio y envío contigo.</p>
+      <div class="cart-total"><span>Total del pedido</span><strong id="cart-total-price">0,00 €</strong></div>
+      <p class="cart-note"><svg><use href="#i-shield"/></svg> Envío por confirmar. Sin pago online.</p>
       <button class="btn btn-primary btn-block" id="checkout-open" type="button">Solicitar pedido <svg><use href="#i-arrow"/></svg></button>
       <button class="btn-link" id="cart-empty-btn" type="button">Vaciar carrito</button>
     </div>
@@ -532,6 +542,7 @@
     <div class="noscript">Este catálogo necesita JavaScript para mostrar las prendas y el carrito. Actívalo en tu navegador.</div>
   </noscript>
 
-  <script src="/js/app.js?v=20261113-9" defer></script>
+  <script src="/js/pricing.js?v=20261113-10" defer></script>
+  <script src="/js/app.js?v=20261113-10" defer></script>
 </body>
 </html>

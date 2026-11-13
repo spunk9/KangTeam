@@ -1775,3 +1775,17 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .001ms !important; }
 }
+
+
+/* Tarifas y precios del carrito */
+.prices-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; padding-top:28px; padding-bottom:64px; }
+.price-card { border:1px solid var(--line,#e7e4dc); border-radius:16px; background:var(--paper,#fff); padding:22px 24px; }
+.price-card h2 { margin:0 0 14px; font-size:20px; }
+.price-card ul { list-style:none; padding:0; margin:0; }
+.price-card li { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:11px 0; border-top:1px solid var(--line,#e7e4dc); font-size:14px; line-height:1.45; }
+.price-card li strong { white-space:nowrap; }
+.cart-line-price { margin-top:8px; font-size:12px; color:var(--muted,#777); }
+.cart-line-price strong { color:var(--ink,#111); }
+.summary-item-copy span + span { color:var(--ink,#111); font-weight:600; }
+.success-total { margin:20px 0; font-size:18px; }
+@media (max-width:700px) { .prices-grid { grid-template-columns:1fr; gap:12px; padding-top:18px; } .price-card { padding:18px; } }
