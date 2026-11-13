@@ -1,0 +1,2151 @@
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   KANG TEAM · Catálogo online
+   Aplicación de una sola página, sin dependencias.
+   ═══════════════════════════════════════════════════════════ */
+
+(function () {
+  var $ = function (selector, root) { return (root || document).querySelector(selector); };
+  var $$ = function (selector, root) { return Array.prototype.slice.call((root || document).querySelectorAll(selector)); };
+
+  var TYPE_LABELS = {
+    jersey: 'Camiseta',
+    training: 'Chándal',
+    jacket: 'Chaqueta',
+    polo: 'Polo',
+    shorts: 'Pantalón',
+    hoodie: 'Sudadera',
+    casual: 'Camiseta casual',
+    other: 'Otra prenda'
+  };
+
+  var FLAG_LABELS = {
+    retro: 'Retro',
+    kids: 'Niños',
+    women: 'Mujer',
+    long: 'Manga larga',
+    player: 'Player version',
+    gk: 'Portero',
+    special: 'Edición especial'
+  };
+
+  var SEASON_ORDER = ['27/28', '26/27', '25/26', '24/25', '23/24', '22/23', '21/22', '20/21', '2016-2019', '2010-2015', 'Retro', 'Sin temporada'];
+  var SEASON_LABELS = { '2016-2019': '2016–2019', '2010-2015': '2010–2015', 'Sin temporada': 'Sin temporada' };
+
+  var numberFormat = new Intl.NumberFormat('es-ES');
+  var cartStorageKey = 'kang_cart_v1';
+  var state = {
+    catalog: null,
+    items: [],
+    byId: new Map(),
+    config: null,
+    teams: new Map(),
+    leagues: new Map(),
+    seasons: new Map(),
+    types: new Map(),
+    filters: { q: '', team: '', league: '', season: '', type: '' },
+    view: 'teams',
+    sort: 'new',
+    gridPage: 1,
+    groupPage: 1,
+    route: 'home',
+    loading: true,
+    product: null,
+    gallery: [],
+    galleryIndex: 0,
+    selectedSize: '',
+    qty: 1,
+    patches: 'No',
+    cart: [],
+    lastOrder: null,
+    overlayCount: 0,
+    returnFocus: null,
+    previewTimer: null
+  };
+
+  // ── Utilidades ───────────────────────────────────────────
+
+  function esc(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function enc(value) { return encodeURIComponent(String(value === undefined ? '' : value)); }
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  function fmt(value) { return numberFormat.format(Number(value) || 0); }
+
+  function debounce(fn, wait) {
+    var timer;
+    return function () {
+      var args = arguments;
+      var ctx = this;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(ctx, args); }, wait);
+    };
+  }
+
+  function hashInt(value) {
+    var hash = 0;
+    var str = String(value || '');
+    for (var i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    return Math.abs(hash);
+  }
+
+  function colorFor(name) {
+    var palette = ['#d9ff3f', '#ffb02e', '#7dd3fc', '#f0abfc', '#fca5a5', '#86efac', '#fde68a', '#c4b5fd', '#fdba74', '#a7f3d0'];
+    return palette[hashInt(name) % palette.length];
+  }
+
+  function initials(name) {
+    var cleaned = String(name || '').replace(/[^\w\s\u00C0-\u024F]/g, ' ').trim();
+    var words = cleaned.split(/\s+/).filter(function (word) {
+      return word && !/^(de|del|la|el|fc|cf|sc|afc|club|the)$/i.test(word);
+    });
+    if (!words.length) return 'KT';
+    if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+    return words.slice(0, 3).map(function (word) { return word.charAt(0); }).join('').toUpperCase();
+  }
+
+  function teamMono(name) {
+    return '<span class="team-mono" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' + esc(initials(name)) + '</span>';
+  }
+
+  function coverUrl(item, size) {
+    if (!item || !item.cover) return '/placeholder.svg';
+    return '/img' + item.cover + '/' + (size || 'small') + '.jpg';
+  }
+
+  function albumUrl(path, size) {
+    if (!path) return '/placeholder.svg';
+    return '/img' + path.replace(/\/[^/]+$/, '/' + (size || 'medium') + '.jpg');
+  }
+
+  function imgTag(src, alt, options) {
+    options = options || {};
+    var cls = 'fade-img' + (options.cls ? ' ' + options.cls : '');
+    return '<img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="' + (options.eager ? 'eager' : 'lazy') + '" decoding="async" class="' + cls + '"' +
+      ' onload="this.classList.add(\'is-loaded\')"' +
+      ' onerror="this.onerror=null;this.src=\'/placeholder.svg\';this.classList.add(\'is-loaded\')">';
+  }
+
+  function seasonLabel(value) { return SEASON_LABELS[value] || value || 'Sin temporada'; }
+
+  function typeLabel(value) { return TYPE_LABELS[value] || 'Prenda'; }
+
+  function flagLabel(value) { return FLAG_LABELS[value] || value; }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    try {
+      return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+    } catch (err) { return '—'; }
+  }
+
+  function loadCart() {
+    try {
+      var raw = localStorage.getItem(cartStorageKey);
+      var parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(function (item) { return item && item.id && item.qty > 0; });
+    } catch (err) { return []; }
+  }
+
+  function saveCart() {
+    try { localStorage.setItem(cartStorageKey, JSON.stringify(state.cart)); } catch (err) {}
+  }
+
+  function toast(message, type) {
+    var region = $('#toast-region');
+    if (!region) return;
+    var el = document.createElement('div');
+    el.className = 'toast' + (type === 'error' ? ' is-error' : '');
+    el.innerHTML = '<svg><use href="#i-' + (type === 'error' ? 'close' : 'check') + '"/></svg><span>' + esc(message) + '</span>';
+    region.appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(6px)';
+      setTimeout(function () { el.remove(); }, 250);
+    }, 3200);
+  }
+
+  // ── Carga de datos ───────────────────────────────────────
+
+  async function loadConfig() {
+    try {
+      var res = await fetch('/api/config', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('config');
+      state.config = await res.json();
+    } catch (err) {
+      state.config = { store: { name: 'KANG Team', whatsapp: '', email: '', instagram: '', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
+    }
+    applyConfig();
+  }
+
+  async function loadCatalog() {
+    var res;
+    try {
+      res = await fetch('/api/catalog', { headers: { 'Accept': 'application/json' } });
+    } catch (err) {
+      renderLoadError('No se pudo conectar con el catálogo. Comprueba tu conexión e inténtalo de nuevo.');
+      return;
+    }
+    if (res.status === 503) {
+      renderSyncing();
+      setTimeout(loadCatalog, 2500);
+      return;
+    }
+    if (!res.ok) {
+      renderLoadError('El catálogo no está disponible en este momento.');
+      return;
+    }
+
+    var data = await res.json();
+    state.catalog = data;
+    state.items = Array.isArray(data.items) ? data.items : [];
+    state.byId = new Map(state.items.map(function (item) { return [item.id, item]; }));
+    buildFacets();
+    state.loading = false;
+    populateFilterOptions();
+    renderHome();
+    renderTeamsView();
+    updateCartUI();
+    updateSyncNote();
+    if (state.route === 'catalog') {
+      syncFilterInputs();
+      renderCatalog();
+    }
+  }
+
+  function buildFacets() {
+    state.teams.clear();
+    state.leagues.clear();
+    state.seasons.clear();
+    state.types.clear();
+
+    state.items.forEach(function (item) {
+      item._search = normalize([item.team, item.title, item.season, item.league, typeLabel(item.type)].join(' '));
+      var team = state.teams.get(item.team);
+      if (!team) {
+        team = { name: item.team, league: item.league || 'Otras ligas', count: 0, seasons: new Map(), cover: item.cover, sample: item };
+        state.teams.set(item.team, team);
+      }
+      team.count += 1;
+      team.seasons.set(item.seasonGroup, (team.seasons.get(item.seasonGroup) || 0) + 1);
+      if (!team.cover) team.cover = item.cover;
+
+      state.leagues.set(team.league, (state.leagues.get(team.league) || 0) + 1);
+      state.seasons.set(item.seasonGroup, (state.seasons.get(item.seasonGroup) || 0) + 1);
+      state.types.set(item.type, (state.types.get(item.type) || 0) + 1);
+    });
+  }
+
+  function applyConfig() {
+    var store = state.config && state.config.store ? state.config.store : {};
+    var name = store.name || 'KANG Team';
+    document.title = name + ' · Catálogo de camisetas, chándals y equipaciones';
+
+    var waNumber = (store.whatsapp || '').replace(/\D/g, '');
+    var waHref = waNumber ? 'https://wa.me/' + waNumber : 'https://wa.me/';
+    ['cta-whatsapp', 'contact-whatsapp', 'footer-whatsapp'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.href = waHref;
+    });
+    var email = store.email || '';
+    ['contact-email', 'footer-email'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        if (email) el.href = 'mailto:' + email;
+        else el.href = '#/como-funciona';
+      }
+    });
+
+    var social = $('#footer-social');
+    if (social) {
+      var html = '';
+      if (waNumber) html += '<a href="' + waHref + '" target="_blank" rel="noopener" aria-label="WhatsApp"><svg><use href="#i-whatsapp"/></svg></a>';
+      if (email) html += '<a href="mailto:' + esc(email) + '" aria-label="Email"><svg><use href="#i-mail"/></svg></a>';
+      if (store.instagram) html += '<a href="https://instagram.com/' + esc(store.instagram.replace(/^@/, '')) + '" target="_blank" rel="noopener" aria-label="Instagram"><svg><use href="#i-instagram"/></svg></a>';
+      html += '<a href="https://minkang.x.yupoo.com/categories/712891" target="_blank" rel="noopener" aria-label="Yupoo"><svg><use href="#i-arrow"/></svg></a>';
+      social.innerHTML = html;
+    }
+
+    if (store.name && store.name !== 'KANG Team') {
+      $$('.brand-word').forEach(function (el) {
+        var parts = store.name.trim().split(/\s+/);
+        var last = parts.pop();
+        el.innerHTML = esc(parts.join(' ')) + (parts.length ? ' ' : '') + '<span>' + esc(last.toUpperCase()) + '</span>';
+      });
+    }
+  }
+
+  function updateSyncNote() {
+    var note = $('#sync-note');
+    if (!note) return;
+    var updated = state.catalog && state.catalog.meta ? state.catalog.meta.generatedAt : null;
+    note.textContent = updated ? 'Catálogo actualizado · ' + formatDate(updated) : 'Catálogo sincronizado';
+  }
+
+  function renderSyncing() {
+    var home = $('#view-home');
+    if (home && !home.hidden) {
+      var total = $('#stat-total');
+      if (total) total.textContent = '…';
+    }
+    var results = $('#catalog-results');
+    if (results && !$('#view-catalog').hidden) {
+      results.innerHTML = '<div class="empty-state"><svg><use href="#i-spark"/></svg><h3>Sincronizando catálogo</h3><p>Estamos descargando las últimas prendas de Yupoo. Tardará unos segundos.</p></div>';
+    }
+  }
+
+  function renderLoadError(message) {
+    var region = $('#catalog-results');
+    if (region) {
+      region.innerHTML = '<div class="empty-state"><svg><use href="#i-close"/></svg><h3>No se pudo cargar el catálogo</h3><p>' + esc(message) + '</p><button class="btn btn-primary" type="button" onclick="location.reload()">Reintentar</button></div>';
+    }
+    toast(message, 'error');
+  }
+
+  // ── Enrutado ─────────────────────────────────────────────
+
+  function parseRoute() {
+    var hash = location.hash.replace(/^#/, '') || '/';
+    var parts = hash.split('?');
+    var path = parts[0] || '/';
+    if (path.length > 1 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);
+    return { path: path, params: new URLSearchParams(parts[1] || '') };
+  }
+
+  function navigate(path) {
+    if (('#' + path) === location.hash) renderRoute(true);
+    else location.hash = path;
+  }
+
+  function renderRoute(scroll) {
+    var route = parseRoute();
+    var routeKeys = { '/': 'home', '/catalogo': 'catalog', '/equipos': 'teams', '/como-funciona': 'how' };
+    state.route = routeKeys[route.path] || 'home';
+
+    $$('.view').forEach(function (view) { view.hidden = true; });
+    var navKey = 'home';
+    var viewId = 'view-home';
+
+    if (route.path === '/catalogo') {
+      viewId = 'view-catalog';
+      navKey = 'catalog';
+      state.filters = {
+        q: route.params.get('q') || '',
+        team: route.params.get('equipo') || '',
+        league: route.params.get('liga') || '',
+        season: route.params.get('temporada') || '',
+        type: route.params.get('tipo') || ''
+      };
+      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo')) ? 'grid' : 'teams';
+      state.groupPage = 1;
+      state.gridPage = 1;
+      if (state.items.length) {
+        syncFilterInputs();
+        renderCatalog();
+      }
+      if (route.params.get('focus') === 'search') {
+        setTimeout(function () { var input = $('#catalog-search'); if (input) input.focus(); }, 90);
+      }
+    } else if (route.path === '/equipos') {
+      viewId = 'view-teams';
+      navKey = 'teams';
+      if (state.items.length) renderTeamsView();
+    } else if (route.path === '/como-funciona') {
+      viewId = 'view-how';
+      navKey = 'how';
+    }
+
+    var view = document.getElementById(viewId);
+    if (view) view.hidden = false;
+
+    $$('[data-nav]').forEach(function (link) {
+      link.classList.toggle('is-active', link.getAttribute('data-nav') === navKey);
+    });
+
+    if (scroll) {
+      try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (err) { window.scrollTo(0, 0); }
+    }
+  }
+
+  function updateCatalogHash() {
+    if (state.route !== 'catalog') return;
+    var params = new URLSearchParams();
+    if (state.filters.q) params.set('q', state.filters.q);
+    if (state.filters.team) params.set('equipo', state.filters.team);
+    if (state.filters.league) params.set('liga', state.filters.league);
+    if (state.filters.season) params.set('temporada', state.filters.season);
+    if (state.filters.type) params.set('tipo', state.filters.type);
+    if (state.view === 'grid') params.set('vista', 'grid');
+    var query = params.toString();
+    try {
+      history.replaceState(null, '', '#/catalogo' + (query ? '?' + query : ''));
+    } catch (err) {}
+  }
+
+  // ── Inicio ───────────────────────────────────────────────
+
+  function renderHome() {
+    if (!state.items.length) return;
+
+    var total = $('#stat-total');
+    var teams = $('#stat-teams');
+    if (total) total.textContent = fmt(state.items.length);
+    if (teams) teams.textContent = fmt(state.teams.size);
+
+    renderHero();
+    renderHomeSeasons();
+    renderHomeNew();
+    renderHomeTeams();
+    startPreviewLoop();
+  }
+
+  function renderHero() {
+    var collage = $('#hero-collage');
+    var feature = $('#hero-feature');
+    var marquee = $('#marquee-track');
+
+    var withCover = state.items.filter(function (item) { return item.cover; });
+    var chosen = withCover.slice(0, 42);
+    if (collage) {
+      var html = '';
+      for (var col = 0; col < 3; col++) {
+        var slice = chosen.filter(function (_, index) { return index % 3 === col; }).slice(0, 14);
+        var doubled = slice.concat(slice);
+        html += '<div class="hero-strip">' + doubled.map(function (item, index) {
+          return '<div class="hero-shot">' + imgTag(coverUrl(item, 'small'), item.title, { eager: col === 0 && index < 3 }) + '</div>';
+        }).join('') + '</div>';
+      }
+      collage.innerHTML = html;
+    }
+
+    if (feature) {
+      var heroItem = chosen.filter(function (item) { return item.custom && item.seasonGroup === '26/27'; })[0] || chosen[0];
+      if (heroItem) {
+        feature.innerHTML = '<div class="hero-feature-card">' +
+          '<div class="hero-badge">NUEVO<span>26/27</span></div>' +
+          '<div class="hero-feature-img">' + imgTag(coverUrl(heroItem, 'medium'), heroItem.title, { eager: true }) + '</div>' +
+          '<div class="hero-feature-meta"><div><span>' + esc(heroItem.team) + ' · ' + esc(heroItem.season) + '</span><strong>' + esc(heroItem.title) + '</strong></div><svg><use href="#i-arrow"/></svg></div>' +
+          '</div>';
+        feature.style.cursor = 'pointer';
+        feature.onclick = function () { openProduct(heroItem.id); };
+      }
+    }
+
+    if (marquee) {
+      var topTeams = Array.from(state.teams.values()).filter(function (team) { return team.name !== 'Otros'; }).sort(function (a, b) { return b.count - a.count; }).slice(0, 16);
+      var items = topTeams.concat(topTeams);
+      marquee.innerHTML = items.map(function (team) {
+        return '<button type="button" class="marquee-item" data-team-link="' + esc(team.name) + '"><img src="' + esc(coverUrl(team.sample, 'square')) + '" alt="" loading="lazy">' + esc(team.name) + '</button>';
+      }).join('');
+    }
+  }
+
+  function renderHomeSeasons() {
+    var container = $('#home-seasons');
+    if (!container) return;
+
+    var current = state.items.filter(function (item) { return item.seasonGroup === '26/27'; });
+    var previous = state.items.filter(function (item) { return item.seasonGroup === '25/26'; });
+    var retro = state.items.filter(function (item) { return item.seasonGroup === 'Retro'; });
+    var nations = state.items.filter(function (item) { return item.league === 'Selecciones'; });
+
+    var cards = [
+      { key: '26/27', label: '26/27', sub: 'Nueva temporada', count: current.length, img: current[0] },
+      { key: '25/26', label: '25/26', sub: 'Temporada anterior', count: previous.length, img: previous[0] },
+      { key: 'Retro', label: 'Retro', sub: 'Clásicas de siempre', count: retro.length, img: retro[0] },
+      { key: 'Selecciones', label: 'Selecciones', sub: 'Mundial 2026', count: nations.length, img: nations[0], league: true }
+    ];
+
+    container.innerHTML = cards.map(function (card) {
+      var href = card.league ? '#/catalogo?liga=Selecciones' : '#/catalogo?temporada=' + enc(card.key);
+      return '<a class="season-card" href="' + href + '">' +
+        (card.img ? imgTag(coverUrl(card.img, 'medium'), card.sub) : '') +
+        '<div class="season-card-body"><small>' + esc(card.sub) + '</small><strong>' + esc(card.label) + '</strong><span>' + fmt(card.count) + ' prendas <svg><use href="#i-arrow"/></svg></span></div>' +
+        '</a>';
+    }).join('');
+  }
+
+  function renderHomeNew() {
+    var container = $('#home-new');
+    if (!container) return;
+    var items = state.items.filter(function (item) {
+      return item.seasonGroup === '26/27' && item.custom;
+    }).slice(0, 12);
+    if (!items.length) items = state.items.slice(0, 12);
+    container.innerHTML = items.map(productCard).join('');
+  }
+
+  function renderHomeTeams() {
+    var container = $('#home-teams');
+    if (!container) return;
+    var teams = Array.from(state.teams.values())
+      .filter(function (team) { return team.name !== 'Otros' && team.count > 0; })
+      .sort(function (a, b) { return b.count - a.count; })
+      .slice(0, 12);
+    container.innerHTML = teams.map(teamCard).join('');
+  }
+
+  function productCard(item) {
+    var badges = '';
+    if (item.custom) badges += '<span class="badge badge-volt">Personalizable</span>';
+    if (item.flags && item.flags.indexOf('retro') !== -1) badges += '<span class="badge badge-light">Retro</span>';
+    if (item.flags && item.flags.indexOf('kids') !== -1) badges += '<span class="badge">Niños</span>';
+
+    return '<article class="card" data-product="' + esc(item.id) + '">' +
+      '<div class="card-media">' +
+        '<button class="card-open" type="button" aria-label="Ver ' + esc(item.title) + '"></button>' +
+        imgTag(coverUrl(item, 'small'), item.title) +
+        '<div class="card-badges" aria-hidden="true">' + badges + '</div>' +
+        '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(item.title) + '"><svg><use href="#i-plus"/></svg></button>' +
+      '</div>' +
+      '<div class="card-body">' +
+        '<div class="card-kicker"><span>' + esc(item.team) + '</span><span>' + esc(item.season) + '</span></div>' +
+        '<h3 class="card-title">' + esc(item.title) + '</h3>' +
+        '<div class="card-foot"><span class="type-label">' + esc(typeLabel(item.type)) + '</span>' +
+          (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Nombre + dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
+        '</div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function teamCard(team) {
+    var topSeasons = Array.from(team.seasons.keys()).sort(function (a, b) {
+      return SEASON_ORDER.indexOf(a) - SEASON_ORDER.indexOf(b);
+    }).slice(0, 2).map(seasonLabel).join(' · ');
+    return '<a class="team-card" href="#/catalogo?equipo=' + enc(team.name) + '">' +
+      teamMono(team.name) +
+      '<div class="team-card-copy"><strong>' + esc(team.name) + '</strong><span>' + fmt(team.count) + ' prendas · ' + esc(topSeasons) + '</span></div>' +
+      '<svg class="team-card-arrow"><use href="#i-arrow"/></svg>' +
+      '</a>';
+  }
+
+  function startPreviewLoop() {
+    if (state.previewTimer) return;
+    var names = ['TU NOMBRE', 'MBAPPÉ', 'VINICIUS', 'BELLINGHAM', 'LAMINE'];
+    var numbers = ['10', '9', '7', '5', '19'];
+    var index = 0;
+    state.previewTimer = setInterval(function () {
+      if (state.route !== 'home') return;
+      index = (index + 1) % names.length;
+      var nameEl = $('#preview-name');
+      var numberEl = $('#preview-number');
+      if (nameEl) nameEl.textContent = names[index];
+      if (numberEl) numberEl.textContent = numbers[index];
+    }, 3200);
+  }
+
+  // ── Equipos ──────────────────────────────────────────────
+
+  function populateTeamsLeague() {
+    var select = $('#teams-league');
+    if (!select) return;
+    var current = select.value;
+    var leagues = Array.from(state.leagues.entries()).sort(function (a, b) { return b[1] - a[1]; });
+    select.innerHTML = '<option value="">Todas las ligas</option>' + leagues.map(function (row) {
+      return '<option value="' + esc(row[0]) + '">' + esc(row[0]) + ' (' + fmt(row[1]) + ')</option>';
+    }).join('');
+    select.value = current;
+  }
+
+  function renderTeamsView() {
+    if (!state.items.length) return;
+    populateTeamsLeague();
+    var container = $('#teams-results');
+    if (!container) return;
+
+    var query = normalize($('#teams-search') ? $('#teams-search').value : '');
+    var league = $('#teams-league') ? $('#teams-league').value : '';
+    var teams = Array.from(state.teams.values()).filter(function (team) {
+      if (league && team.league !== league) return false;
+      if (query && normalize(team.name + ' ' + team.league).indexOf(query) === -1) return false;
+      return true;
+    });
+
+    if (!teams.length) {
+      container.innerHTML = '<div class="empty-state"><svg><use href="#i-search"/></svg><h3>Sin equipos</h3><p>No encontramos equipos con esa búsqueda.</p></div>';
+      return;
+    }
+
+    var grouped = {};
+    teams.forEach(function (team) {
+      if (!grouped[team.league]) grouped[team.league] = [];
+      grouped[team.league].push(team);
+    });
+
+    var leagueNames = Object.keys(grouped).sort(function (a, b) {
+      return grouped[b].length - grouped[a].length;
+    });
+    if (leagueNames.indexOf('Selecciones') !== -1) {
+      leagueNames = ['Selecciones'].concat(leagueNames.filter(function (name) { return name !== 'Selecciones'; }));
+    }
+
+    container.innerHTML = leagueNames.map(function (name) {
+      var list = grouped[name].sort(function (a, b) { return b.count - a.count; });
+      var total = list.reduce(function (sum, team) { return sum + team.count; }, 0);
+      return '<section class="league-block">' +
+        '<div class="league-block-head"><h2>' + esc(name) + '</h2><span>' + fmt(list.length) + ' equipos · ' + fmt(total) + ' prendas</span></div>' +
+        '<div class="team-grid">' + list.map(teamCard).join('') + '</div>' +
+        '</section>';
+    }).join('');
+  }
+
+  // ── Catálogo ─────────────────────────────────────────────
+
+  var PAGE_GRID = 24;
+  var PAGE_TEAMS = 6;
+
+  function seasonRank(item) {
+    var rank = SEASON_ORDER.indexOf(item.seasonGroup);
+    return rank === -1 ? SEASON_ORDER.length : rank;
+  }
+
+  function getFilteredItems() {
+    var q = normalize(state.filters.q);
+    var team = state.filters.team;
+    var league = state.filters.league;
+    var season = state.filters.season;
+    var type = state.filters.type;
+
+    var items = state.items.filter(function (item) {
+      if (team && item.team !== team) return false;
+      if (league && item.league !== league) return false;
+      if (season && item.seasonGroup !== season) return false;
+      if (type && item.type !== type) return false;
+      if (q && item._search.indexOf(q) === -1) return false;
+      return true;
+    });
+
+    return sortItems(items);
+  }
+
+  function sortItems(list) {
+    var items = list.slice();
+    if (state.sort === 'team') {
+      items.sort(function (a, b) {
+        return a.team.localeCompare(b.team, 'es') ||
+          seasonRank(a) - seasonRank(b) ||
+          a.title.localeCompare(b.title, 'es');
+      });
+    } else if (state.sort === 'season') {
+      items.sort(function (a, b) {
+        return (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) ||
+          a.team.localeCompare(b.team, 'es') ||
+          a.title.localeCompare(b.title, 'es');
+      });
+    } else if (state.sort === 'name') {
+      items.sort(function (a, b) { return a.title.localeCompare(b.title, 'es'); });
+    }
+    return items;
+  }
+
+  function catalogHref(filters, view) {
+    var params = new URLSearchParams();
+    if (filters.q) params.set('q', filters.q);
+    if (filters.team) params.set('equipo', filters.team);
+    if (filters.league) params.set('liga', filters.league);
+    if (filters.season) params.set('temporada', filters.season);
+    if (filters.type) params.set('tipo', filters.type);
+    if (view === 'grid') params.set('vista', 'grid');
+    var query = params.toString();
+    return '#/catalogo' + (query ? '?' + query : '');
+  }
+
+  function groupByTeam(items) {
+    var map = new Map();
+    items.forEach(function (item) {
+      var group = map.get(item.team);
+      if (!group) {
+        group = { name: item.team, league: item.league || 'Otras ligas', items: [], seasons: new Map(), cover: item.cover };
+        map.set(item.team, group);
+      }
+      group.items.push(item);
+      group.seasons.set(item.seasonGroup, (group.seasons.get(item.seasonGroup) || 0) + 1);
+      if (!group.cover) group.cover = item.cover;
+    });
+
+    var groups = Array.from(map.values());
+    groups.forEach(function (group) {
+      group.items.sort(function (a, b) {
+        return (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) ||
+          a.title.localeCompare(b.title, 'es');
+      });
+    });
+
+    groups.sort(function (a, b) {
+      if (state.sort === 'team') return a.name.localeCompare(b.name, 'es');
+      return b.items.length - a.items.length || a.name.localeCompare(b.name, 'es');
+    });
+    return groups;
+  }
+
+  function renderCatalog() {
+    if (!state.items.length) return;
+    var results = $('#catalog-results');
+    if (!results) return;
+
+    var items = getFilteredItems();
+    var useGrid = state.view === 'grid' || !!state.filters.team;
+
+    renderActiveFilters();
+    updateFilterCount();
+
+    if (!items.length) {
+      results.innerHTML = '<div class="empty-state">' +
+        '<svg><use href="#i-search"/></svg>' +
+        '<h3>Sin resultados</h3>' +
+        '<p>No encontramos prendas con esos filtros. Prueba a quitar alguno o busca otro equipo.</p>' +
+        '<button class="btn btn-primary" type="button" data-clear-all>Limpiar filtros</button>' +
+        '</div>';
+      var emptyCount = $('#results-count');
+      if (emptyCount) emptyCount.innerHTML = 'Sin resultados';
+      setLoadMore(false);
+      return;
+    }
+
+    if (useGrid) renderGrid(items);
+    else renderGroups(items);
+
+    updateCatalogHash();
+  }
+
+  function renderGrid(items) {
+    var shown = Math.min(items.length, state.gridPage * PAGE_GRID);
+    var results = $('#catalog-results');
+    if (results) {
+      results.innerHTML = '<h2 class="sr-only">Resultados del catálogo</h2>' +
+        '<div class="product-grid">' + items.slice(0, shown).map(productCard).join('') + '</div>';
+    }
+    var count = $('#results-count');
+    if (count) {
+      count.innerHTML = 'Mostrando <strong>' + fmt(shown) + '</strong> de <strong>' + fmt(items.length) + '</strong> prendas';
+    }
+    setLoadMore(shown < items.length, 'Cargar más prendas', items.length - shown);
+  }
+
+  function renderGroups(items) {
+    var groups = groupByTeam(items);
+    var shown = Math.min(groups.length, state.groupPage * PAGE_TEAMS);
+    var results = $('#catalog-results');
+    if (results) {
+      results.innerHTML = groups.slice(0, shown).map(teamGroupSection).join('');
+    }
+    var count = $('#results-count');
+    if (count) {
+      count.innerHTML = 'Mostrando <strong>' + fmt(shown) + '</strong> de <strong>' + fmt(groups.length) + '</strong> equipos · <strong>' + fmt(items.length) + '</strong> prendas';
+    }
+    setLoadMore(shown < groups.length, 'Cargar más equipos', groups.length - shown);
+  }
+
+  function teamGroupSection(group) {
+    var seasons = Array.from(group.seasons.keys())
+      .sort(function (a, b) { return SEASON_ORDER.indexOf(a) - SEASON_ORDER.indexOf(b); })
+      .slice(0, 3);
+    var preview = group.items.slice(0, 8);
+    var filters = Object.assign({}, state.filters, { team: group.name });
+    var href = catalogHref(filters, 'grid');
+
+    return '<section class="team-group">' +
+      '<div class="team-group-head">' +
+        '<div class="team-group-title">' + teamMono(group.name) +
+          '<div><h2>' + esc(group.name) + '</h2>' +
+          '<p>' + fmt(group.items.length) + ' prendas · ' + esc(group.league) + '</p></div>' +
+        '</div>' +
+        '<div class="team-group-actions">' +
+          '<div class="season-tags">' + seasons.map(function (season) {
+            return '<span class="season-tag">' + esc(seasonLabel(season)) + '</span>';
+          }).join('') + '</div>' +
+          '<a href="' + esc(href) + '">Ver todo <svg><use href="#i-arrow"/></svg></a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="rail">' + preview.map(productCard).join('') + '</div>' +
+    '</section>';
+  }
+
+  function setLoadMore(visible, label, remaining) {
+    var wrap = $('#load-more-wrap');
+    if (!wrap) return;
+    wrap.hidden = !visible;
+    if (!visible) return;
+    var button = $('#load-more');
+    if (button) {
+      button.innerHTML = esc(label || 'Cargar más') + ' <span id="load-more-count">' + fmt(remaining || 0) + '</span>';
+    }
+  }
+
+  function loadMoreResults() {
+    if (state.view === 'grid' || state.filters.team) state.gridPage += 1;
+    else state.groupPage += 1;
+    renderCatalog();
+  }
+
+  function setView(view) {
+    state.view = view === 'grid' ? 'grid' : 'teams';
+    if (state.view === 'teams') state.filters.team = '';
+    state.gridPage = 1;
+    state.groupPage = 1;
+    syncFilterInputs();
+    renderCatalog();
+    updateCatalogHash();
+  }
+
+  function activeFilterCount() {
+    return ['q', 'team', 'league', 'season', 'type'].filter(function (key) {
+      return !!state.filters[key];
+    }).length;
+  }
+
+  function updateFilterCount() {
+    var count = activeFilterCount();
+    var badge = $('#filter-count');
+    if (badge) {
+      badge.textContent = String(count);
+      badge.style.display = count ? '' : 'none';
+    }
+  }
+
+  function renderActiveFilters() {
+    var container = $('#active-filters');
+    if (!container) return;
+
+    var chips = [];
+    function chip(key, label) {
+      return '<span class="filter-chip">' + esc(label) +
+        '<button type="button" data-clear-filter="' + key + '" aria-label="Quitar filtro ' + esc(label) + '">' +
+        '<svg><use href="#i-close"/></svg></button></span>';
+    }
+
+    if (state.filters.q) chips.push(chip('q', 'Búsqueda: ' + state.filters.q));
+    if (state.filters.team) chips.push(chip('team', 'Equipo: ' + state.filters.team));
+    if (state.filters.league) chips.push(chip('league', 'Liga: ' + state.filters.league));
+    if (state.filters.season) chips.push(chip('season', 'Temporada: ' + seasonLabel(state.filters.season)));
+    if (state.filters.type) chips.push(chip('type', 'Tipo: ' + typeLabel(state.filters.type)));
+
+    if (!chips.length) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = chips.join('') +
+      '<button type="button" class="filter-chip" data-clear-all>Limpiar todo</button>';
+  }
+
+  function applyFilters(patch) {
+    patch = patch || {};
+    Object.keys(patch).forEach(function (key) {
+      if (key in state.filters) state.filters[key] = String(patch[key] || '').trim();
+    });
+
+    if ('league' in patch && state.filters.team) {
+      var team = state.teams.get(state.filters.team);
+      if (team && team.league !== state.filters.league) state.filters.team = '';
+    }
+    if ('team' in patch && state.filters.team) state.view = 'grid';
+
+    state.gridPage = 1;
+    state.groupPage = 1;
+    syncFilterInputs();
+    renderCatalog();
+    updateCatalogHash();
+  }
+
+  function clearAllFilters() {
+    state.filters = { q: '', team: '', league: '', season: '', type: '' };
+    state.gridPage = 1;
+    state.groupPage = 1;
+    syncFilterInputs();
+    renderCatalog();
+    updateCatalogHash();
+  }
+
+  // ── Opciones de filtro ───────────────────────────────────
+
+  function leagueOptionsHtml(allLabel) {
+    var rows = Array.from(state.leagues.entries()).sort(function (a, b) { return b[1] - a[1]; });
+    return '<option value="">' + esc(allLabel) + '</option>' + rows.map(function (row) {
+      return '<option value="' + esc(row[0]) + '">' + esc(row[0]) + ' (' + fmt(row[1]) + ')</option>';
+    }).join('');
+  }
+
+  function teamOptionsHtml(allLabel) {
+    var byLeague = {};
+    Array.from(state.teams.values())
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); })
+      .forEach(function (team) {
+        var league = team.league || 'Otras ligas';
+        if (!byLeague[league]) byLeague[league] = [];
+        byLeague[league].push(team);
+      });
+
+    var leagues = Object.keys(byLeague).sort(function (a, b) {
+      if (a === 'Selecciones') return -1;
+      if (b === 'Selecciones') return 1;
+      return byLeague[b].length - byLeague[a].length;
+    });
+
+    return '<option value="">' + esc(allLabel) + '</option>' + leagues.map(function (league) {
+      return '<optgroup label="' + esc(league) + '">' + byLeague[league].map(function (team) {
+        return '<option value="' + esc(team.name) + '">' + esc(team.name) + ' (' + fmt(team.count) + ')</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+  }
+
+  function seasonOptionsHtml() {
+    var keys = SEASON_ORDER.filter(function (key) { return state.seasons.has(key); });
+    return '<option value="">Todas las temporadas</option>' + keys.map(function (key) {
+      return '<option value="' + esc(key) + '">' + esc(seasonLabel(key)) + ' (' + fmt(state.seasons.get(key)) + ')</option>';
+    }).join('');
+  }
+
+  function typeOptionsHtml() {
+    var rows = Array.from(state.types.entries()).sort(function (a, b) { return b[1] - a[1]; });
+    return '<option value="">Todos los tipos</option>' + rows.map(function (row) {
+      return '<option value="' + esc(row[0]) + '">' + esc(typeLabel(row[0])) + ' (' + fmt(row[1]) + ')</option>';
+    }).join('');
+  }
+
+  function seasonChipsHtml() {
+    var keys = SEASON_ORDER.filter(function (key) { return state.seasons.has(key); });
+    return '<button type="button" data-season="">Todas</button>' + keys.map(function (key) {
+      return '<button type="button" data-season="' + esc(key) + '">' + esc(seasonLabel(key)) + '</button>';
+    }).join('');
+  }
+
+  function typeChipsHtml() {
+    var rows = Array.from(state.types.entries()).sort(function (a, b) { return b[1] - a[1]; });
+    return '<button type="button" data-type="">Todos</button>' + rows.map(function (row) {
+      return '<button type="button" data-type="' + esc(row[0]) + '">' + esc(typeLabel(row[0])) + '</button>';
+    }).join('');
+  }
+
+  function populateFilterOptions() {
+    var fill = function (id, html) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    };
+
+    fill('filter-league', leagueOptionsHtml('Todas las ligas'));
+    fill('filter-team', teamOptionsHtml('Todos los equipos'));
+    fill('filter-season', seasonOptionsHtml());
+    fill('filter-type', typeOptionsHtml());
+
+    var body = $('#filters-drawer-body');
+    if (body) {
+      body.innerHTML =
+        '<label class="searchbox"><svg><use href="#i-search"/></svg>' +
+          '<input type="search" id="drawer-search" placeholder="Busca una prenda o equipo…" autocomplete="off"></label>' +
+        '<p class="filter-section-title">Temporada</p>' +
+        '<div class="filter-chips" id="drawer-seasons">' + seasonChipsHtml() + '</div>' +
+        '<p class="filter-section-title">Tipo de prenda</p>' +
+        '<div class="filter-chips" id="drawer-types">' + typeChipsHtml() + '</div>' +
+        '<label class="select-wrap"><span>Liga</span><select id="drawer-league">' + leagueOptionsHtml('Todas las ligas') + '</select><svg><use href="#i-chevron"/></svg></label>' +
+        '<label class="select-wrap"><span>Equipo</span><select id="drawer-team">' + teamOptionsHtml('Todos los equipos') + '</select><svg><use href="#i-chevron"/></svg></label>';
+    }
+
+    syncFilterInputs();
+  }
+
+  function syncFilterInputs() {
+    var search = $('#catalog-search');
+    if (search && document.activeElement !== search) search.value = state.filters.q;
+
+    var setSelect = function (id, value) {
+      var el = document.getElementById(id);
+      if (el) el.value = value || '';
+    };
+    setSelect('filter-league', state.filters.league);
+    setSelect('filter-team', state.filters.team);
+    setSelect('filter-season', state.filters.season);
+    setSelect('filter-type', state.filters.type);
+
+    var sortSelect = $('#sort-select');
+    if (sortSelect) sortSelect.value = state.sort;
+
+    $$('.view-switch button').forEach(function (button) {
+      var active = button.getAttribute('data-view') === (state.view === 'grid' ? 'grid' : 'teams');
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    syncDrawerValues();
+    updateFilterCount();
+  }
+
+  function syncDrawerValues() {
+    var search = $('#drawer-search');
+    if (search && document.activeElement !== search) search.value = state.filters.q;
+    var league = $('#drawer-league');
+    if (league) league.value = state.filters.league || '';
+    var team = $('#drawer-team');
+    if (team) team.value = state.filters.team || '';
+
+    $$('#drawer-seasons button').forEach(function (button) {
+      button.classList.toggle('is-active', (button.getAttribute('data-season') || '') === (state.filters.season || ''));
+    });
+    $$('#drawer-types button').forEach(function (button) {
+      button.classList.toggle('is-active', (button.getAttribute('data-type') || '') === (state.filters.type || ''));
+    });
+  }
+
+  // ── Cierre y apertura del panel de filtros ───────────────
+
+  function openFilters() {
+    var drawer = $('#filters-drawer');
+    var backdrop = $('#filters-backdrop');
+    if (!drawer || drawer.classList.contains('is-open')) return;
+    syncDrawerValues();
+    drawer.classList.add('is-open');
+    setOverlayState(drawer, true);
+    if (backdrop) {
+      backdrop.hidden = false;
+      requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    }
+    var opener = $('#filters-open');
+    if (opener) opener.setAttribute('aria-expanded', 'true');
+    lockScroll();
+    setTimeout(function () {
+      var input = $('#drawer-search');
+      if (input) input.focus();
+    }, 220);
+  }
+
+  function closeFilters() {
+    var drawer = $('#filters-drawer');
+    if (!drawer || !drawer.classList.contains('is-open')) return;
+    releaseFocus(drawer);
+    drawer.classList.remove('is-open');
+    setOverlayState(drawer, false);
+    var opener = $('#filters-open');
+    if (opener) opener.setAttribute('aria-expanded', 'false');
+    var backdrop = $('#filters-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+    if (opener) opener.focus();
+  }
+
+  // ── Eventos del catálogo ─────────────────────────────────
+
+  function bindCatalogEvents() {
+    var search = $('#catalog-search');
+    if (search) {
+      search.addEventListener('input', debounce(function () {
+        applyFilters({ q: search.value });
+      }, 200));
+      search.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && search.value) {
+          search.value = '';
+          applyFilters({ q: '' });
+        }
+      });
+    }
+
+    var filters = $('#catalog-filters');
+    if (filters) {
+      filters.addEventListener('change', function (event) {
+        var map = { 'filter-league': 'league', 'filter-team': 'team', 'filter-season': 'season', 'filter-type': 'type' };
+        var key = map[event.target.id];
+        if (!key) return;
+        var patch = {};
+        patch[key] = event.target.value;
+        applyFilters(patch);
+      });
+    }
+
+    var clear = $('#filters-clear');
+    if (clear) clear.addEventListener('click', clearAllFilters);
+
+    var sort = $('#sort-select');
+    if (sort) {
+      sort.addEventListener('change', function () {
+        state.sort = sort.value;
+        state.gridPage = 1;
+        state.groupPage = 1;
+        renderCatalog();
+      });
+    }
+
+    $$('.view-switch button').forEach(function (button) {
+      button.addEventListener('click', function () { setView(button.getAttribute('data-view')); });
+    });
+
+    var more = $('#load-more');
+    if (more) more.addEventListener('click', loadMoreResults);
+
+    var openBtn = $('#filters-open');
+    if (openBtn) openBtn.addEventListener('click', openFilters);
+    var closeBtn = $('#filters-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeFilters);
+    var applyBtn = $('#filters-apply');
+    if (applyBtn) applyBtn.addEventListener('click', closeFilters);
+    var resetBtn = $('#filters-reset');
+    if (resetBtn) resetBtn.addEventListener('click', clearAllFilters);
+    var backdrop = $('#filters-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeFilters);
+
+    var drawerBody = $('#filters-drawer-body');
+    if (drawerBody) {
+      var drawerSearch = debounce(function (value) {
+        applyFilters({ q: value });
+      }, 220);
+
+      drawerBody.addEventListener('input', function (event) {
+        if (event.target && event.target.id === 'drawer-search') drawerSearch(event.target.value);
+      });
+      drawerBody.addEventListener('change', function (event) {
+        if (event.target.id === 'drawer-league') applyFilters({ league: event.target.value });
+        else if (event.target.id === 'drawer-team') applyFilters({ team: event.target.value });
+      });
+      drawerBody.addEventListener('click', function (event) {
+        var season = event.target.closest('[data-season]');
+        if (season) {
+          applyFilters({ season: season.getAttribute('data-season') });
+          return;
+        }
+        var type = event.target.closest('[data-type]');
+        if (type) applyFilters({ type: type.getAttribute('data-type') });
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var clearOne = event.target.closest('[data-clear-filter]');
+      if (clearOne) {
+        var patch = {};
+        patch[clearOne.getAttribute('data-clear-filter')] = '';
+        applyFilters(patch);
+        return;
+      }
+      if (event.target.closest('[data-clear-all]')) {
+        clearAllFilters();
+        return;
+      }
+      var teamLink = event.target.closest('[data-team-link]');
+      if (teamLink) {
+        location.hash = catalogHref({
+          q: '',
+          team: teamLink.getAttribute('data-team-link'),
+          league: '',
+          season: '',
+          type: ''
+        });
+      }
+    });
+
+    var teamsSearch = $('#teams-search');
+    if (teamsSearch) teamsSearch.addEventListener('input', debounce(renderTeamsView, 180));
+    var teamsLeague = $('#teams-league');
+    if (teamsLeague) teamsLeague.addEventListener('change', renderTeamsView);
+  }
+
+  // ── Capas y bloqueo del scroll ───────────────────────────
+
+  function lockScroll() {
+    state.overlayCount += 1;
+    if (state.overlayCount === 1) document.body.classList.add('no-scroll');
+  }
+
+  function unlockScroll() {
+    state.overlayCount = Math.max(0, state.overlayCount - 1);
+    if (!state.overlayCount) document.body.classList.remove('no-scroll');
+  }
+
+  function releaseFocus(container) {
+    if (container && container.contains(document.activeElement)) {
+      try { document.activeElement.blur(); } catch (err) {}
+    }
+  }
+
+  function setOverlayState(el, open) {
+    if (!el) return;
+    el.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) el.removeAttribute('inert');
+    else el.setAttribute('inert', '');
+  }
+
+  function initOverlays() {
+    ['product-modal', 'cart-drawer', 'filters-drawer', 'checkout-modal', 'mobile-menu', 'lightbox'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && !el.classList.contains('is-open')) setOverlayState(el, false);
+    });
+  }
+
+  function photoUrl(path, size) {
+    if (!path) return '/placeholder.svg';
+    var value = String(path).replace(/^https?:\/\/photo\.yupoo\.com/i, '');
+    if (value.charAt(0) !== '/') value = '/' + value;
+    if (!/\.(jpg|jpeg|png|webp)$/i.test(value)) {
+      value += '/' + (size || 'big') + '.jpg';
+    } else if (size) {
+      value = value.replace(/\/[^/]+\.(jpg|jpeg|png|webp)$/i, '/' + size + '.jpg');
+    }
+    return '/img' + value;
+  }
+
+  function expandSizes(range) {
+    var value = String(range || 'S-2XL');
+    var kids = value.match(/^(\d{1,2})-(\d{1,2})$/);
+    var sizes = [];
+    var index;
+
+    if (kids) {
+      var from = parseInt(kids[1], 10);
+      var to = parseInt(kids[2], 10);
+      for (index = from; index <= to; index += 2) sizes.push(String(index));
+      return sizes;
+    }
+
+    var order = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
+    var parts = value.split('-');
+    var start = order.indexOf(parts[0]);
+    var end = order.indexOf(parts[1]);
+    if (start === -1) start = 2;
+    if (end === -1) end = 4;
+    if (end < start) end = start;
+    return order.slice(start, end + 1);
+  }
+
+  // ── Ficha de producto ────────────────────────────────────
+
+  function openProduct(id) {
+    var item = state.byId.get(String(id));
+    if (!item) {
+      toast('Esta prenda ya no está disponible', 'error');
+      return;
+    }
+
+    var modal = $('#product-modal');
+    var backdrop = $('#product-backdrop');
+    if (!modal) return;
+
+    state.product = item;
+    state.galleryToken += 1;
+    state.gallery = [item.cover ? item.cover + '/big.jpg' : ''];
+    state.galleryIndex = 0;
+    state.qty = 1;
+    state.patches = 'No';
+    state.customName = '';
+    state.customNumber = '';
+
+    var sizes = expandSizes(item.sizeRange);
+    state.selectedSize = sizes.indexOf('M') !== -1 ? 'M' : (sizes[0] || 'S');
+
+    renderProduct();
+
+    if (!modal.classList.contains('is-open')) {
+      state.returnFocus = document.activeElement;
+      modal.classList.add('is-open');
+      setOverlayState(modal, true);
+      if (backdrop) {
+        backdrop.hidden = false;
+        requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+      }
+      lockScroll();
+      setTimeout(function () {
+        var close = $('#product-close');
+        if (close) close.focus();
+      }, 220);
+    }
+
+    var body = modal.querySelector('.product-layout');
+    if (body) body.scrollTop = 0;
+    loadAlbum(item.id);
+  }
+
+  function closeProduct() {
+    var modal = $('#product-modal');
+    if (!modal || !modal.classList.contains('is-open')) return;
+    releaseFocus(modal);
+    modal.classList.remove('is-open');
+    setOverlayState(modal, false);
+    var backdrop = $('#product-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+    if (state.returnFocus && state.returnFocus.isConnected) {
+      try { state.returnFocus.focus(); } catch (err) {}
+    }
+    state.returnFocus = null;
+  }
+
+  async function loadAlbum(id) {
+    var token = state.galleryToken;
+    try {
+      var res = await fetch('/api/album/' + encodeURIComponent(id), { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      var album = await res.json();
+      if (token !== state.galleryToken || !state.product || String(state.product.id) !== String(id)) return;
+      var images = (album.images || []).map(function (path) {
+        var value = String(path || '').replace(/^https?:\/\/photo\.yupoo\.com/i, '');
+        if (!value) return '';
+        if (value.charAt(0) !== '/') value = '/' + value;
+        if (!/\.(jpg|jpeg|png|webp)$/i.test(value)) value += '/big.jpg';
+        return value;
+      }).filter(Boolean);
+
+      if (images.length) {
+        var cover = state.product.cover || '';
+        var ordered = images.slice();
+        var coverIndex = -1;
+        for (var i = 0; i < ordered.length; i++) {
+          if (cover && ordered[i].indexOf(cover + '/') === 0) { coverIndex = i; break; }
+        }
+        if (coverIndex > 0) {
+          var first = ordered.splice(coverIndex, 1)[0];
+          ordered.unshift(first);
+        }
+        state.gallery = ordered.slice(0, 20);
+        state.galleryIndex = 0;
+        renderGallery();
+      }
+    } catch (err) {}
+  }
+
+  function renderGallery() {
+    var main = $('#product-main-img');
+    var thumbs = $('#product-thumbs');
+    var item = state.product;
+    if (!main || !item) return;
+
+    var path = state.gallery[state.galleryIndex] || '';
+    main.innerHTML = '<div class="img-skeleton"></div>' +
+      imgTag(photoUrl(path, 'big'), item.title, { eager: true }) +
+      '<button class="product-zoom" id="product-zoom" type="button" aria-label="Ampliar imagen">' +
+      '<svg><use href="#i-zoom"/></svg></button>';
+
+    if (thumbs) {
+      thumbs.style.display = state.gallery.length > 1 ? '' : 'none';
+      thumbs.innerHTML = state.gallery.map(function (photo, index) {
+        return '<button type="button" class="' + (index === state.galleryIndex ? 'is-active' : '') + '" ' +
+          'data-photo="' + index + '" aria-label="Ver foto ' + (index + 1) + '">' +
+          '<img src="' + esc(photoUrl(photo, 'medium')) + '" alt="" loading="lazy"></button>';
+      }).join('');
+    }
+  }
+
+  function selectPhoto(index) {
+    if (!state.gallery[index]) return;
+    state.galleryIndex = index;
+    renderGallery();
+  }
+
+  function renderProduct() {
+    var item = state.product;
+    var info = $('#product-info');
+    if (!item || !info) return;
+
+    var sizes = expandSizes(item.sizeRange);
+    if (sizes.indexOf(state.selectedSize) === -1) state.selectedSize = sizes[0] || 'S';
+
+    var tags = '';
+    if (item.league) tags += '<span class="product-tag">' + esc(item.league) + '</span>';
+    (item.flags || []).forEach(function (flag) {
+      tags += '<span class="product-tag' + (flag === 'player' ? ' is-accent' : '') + '">' + esc(flagLabel(flag)) + '</span>';
+    });
+    tags += '<span class="product-tag">' + esc(typeLabel(item.type)) + '</span>';
+
+    var sizeButtons = sizes.map(function (size) {
+      return '<button type="button" class="size-btn' +
+        (size === state.selectedSize ? ' is-active' : '') +
+        (/^\d+$/.test(size) ? ' is-kid' : '') +
+        '" data-size="' + esc(size) + '">' + esc(size) + '</button>';
+    }).join('');
+
+    var patches = ['No', 'Liga', 'Champions', 'Mundial', 'Copa'].map(function (patch) {
+      return '<label class="patch-option' + (state.patches === patch ? ' is-active' : '') + '" data-patch="' + esc(patch) + '">' +
+        '<input type="radio" name="product-patches" value="' + esc(patch) + '"' + (state.patches === patch ? ' checked' : '') + '>' +
+        '<svg><use href="#i-check"/></svg>' + esc(patch) + '</label>';
+    }).join('');
+
+    var customPanel = item.custom ?
+      '<div class="custom-panel">' +
+        '<div class="custom-panel-head"><strong>Nombre y dorsal</strong>' +
+          '<span><svg><use href="#i-spark"/></svg> Personalización</span></div>' +
+        '<div class="custom-fields">' +
+          '<label class="field"><span>Nombre</span>' +
+            '<input type="text" id="custom-name" maxlength="14" placeholder="TU NOMBRE" autocomplete="off" style="text-transform:uppercase" value="' + esc(state.customName) + '"></label>' +
+          '<label class="field"><span>Dorsal</span>' +
+            '<input type="text" id="custom-number" maxlength="2" inputmode="numeric" placeholder="10" autocomplete="off" value="' + esc(state.customNumber) + '"></label>' +
+        '</div>' +
+        '<p class="field-label" style="margin-top:14px">Parches <span>Opcional</span></p>' +
+        '<div class="patch-row" id="patch-row">' + patches + '</div>' +
+        '<p class="custom-note"><svg><use href="#i-shield"/></svg> El nombre se imprime en mayúsculas. El dorsal debe ser un número del 0 al 99.</p>' +
+      '</div>' :
+      '<div class="not-customizable"><svg><use href="#i-shirt"/></svg>' +
+        '<span>Esta prenda no admite nombre ni dorsal. Solo necesitas elegir la talla.</span></div>';
+
+    info.innerHTML =
+      '<div class="product-info-top">' +
+        '<span class="product-league">' + esc(item.league || 'Catálogo') + '</span>' +
+        '<span class="product-season">' + esc(seasonLabel(item.seasonGroup)) + '</span>' +
+        (item.custom ? '<span class="product-tag is-accent">Personalizable</span>' : '') +
+      '</div>' +
+      '<h2 id="product-title">' + esc(item.title) + '</h2>' +
+      '<p class="product-team">' + esc(item.team) + ' · ' + esc(item.season) + ' · Tallas ' + esc(item.sizeRange) + '</p>' +
+      '<div class="product-tags">' + tags + '</div>' +
+      '<p class="field-label">Talla <span id="size-hint">' + esc(state.selectedSize) + '</span></p>' +
+      '<div class="size-list" id="size-list">' + sizeButtons + '</div>' +
+      customPanel +
+      '<div class="product-add-row">' +
+        '<div class="qty">' +
+          '<button type="button" data-qty="-1" aria-label="Quitar una unidad"><svg><use href="#i-minus"/></svg></button>' +
+          '<span id="product-qty">1</span>' +
+          '<button type="button" data-qty="1" aria-label="Añadir una unidad"><svg><use href="#i-plus"/></svg></button>' +
+        '</div>' +
+        '<button class="btn btn-primary" id="product-add" type="button">Añadir al carrito <svg><use href="#i-cart"/></svg></button>' +
+      '</div>' +
+      '<p class="product-disclaimer">Sin pago online. Confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>';
+  }
+
+  function selectSize(size) {
+    state.selectedSize = size;
+    $$('#product-info .size-btn').forEach(function (button) {
+      button.classList.toggle('is-active', button.getAttribute('data-size') === size);
+    });
+    var hint = $('#size-hint');
+    if (hint) hint.textContent = size;
+  }
+
+  function selectPatch(value) {
+    state.patches = value;
+    $$('#product-info .patch-option').forEach(function (option) {
+      var active = option.getAttribute('data-patch') === value;
+      option.classList.toggle('is-active', active);
+      var input = option.querySelector('input');
+      if (input) input.checked = active;
+    });
+  }
+
+  function changeProductQty(delta) {
+    state.qty = Math.min(30, Math.max(1, state.qty + delta));
+    var qty = $('#product-qty');
+    if (qty) qty.textContent = String(state.qty);
+  }
+
+  function bindProductEvents() {
+    var info = $('#product-info');
+    if (info) {
+      info.addEventListener('click', function (event) {
+        var size = event.target.closest('[data-size]');
+        if (size) {
+          selectSize(size.getAttribute('data-size'));
+          return;
+        }
+        var patch = event.target.closest('[data-patch]');
+        if (patch) {
+          selectPatch(patch.getAttribute('data-patch'));
+          return;
+        }
+        var qty = event.target.closest('[data-qty]');
+        if (qty) {
+          changeProductQty(parseInt(qty.getAttribute('data-qty'), 10) || 0);
+          return;
+        }
+        if (event.target.closest('#product-add')) addToCart();
+      });
+
+      info.addEventListener('input', function (event) {
+        if (event.target.id === 'custom-name') {
+          state.customName = event.target.value.slice(0, 14);
+        } else if (event.target.id === 'custom-number') {
+          var cleaned = event.target.value.replace(/\D/g, '').slice(0, 2);
+          if (event.target.value !== cleaned) event.target.value = cleaned;
+          state.customNumber = cleaned;
+        }
+      });
+    }
+
+    var thumbs = $('#product-thumbs');
+    if (thumbs) {
+      thumbs.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-photo]');
+        if (button) selectPhoto(parseInt(button.getAttribute('data-photo'), 10));
+      });
+    }
+
+    var main = $('#product-main-img');
+    if (main) {
+      main.addEventListener('click', function (event) {
+        if (event.target.closest('#product-zoom') || event.target.tagName === 'IMG') {
+          openLightbox(state.gallery[state.galleryIndex]);
+        }
+      });
+    }
+
+    var close = $('#product-close');
+    if (close) close.addEventListener('click', closeProduct);
+    var backdrop = $('#product-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeProduct);
+  }
+
+  // ── Carrito ──────────────────────────────────────────────
+
+  function findCartLine(key) {
+    return state.cart.filter(function (line) { return line.key === key; })[0] || null;
+  }
+
+  function addToCart() {
+    var item = state.product;
+    if (!item) return;
+    if (!state.selectedSize) {
+      toast('Elige una talla antes de continuar', 'error');
+      return;
+    }
+
+    var name = item.custom ? String(state.customName || '').trim().toUpperCase().slice(0, 14) : '';
+    var number = item.custom ? String(state.customNumber || '').replace(/\D/g, '').slice(0, 2) : '';
+    var patches = item.custom ? state.patches : 'No';
+    var key = [item.id, state.selectedSize, name, number, patches].join('|');
+    var existing = findCartLine(key);
+
+    if (existing) {
+      existing.qty = Math.min(30, existing.qty + state.qty);
+    } else {
+      state.cart.push({
+        key: key,
+        id: item.id,
+        size: state.selectedSize,
+        qty: state.qty,
+        name: name,
+        number: number,
+        patches: patches
+      });
+    }
+
+    saveCart();
+    updateCartUI();
+    closeProduct();
+    toast(item.title + ' añadido al carrito');
+    setTimeout(openCart, 200);
+  }
+
+  function cartTotalItems() {
+    return state.cart.reduce(function (sum, line) { return sum + (parseInt(line.qty, 10) || 0); }, 0);
+  }
+
+  function updateCartUI() {
+    var total = cartTotalItems();
+    var count = $('#cart-count');
+    if (count) {
+      count.textContent = String(total);
+      count.classList.toggle('is-empty', total === 0);
+    }
+    var titleCount = $('#cart-title-count');
+    if (titleCount) titleCount.textContent = '(' + total + ')';
+    var totalEl = $('#cart-total-items');
+    if (totalEl) totalEl.textContent = total + (total === 1 ? ' artículo' : ' artículos');
+    var foot = $('#cart-foot');
+    if (foot) foot.hidden = total === 0;
+    renderCartBody();
+  }
+
+  function renderCartBody() {
+    var body = $('#cart-body');
+    if (!body) return;
+
+    if (!state.cart.length) {
+      body.innerHTML = '<div class="cart-empty">' +
+        '<svg><use href="#i-cart"/></svg>' +
+        '<h3>Tu carrito está vacío</h3>' +
+        '<p>Encuentra tu equipo, elige talla y personaliza tu camiseta con nombre y dorsal.</p>' +
+        '<button class="btn btn-primary" type="button" id="cart-continue">Explorar catálogo</button>' +
+        '</div>';
+      return;
+    }
+
+    body.innerHTML = state.cart.map(function (line) {
+      var item = state.byId.get(line.id);
+      if (!item) return '';
+
+      var customs = '<span>Talla ' + esc(line.size) + '</span>';
+      if (line.name) customs += '<span>' + esc(line.name) + '</span>';
+      if (line.number) customs += '<span>#' + esc(line.number) + '</span>';
+      if (line.patches && line.patches !== 'No') customs += '<span>Parches: ' + esc(line.patches) + '</span>';
+
+      return '<article class="cart-item" data-cart-line="' + esc(line.key) + '">' +
+        '<div class="cart-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+        '<div class="cart-item-copy">' +
+          '<span class="cart-team">' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
+          '<h4>' + esc(item.title) + '</h4>' +
+          '<div class="cart-custom">' + customs + '</div>' +
+          '<div class="cart-item-foot">' +
+            '<div class="qty">' +
+              '<button type="button" data-cart-dec aria-label="Quitar una unidad"><svg><use href="#i-minus"/></svg></button>' +
+              '<span>' + esc(line.qty) + '</span>' +
+              '<button type="button" data-cart-inc aria-label="Añadir una unidad"><svg><use href="#i-plus"/></svg></button>' +
+            '</div>' +
+            '<button class="cart-remove" type="button" data-cart-remove aria-label="Quitar del carrito">' +
+              '<svg><use href="#i-trash"/></svg></button>' +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+
+  function changeCartQty(key, delta) {
+    var line = findCartLine(key);
+    if (!line) return;
+    line.qty = Math.min(30, Math.max(1, (parseInt(line.qty, 10) || 1) + delta));
+    saveCart();
+    updateCartUI();
+  }
+
+  function removeCartLine(key) {
+    state.cart = state.cart.filter(function (line) { return line.key !== key; });
+    saveCart();
+    updateCartUI();
+    toast('Prenda eliminada del carrito');
+  }
+
+  function openCart() {
+    var drawer = $('#cart-drawer');
+    var backdrop = $('#cart-backdrop');
+    if (!drawer || drawer.classList.contains('is-open')) return;
+    renderCartBody();
+    drawer.classList.add('is-open');
+    setOverlayState(drawer, true);
+    if (backdrop) {
+      backdrop.hidden = false;
+      requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    }
+    lockScroll();
+    setTimeout(function () {
+      var close = $('#cart-close');
+      if (close) close.focus();
+    }, 220);
+  }
+
+  function closeCart() {
+    var drawer = $('#cart-drawer');
+    if (!drawer || !drawer.classList.contains('is-open')) return;
+    releaseFocus(drawer);
+    drawer.classList.remove('is-open');
+    setOverlayState(drawer, false);
+    var backdrop = $('#cart-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+    var opener = $('#cart-open');
+    if (opener) opener.focus();
+  }
+
+  function bindCartEvents() {
+    var open = $('#cart-open');
+    if (open) open.addEventListener('click', openCart);
+    var close = $('#cart-close');
+    if (close) close.addEventListener('click', closeCart);
+    var backdrop = $('#cart-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeCart);
+
+    var body = $('#cart-body');
+    if (body) {
+      body.addEventListener('click', function (event) {
+        var line = event.target.closest('[data-cart-line]');
+        var key = line ? line.getAttribute('data-cart-line') : '';
+        if (event.target.closest('[data-cart-inc]')) {
+          changeCartQty(key, 1);
+          return;
+        }
+        if (event.target.closest('[data-cart-dec]')) {
+          changeCartQty(key, -1);
+          return;
+        }
+        if (event.target.closest('[data-cart-remove]')) {
+          removeCartLine(key);
+          return;
+        }
+        if (event.target.closest('#cart-continue')) {
+          closeCart();
+          location.hash = '#/catalogo';
+        }
+      });
+    }
+
+    var empty = $('#cart-empty-btn');
+    if (empty) {
+      empty.addEventListener('click', function () {
+        if (!state.cart.length) return;
+        state.cart = [];
+        saveCart();
+        updateCartUI();
+        toast('Carrito vaciado');
+      });
+    }
+
+    var checkout = $('#checkout-open');
+    if (checkout) checkout.addEventListener('click', openCheckout);
+  }
+
+  // ── Pedido ───────────────────────────────────────────────
+
+  function cartSummaryHtml() {
+    return state.cart.map(function (line) {
+      var item = state.byId.get(line.id);
+      if (!item) return '';
+      var detail = 'Talla ' + line.size + ' · x' + line.qty;
+      if (line.name) detail += ' · ' + line.name;
+      if (line.number) detail += ' #' + line.number;
+      if (line.patches && line.patches !== 'No') detail += ' · ' + line.patches;
+      return '<div class="summary-item">' +
+        '<img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy">' +
+        '<div class="summary-item-copy"><strong>' + esc(item.title) + '</strong><span>' + esc(detail) + '</span></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderCheckout() {
+    var content = $('#checkout-content');
+    if (!content) return;
+    var total = cartTotalItems();
+    var storeName = state.config && state.config.store && state.config.store.name ? state.config.store.name : 'KANG Team';
+
+    content.innerHTML = '<div class="checkout-grid">' +
+      '<div class="checkout-form-wrap">' +
+        '<p class="eyebrow">Último paso</p>' +
+        '<h2 id="checkout-title">Confirma tu pedido</h2>' +
+        '<p class="checkout-sub">Déjanos tus datos y te escribimos para confirmar disponibilidad, precio y envío. Sin pago online.</p>' +
+        '<form id="checkout-form" novalidate>' +
+          '<div class="form-error" id="checkout-error" role="alert"></div>' +
+          '<div class="form-grid">' +
+            '<label class="field"><span>Nombre y apellidos *</span><input name="name" type="text" autocomplete="name" maxlength="80" required></label>' +
+            '<label class="field"><span>Teléfono / WhatsApp *</span><input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>' +
+            '<label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="120"></label>' +
+            '<label class="field"><span>Ciudad</span><input name="city" type="text" autocomplete="address-level2" maxlength="80"></label>' +
+            '<label class="field field-full"><span>Notas (dirección, talla, dudas…)</span><textarea name="notes" maxlength="600"></textarea></label>' +
+          '</div>' +
+          '<label class="form-consent"><input type="checkbox" id="checkout-consent">' +
+            '<span>Acepto que ' + esc(storeName) + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.</span></label>' +
+          '<button class="btn btn-primary btn-block" id="checkout-submit" type="submit">Enviar pedido <svg><use href="#i-arrow"/></svg></button>' +
+        '</form>' +
+      '</div>' +
+      '<aside class="checkout-summary">' +
+        '<h3 class="summary-title">Tu selección <span>' + total + ' art.</span></h3>' +
+        '<div class="summary-items">' + cartSummaryHtml() + '</div>' +
+        '<div class="summary-totals">' +
+          '<div><span>Artículos</span><strong>' + total + '</strong></div>' +
+          '<div><span>Personalización</span><strong>Incluida</strong></div>' +
+          '<div><span>Precio</span><strong>Por confirmar</strong></div>' +
+        '</div>' +
+        '<p class="summary-note">Te responderemos con el precio final, la disponibilidad y los gastos de envío. Puedes añadir o quitar prendas antes de enviar.</p>' +
+      '</aside>' +
+    '</div>';
+  }
+
+  function openCheckout() {
+    if (!state.cart.length) {
+      toast('Tu carrito está vacío', 'error');
+      return;
+    }
+    closeCart();
+    var modal = $('#checkout-modal');
+    var backdrop = $('#checkout-backdrop');
+    if (!modal) return;
+    renderCheckout();
+    if (!modal.classList.contains('is-open')) {
+      modal.classList.add('is-open');
+      setOverlayState(modal, true);
+      if (backdrop) {
+        backdrop.hidden = false;
+        requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+      }
+      lockScroll();
+    }
+    setTimeout(function () {
+      var input = $('#checkout-form input[name="name"]');
+      if (input) input.focus();
+    }, 240);
+  }
+
+  function closeCheckout() {
+    var modal = $('#checkout-modal');
+    if (!modal || !modal.classList.contains('is-open')) return;
+    releaseFocus(modal);
+    modal.classList.remove('is-open');
+    setOverlayState(modal, false);
+    var backdrop = $('#checkout-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+  }
+
+  function showCheckoutError(message) {
+    var error = $('#checkout-error');
+    if (!error) {
+      toast(message, 'error');
+      return;
+    }
+    error.textContent = message;
+    error.classList.add('is-visible');
+    try { error.scrollIntoView({ block: 'nearest' }); } catch (err) {}
+  }
+
+  function validateCheckout(form) {
+    var name = form.elements.name.value.trim();
+    var phone = form.elements.phone.value.trim();
+    var email = form.elements.email.value.trim();
+    var consent = $('#checkout-consent');
+
+    if (name.length < 2) return 'Escribe tu nombre y apellidos.';
+    if (phone.replace(/\D/g, '').length < 6) return 'Escribe un teléfono o WhatsApp válido.';
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return 'El email no parece válido.';
+    if (!consent || !consent.checked) return 'Marca la casilla para que podamos contactarte.';
+    return '';
+  }
+
+  async function submitOrder(event) {
+    event.preventDefault();
+    var form = event.target;
+    if (!form || form.id !== 'checkout-form') return;
+
+    var error = validateCheckout(form);
+    if (error) {
+      showCheckoutError(error);
+      return;
+    }
+
+    var button = $('#checkout-submit');
+    var original = button ? button.innerHTML : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Enviando pedido…';
+    }
+
+    var payload = {
+      customer: {
+        name: form.elements.name.value.trim(),
+        phone: form.elements.phone.value.trim(),
+        email: form.elements.email.value.trim(),
+        city: form.elements.city.value.trim(),
+        notes: form.elements.notes.value.trim()
+      },
+      items: state.cart.map(function (line) {
+        var item = state.byId.get(line.id);
+        return {
+          id: line.id,
+          size: line.size,
+          qty: line.qty,
+          name: item && item.custom ? line.name : '',
+          number: item && item.custom ? line.number : '',
+          patches: item && item.custom ? line.patches : 'No'
+        };
+      })
+    };
+
+    try {
+      var res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var data = null;
+      try { data = await res.json(); } catch (err) {}
+      if (!res.ok) {
+        throw new Error(data && data.error ? data.error : 'No se pudo enviar el pedido. Inténtalo de nuevo.');
+      }
+
+      state.lastOrder = data;
+      state.cart = [];
+      saveCart();
+      updateCartUI();
+      renderSuccess(data, payload.customer.name);
+      toast('Pedido enviado correctamente');
+    } catch (err) {
+      showCheckoutError(err.message || 'No se pudo enviar el pedido. Revisa tu conexión e inténtalo de nuevo.');
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = original;
+      }
+    }
+  }
+
+  function renderSuccess(data, customerName) {
+    var content = $('#checkout-content');
+    if (!content) return;
+    var id = data && data.order ? data.order.id : '';
+    var text = data && data.text ? data.text : '';
+    var wa = (data && data.whatsappUrl) || ('https://wa.me/?text=' + encodeURIComponent(text));
+    var mail = (data && data.mailtoUrl) || ('mailto:?subject=' + encodeURIComponent('Pedido ' + id) + '&body=' + encodeURIComponent(text));
+    var automatic = data && data.delivery && (data.delivery.email || data.delivery.whatsapp);
+
+    content.innerHTML = '<div class="success-panel">' +
+      '<div class="success-icon"><svg><use href="#i-check"/></svg></div>' +
+      '<h2 id="checkout-title" tabindex="-1">Pedido recibido</h2>' +
+      '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido y te contactaremos para confirmar disponibilidad, precio y envío.</p>' +
+      '<span class="order-ref">PEDIDO ' + esc(id) + '</span>' +
+      '<div class="success-actions">' +
+        '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Enviar por WhatsApp</a>' +
+        '<a class="btn btn-outline" href="' + esc(mail) + '"><svg><use href="#i-mail"/></svg> Enviar por email</a>' +
+        '<button class="btn btn-ghost" type="button" data-copy-order>Copiar resumen del pedido</button>' +
+        '<a class="btn btn-ghost" href="#/catalogo" data-close-checkout>Seguir explorando</a>' +
+      '</div>' +
+      '<p class="success-note">' +
+        (automatic ? 'También hemos intentado avisar a la tienda automáticamente. ' : 'Para asegurarte de que lo recibimos, envía el resumen con uno de los botones. ') +
+        'Guarda tu número de pedido por si necesitas consultarnos.' +
+      '</p>' +
+    '</div>';
+
+    var heading = content.querySelector('h2');
+    if (heading) {
+      try { heading.focus(); } catch (err) {}
+    }
+  }
+
+  function copyText(text) {
+    return new Promise(function (resolve, reject) {
+      function fallback() {
+        try {
+          var area = document.createElement('textarea');
+          area.value = text;
+          area.setAttribute('readonly', '');
+          area.style.position = 'fixed';
+          area.style.opacity = '0';
+          document.body.appendChild(area);
+          area.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(area);
+          if (ok) resolve();
+          else reject(new Error('No se pudo copiar'));
+        } catch (err) {
+          reject(err);
+        }
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(resolve).catch(fallback);
+      } else {
+        fallback();
+      }
+    });
+  }
+
+  function bindCheckoutEvents() {
+    var content = $('#checkout-content');
+    if (content) {
+      content.addEventListener('submit', submitOrder);
+    }
+    var close = $('#checkout-close');
+    if (close) close.addEventListener('click', closeCheckout);
+    var backdrop = $('#checkout-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeCheckout);
+  }
+
+  // ── Lightbox ─────────────────────────────────────────────
+
+  function openLightbox(path) {
+    var box = $('#lightbox');
+    var image = $('#lightbox-img');
+    if (!box || !image) return;
+    image.src = photoUrl(path, 'big');
+    image.alt = state.product ? state.product.title : 'Imagen ampliada';
+    box.classList.add('is-open');
+    setOverlayState(box, true);
+    lockScroll();
+    var close = $('#lightbox-close');
+    if (close) close.focus();
+  }
+
+  function closeLightbox() {
+    var box = $('#lightbox');
+    if (!box || !box.classList.contains('is-open')) return;
+    releaseFocus(box);
+    box.classList.remove('is-open');
+    setOverlayState(box, false);
+    unlockScroll();
+    var zoom = $('#product-zoom');
+    if (zoom) zoom.focus();
+  }
+
+  function stepGallery(delta) {
+    if (!state.gallery.length) return;
+    state.galleryIndex = (state.galleryIndex + delta + state.gallery.length) % state.gallery.length;
+    renderGallery();
+    var image = $('#lightbox-img');
+    var box = $('#lightbox');
+    if (image && box && box.classList.contains('is-open')) {
+      image.src = photoUrl(state.gallery[state.galleryIndex], 'big');
+    }
+  }
+
+  // ── Menú móvil ───────────────────────────────────────────
+
+  function openMenu() {
+    var menu = $('#mobile-menu');
+    if (!menu || menu.classList.contains('is-open')) return;
+    menu.classList.add('is-open');
+    setOverlayState(menu, true);
+    var opener = $('#menu-open');
+    if (opener) opener.setAttribute('aria-expanded', 'true');
+    lockScroll();
+  }
+
+  function closeMenu() {
+    var menu = $('#mobile-menu');
+    if (!menu || !menu.classList.contains('is-open')) return;
+    releaseFocus(menu);
+    menu.classList.remove('is-open');
+    setOverlayState(menu, false);
+    var opener = $('#menu-open');
+    if (opener) opener.setAttribute('aria-expanded', 'false');
+    unlockScroll();
+    if (opener) opener.focus();
+  }
+
+  // ── Eventos globales ─────────────────────────────────────
+
+  function handleEscape() {
+    var lightbox = $('#lightbox');
+    if (lightbox && lightbox.classList.contains('is-open')) return closeLightbox();
+    var checkout = $('#checkout-modal');
+    if (checkout && checkout.classList.contains('is-open')) return closeCheckout();
+    var product = $('#product-modal');
+    if (product && product.classList.contains('is-open')) return closeProduct();
+    var cart = $('#cart-drawer');
+    if (cart && cart.classList.contains('is-open')) return closeCart();
+    var filters = $('#filters-drawer');
+    if (filters && filters.classList.contains('is-open')) return closeFilters();
+    var menu = $('#mobile-menu');
+    if (menu && menu.classList.contains('is-open')) return closeMenu();
+  }
+
+  function bindGlobalEvents() {
+    var menuOpen = $('#menu-open');
+    if (menuOpen) menuOpen.addEventListener('click', openMenu);
+    var menuClose = $('#menu-close');
+    if (menuClose) menuClose.addEventListener('click', closeMenu);
+    var mobileMenu = $('#mobile-menu');
+    if (mobileMenu) {
+      mobileMenu.addEventListener('click', function (event) {
+        if (event.target.closest('a')) closeMenu();
+      });
+    }
+
+    var lightbox = $('#lightbox');
+    if (lightbox) {
+      lightbox.addEventListener('click', function (event) {
+        if (event.target === lightbox) closeLightbox();
+      });
+    }
+    var lightboxClose = $('#lightbox-close');
+    if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+
+    document.addEventListener('click', function (event) {
+      if (event.target.closest('[data-copy-order]')) {
+        var text = state.lastOrder && state.lastOrder.text ? state.lastOrder.text : '';
+        if (!text) return;
+        copyText(text).then(function () {
+          toast('Resumen copiado al portapapeles');
+        }).catch(function () {
+          toast('No se pudo copiar el resumen', 'error');
+        });
+        return;
+      }
+
+      if (event.target.closest('[data-close-checkout]')) {
+        closeCheckout();
+        return;
+      }
+
+      var card = event.target.closest('[data-product]');
+      if (card) openProduct(card.getAttribute('data-product'));
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        handleEscape();
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
+        event.preventDefault();
+        if (state.route !== 'catalog') {
+          location.hash = '#/catalogo?focus=search';
+        } else {
+          var search = $('#catalog-search');
+          if (search) {
+            search.focus();
+            search.select();
+          }
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        var box = $('#lightbox');
+        if (box && box.classList.contains('is-open')) {
+          event.preventDefault();
+          stepGallery(event.key === 'ArrowRight' ? 1 : -1);
+        }
+        return;
+      }
+    });
+
+    window.addEventListener('hashchange', function () {
+      var product = $('#product-modal');
+      if (product && product.classList.contains('is-open')) closeProduct();
+      var checkout = $('#checkout-modal');
+      if (checkout && checkout.classList.contains('is-open')) closeCheckout();
+      var menu = $('#mobile-menu');
+      if (menu && menu.classList.contains('is-open')) closeMenu();
+      renderRoute(true);
+    });
+  }
+
+  // ── Arranque ─────────────────────────────────────────────
+
+  async function init() {
+    var year = $('#year');
+    if (year) year.textContent = String(new Date().getFullYear());
+
+    state.cart = loadCart();
+    state.galleryToken = 0;
+
+    initOverlays();
+    bindGlobalEvents();
+    bindCatalogEvents();
+    bindProductEvents();
+    bindCartEvents();
+    bindCheckoutEvents();
+
+    renderRoute(false);
+    updateCartUI();
+
+    await Promise.all([loadConfig(), loadCatalog()]);
+
+    state.cart = state.cart.filter(function (line) { return state.byId.has(line.id); });
+    saveCart();
+    updateCartUI();
+    renderRoute(false);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init().catch(function (err) {
+      console.error('Error al iniciar el catálogo:', err);
+      toast('No se pudo iniciar el catálogo. Recarga la página.', 'error');
+    });
+  }
+})();
