@@ -19,6 +19,11 @@
     casual: 'Camiseta casual',
     other: 'Otra prenda'
   };
+  var COLLECTION_LABELS = {
+    equipaciones: 'Camisetas y equipaciones',
+    'primavera-invierno': 'Ropa primavera / invierno'
+  };
+  var DEPARTMENT_LABELS = { training: 'Entrenamiento', walk: 'Paseo' };
 
   var FLAG_LABELS = {
     retro: 'Retro',
@@ -44,7 +49,7 @@
     leagues: new Map(),
     seasons: new Map(),
     types: new Map(),
-    filters: { q: '', team: '', league: '', season: '', type: '' },
+    filters: { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '' },
     view: 'teams',
     sort: 'new',
     gridPage: 1,
@@ -127,7 +132,7 @@
 
   function coverUrl(item, size) {
     if (!item || !item.cover) return '/placeholder.svg';
-    return '/img' + item.cover + '/' + (size || 'small') + '.jpg';
+    return (item.source && item.source !== 'minkang' ? '/img/' + item.source : '/img') + item.cover + '/' + (size || 'small') + '.jpg';
   }
 
   function albumUrl(path, size) {
@@ -238,7 +243,9 @@
     state.types.clear();
 
     state.items.forEach(function (item) {
-      item._search = normalize([item.team, item.title, item.season, item.league, typeLabel(item.type)].join(' '));
+      item.collection = item.collection || 'equipaciones';
+      item.source = item.source || 'minkang';
+      item._search = normalize([item.team, item.title, item.season, item.league, typeLabel(item.type), item.subcategory, DEPARTMENT_LABELS[item.department] || ''].join(' '));
       var team = state.teams.get(item.team);
       if (!team) {
         team = { name: item.team, league: item.league || 'Otras ligas', count: 0, seasons: new Map(), cover: item.cover, sample: item };
@@ -372,7 +379,10 @@
         team: route.params.get('equipo') || '',
         league: route.params.get('liga') || '',
         season: route.params.get('temporada') || '',
-        type: route.params.get('tipo') || ''
+        type: route.params.get('tipo') || '',
+        collection: route.params.get('coleccion') || '',
+        department: route.params.get('uso') || '',
+        subcategory: route.params.get('subcategoria') || ''
       };
       state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo')) ? 'grid' : 'teams';
       state.groupPage = 1;
@@ -381,6 +391,7 @@
         syncFilterInputs();
         renderCatalog();
       }
+      updateCatalogIntro();
       if (route.params.get('focus') === 'search') {
         setTimeout(function () { var input = $('#catalog-search'); if (input) input.focus(); }, 90);
       }
@@ -417,11 +428,26 @@
     if (state.filters.league) params.set('liga', state.filters.league);
     if (state.filters.season) params.set('temporada', state.filters.season);
     if (state.filters.type) params.set('tipo', state.filters.type);
+    if (state.filters.collection) params.set('coleccion', state.filters.collection);
+    if (state.filters.department) params.set('uso', state.filters.department);
+    if (state.filters.subcategory) params.set('subcategoria', state.filters.subcategory);
     if (state.view === 'grid') params.set('vista', 'grid');
     var query = params.toString();
     try {
       history.replaceState(null, '', '#/catalogo' + (query ? '?' + query : ''));
     } catch (err) {}
+  }
+
+  function updateCatalogIntro() {
+    var isSeasonal = state.filters.collection === 'primavera-invierno';
+    var eyebrow = $('#catalog-eyebrow');
+    var title = $('#catalog-title');
+    var lead = $('#catalog-lead');
+    if (eyebrow) eyebrow.textContent = isSeasonal ? 'Colección GXG' : 'Catálogo completo';
+    if (title) title.innerHTML = isSeasonal ? 'Ropa de<br><em>primavera / invierno.</em>' : 'Toda la colección,<br><em>equipo a equipo.</em>';
+    if (lead) lead.textContent = isSeasonal
+      ? 'Ropa de entrenamiento y paseo para adultos y niños. Filtra por tipo de prenda, cierre y equipo.'
+      : 'Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.';
   }
 
   // ── Inicio ───────────────────────────────────────────────
@@ -543,7 +569,7 @@
       '<div class="card-body">' +
         '<div class="card-kicker"><span>' + esc(item.team) + '</span><span>' + esc(item.season) + '</span></div>' +
         '<h3 class="card-title">' + esc(item.title) + '</h3>' +
-        '<div class="card-foot"><span class="type-label">' + esc(typeLabel(item.type)) + '</span>' +
+        '<div class="card-foot"><span class="type-label">' + esc(item.subcategory || typeLabel(item.type)) + '</span>' +
           (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Nombre + dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
         '</div>' +
       '</div>' +
@@ -647,12 +673,18 @@
     var league = state.filters.league;
     var season = state.filters.season;
     var type = state.filters.type;
+    var collection = state.filters.collection;
+    var department = state.filters.department;
+    var subcategory = state.filters.subcategory;
 
     var items = state.items.filter(function (item) {
       if (team && item.team !== team) return false;
       if (league && item.league !== league) return false;
       if (season && item.seasonGroup !== season) return false;
       if (type && item.type !== type) return false;
+      if (collection && item.collection !== collection) return false;
+      if (department && item.department !== department) return false;
+      if (subcategory && item.subcategory !== subcategory) return false;
       if (q && item._search.indexOf(q) === -1) return false;
       return true;
     });
@@ -687,6 +719,9 @@
     if (filters.league) params.set('liga', filters.league);
     if (filters.season) params.set('temporada', filters.season);
     if (filters.type) params.set('tipo', filters.type);
+    if (filters.collection) params.set('coleccion', filters.collection);
+    if (filters.department) params.set('uso', filters.department);
+    if (filters.subcategory) params.set('subcategoria', filters.subcategory);
     if (view === 'grid') params.set('vista', 'grid');
     var query = params.toString();
     return '#/catalogo' + (query ? '?' + query : '');
@@ -828,10 +863,11 @@
     syncFilterInputs();
     renderCatalog();
     updateCatalogHash();
+    updateCatalogIntro();
   }
 
   function activeFilterCount() {
-    return ['q', 'team', 'league', 'season', 'type'].filter(function (key) {
+    return ['q', 'team', 'league', 'season', 'type', 'collection', 'department', 'subcategory'].filter(function (key) {
       return !!state.filters[key];
     }).length;
   }
@@ -861,6 +897,9 @@
     if (state.filters.league) chips.push(chip('league', 'Liga: ' + state.filters.league));
     if (state.filters.season) chips.push(chip('season', 'Temporada: ' + seasonLabel(state.filters.season)));
     if (state.filters.type) chips.push(chip('type', 'Tipo: ' + typeLabel(state.filters.type)));
+    if (state.filters.collection) chips.push(chip('collection', 'Colección: ' + (COLLECTION_LABELS[state.filters.collection] || state.filters.collection)));
+    if (state.filters.department) chips.push(chip('department', 'Uso: ' + (DEPARTMENT_LABELS[state.filters.department] || state.filters.department)));
+    if (state.filters.subcategory) chips.push(chip('subcategory', state.filters.subcategory));
 
     if (!chips.length) {
       container.innerHTML = '';
@@ -872,9 +911,15 @@
 
   function applyFilters(patch) {
     patch = patch || {};
+    var previousCollection = state.filters.collection;
     Object.keys(patch).forEach(function (key) {
       if (key in state.filters) state.filters[key] = String(patch[key] || '').trim();
     });
+
+    if ('collection' in patch && state.filters.collection !== previousCollection) {
+      state.filters.department = '';
+      state.filters.subcategory = '';
+    }
 
     if ('league' in patch && state.filters.team) {
       var team = state.teams.get(state.filters.team);
@@ -887,10 +932,11 @@
     syncFilterInputs();
     renderCatalog();
     updateCatalogHash();
+    updateCatalogIntro();
   }
 
   function clearAllFilters() {
-    state.filters = { q: '', team: '', league: '', season: '', type: '' };
+    state.filters = { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '' };
     state.gridPage = 1;
     state.groupPage = 1;
     syncFilterInputs();
@@ -907,6 +953,9 @@
       if (excludedFilter !== 'league' && state.filters.league && item.league !== state.filters.league) return false;
       if (excludedFilter !== 'season' && state.filters.season && item.seasonGroup !== state.filters.season) return false;
       if (excludedFilter !== 'type' && state.filters.type && item.type !== state.filters.type) return false;
+      if (excludedFilter !== 'collection' && state.filters.collection && item.collection !== state.filters.collection) return false;
+      if (excludedFilter !== 'department' && state.filters.department && item.department !== state.filters.department) return false;
+      if (excludedFilter !== 'subcategory' && state.filters.subcategory && item.subcategory !== state.filters.subcategory) return false;
       if (excludedFilter !== 'q' && q && item._search.indexOf(q) === -1) return false;
       return true;
     });
@@ -994,6 +1043,16 @@
     }).join('');
   }
 
+  function dimensionOptionsHtml(allLabel, key, labels, items) {
+    var counts = withSelectedFacet(countFacet(items || itemsForFacet(key), key), key);
+    var rows = Object.keys(counts).map(function (value) { return [value, counts[value]]; }).sort(function (a, b) {
+      return b[1] - a[1] || String(labels[a[0]] || a[0]).localeCompare(String(labels[b[0]] || b[0]), 'es');
+    });
+    return '<option value="">' + esc(allLabel) + '</option>' + rows.map(function (row) {
+      return '<option value="' + esc(row[0]) + '">' + esc(labels[row[0]] || row[0]) + ' (' + fmt(row[1]) + ')</option>';
+    }).join('');
+  }
+
   function seasonChipsHtml(items) {
     var counts = withSelectedFacet(countFacet(items || itemsForFacet('season'), 'seasonGroup'), 'season');
     var keys = Object.keys(counts).sort(function (a, b) {
@@ -1027,6 +1086,9 @@
         '<div class="filter-chips" id="drawer-seasons"></div>' +
         '<p class="filter-section-title">Tipo de prenda</p>' +
         '<div class="filter-chips" id="drawer-types"></div>' +
+        '<label class="select-wrap"><span>Colección</span><select id="drawer-collection"></select><svg><use href="#i-chevron"/></svg></label>' +
+        '<label class="select-wrap"><span>Uso</span><select id="drawer-department"></select><svg><use href="#i-chevron"/></svg></label>' +
+        '<label class="select-wrap"><span>Prenda</span><select id="drawer-subcategory"></select><svg><use href="#i-chevron"/></svg></label>' +
         '<label class="select-wrap"><span>Liga</span><select id="drawer-league"></select><svg><use href="#i-chevron"/></svg></label>' +
         '<label class="select-wrap"><span>Equipo</span><select id="drawer-team"></select><svg><use href="#i-chevron"/></svg></label>';
     }
@@ -1042,7 +1104,13 @@
       ['filter-team', teamOptionsHtml('Todos los equipos', itemsForFacet('team'))],
       ['drawer-team', teamOptionsHtml('Todos los equipos', itemsForFacet('team'))],
       ['filter-season', seasonOptionsHtml(itemsForFacet('season'))],
-      ['filter-type', typeOptionsHtml(itemsForFacet('type'))]
+      ['filter-type', typeOptionsHtml(itemsForFacet('type'))],
+      ['filter-collection', dimensionOptionsHtml('Todas', 'collection', COLLECTION_LABELS, itemsForFacet('collection'))],
+      ['filter-department', dimensionOptionsHtml('Todos', 'department', DEPARTMENT_LABELS, itemsForFacet('department'))],
+      ['filter-subcategory', dimensionOptionsHtml('Todas', 'subcategory', {}, itemsForFacet('subcategory'))],
+      ['drawer-collection', dimensionOptionsHtml('Todas', 'collection', COLLECTION_LABELS, itemsForFacet('collection'))],
+      ['drawer-department', dimensionOptionsHtml('Todos', 'department', DEPARTMENT_LABELS, itemsForFacet('department'))],
+      ['drawer-subcategory', dimensionOptionsHtml('Todas', 'subcategory', {}, itemsForFacet('subcategory'))]
     ];
     options.forEach(function (entry) {
       var select = document.getElementById(entry[0]);
@@ -1067,6 +1135,9 @@
     setSelect('filter-team', state.filters.team);
     setSelect('filter-season', state.filters.season);
     setSelect('filter-type', state.filters.type);
+    setSelect('filter-collection', state.filters.collection);
+    setSelect('filter-department', state.filters.department);
+    setSelect('filter-subcategory', state.filters.subcategory);
 
     var sortSelect = $('#sort-select');
     if (sortSelect) sortSelect.value = state.sort;
@@ -1088,6 +1159,10 @@
     if (league) league.value = state.filters.league || '';
     var team = $('#drawer-team');
     if (team) team.value = state.filters.team || '';
+    ['collection', 'department', 'subcategory'].forEach(function (key) {
+      var select = $('#drawer-' + key);
+      if (select) select.value = state.filters[key] || '';
+    });
 
     $$('#drawer-seasons button').forEach(function (button) {
       button.classList.toggle('is-active', (button.getAttribute('data-season') || '') === (state.filters.season || ''));
@@ -1155,7 +1230,7 @@
     var filters = $('#catalog-filters');
     if (filters) {
       filters.addEventListener('change', function (event) {
-        var map = { 'filter-league': 'league', 'filter-team': 'team', 'filter-season': 'season', 'filter-type': 'type' };
+        var map = { 'filter-league': 'league', 'filter-team': 'team', 'filter-season': 'season', 'filter-type': 'type', 'filter-collection': 'collection', 'filter-department': 'department', 'filter-subcategory': 'subcategory' };
         var key = map[event.target.id];
         if (!key) return;
         var patch = {};
@@ -1207,6 +1282,9 @@
       drawerBody.addEventListener('change', function (event) {
         if (event.target.id === 'drawer-league') applyFilters({ league: event.target.value });
         else if (event.target.id === 'drawer-team') applyFilters({ team: event.target.value });
+        else if (event.target.id === 'drawer-collection') applyFilters({ collection: event.target.value });
+        else if (event.target.id === 'drawer-department') applyFilters({ department: event.target.value });
+        else if (event.target.id === 'drawer-subcategory') applyFilters({ subcategory: event.target.value });
       });
       drawerBody.addEventListener('click', function (event) {
         var season = event.target.closest('[data-season]');
@@ -1281,7 +1359,7 @@
     });
   }
 
-  function photoUrl(path, size) {
+  function photoUrl(path, size, source) {
     if (!path) return '/placeholder.svg';
     var value = String(path).replace(/^https?:\/\/photo\.yupoo\.com/i, '');
     if (value.charAt(0) !== '/') value = '/' + value;
@@ -1290,7 +1368,7 @@
     } else if (size) {
       value = value.replace(/\/[^/]+\.(jpg|jpeg|png|webp)$/i, '/' + size + '.jpg');
     }
-    return '/img' + value;
+    return (source && source !== 'minkang' ? '/img/' + source : '/img') + value;
   }
 
   function expandSizes(range) {
@@ -1361,7 +1439,7 @@
 
     var body = modal.querySelector('.product-layout');
     if (body) body.scrollTop = 0;
-    loadAlbum(item.id);
+    loadAlbum(item);
   }
 
   function closeProduct() {
@@ -1382,13 +1460,14 @@
     state.returnFocus = null;
   }
 
-  async function loadAlbum(id) {
+  async function loadAlbum(item) {
+    var id = item.albumId || item.id;
     var token = state.galleryToken;
     try {
-      var res = await fetch('/api/album/' + encodeURIComponent(id), { headers: { 'Accept': 'application/json' } });
+      var res = await fetch('/api/album/' + encodeURIComponent(id) + (item.source === 'gxg' ? '?source=gxg' : ''), { headers: { 'Accept': 'application/json' } });
       if (!res.ok) return;
       var album = await res.json();
-      if (token !== state.galleryToken || !state.product || String(state.product.id) !== String(id)) return;
+      if (token !== state.galleryToken || !state.product || String(state.product.id) !== String(item.id)) return;
       var images = (album.images || []).map(function (path) {
         var value = String(path || '').replace(/^https?:\/\/photo\.yupoo\.com/i, '');
         if (!value) return '';
@@ -1422,7 +1501,7 @@
     if (!main || !item) return;
 
     var path = state.gallery[state.galleryIndex] || '';
-    main.innerHTML = imgTag(photoUrl(path, 'big'), item.title, { eager: true }) +
+    main.innerHTML = imgTag(photoUrl(path, 'big', item.source), item.title, { eager: true }) +
       '<div class="img-skeleton" aria-hidden="true"></div>' +
       '<button class="product-zoom" id="product-zoom" type="button" aria-label="Ampliar imagen">' +
       '<svg><use href="#i-zoom"/></svg></button>';
@@ -1432,7 +1511,7 @@
       thumbs.innerHTML = state.gallery.map(function (photo, index) {
         return '<button type="button" class="' + (index === state.galleryIndex ? 'is-active' : '') + '" ' +
           'data-photo="' + index + '" aria-label="Ver foto ' + (index + 1) + '">' +
-          '<img src="' + esc(photoUrl(photo, 'medium')) + '" alt="" loading="lazy"></button>';
+          '<img src="' + esc(photoUrl(photo, 'medium', item.source)) + '" alt="" loading="lazy"></button>';
       }).join('');
     }
   }
@@ -1456,7 +1535,8 @@
     (item.flags || []).forEach(function (flag) {
       tags += '<span class="product-tag' + (flag === 'player' ? ' is-accent' : '') + '">' + esc(flagLabel(flag)) + '</span>';
     });
-    tags += '<span class="product-tag">' + esc(typeLabel(item.type)) + '</span>';
+    tags += '<span class="product-tag">' + esc(item.subcategory || typeLabel(item.type)) + '</span>';
+    if (item.department) tags += '<span class="product-tag">' + esc(DEPARTMENT_LABELS[item.department] || item.department) + '</span>';
 
     var sizeButtons = sizes.map(function (size) {
       return '<button type="button" class="size-btn' +
@@ -2064,7 +2144,7 @@
     var box = $('#lightbox');
     var image = $('#lightbox-img');
     if (!box || !image) return;
-    image.src = photoUrl(path, 'big');
+    image.src = photoUrl(path, 'big', state.product && state.product.source);
     image.alt = state.product ? state.product.title : 'Imagen ampliada';
     box.classList.add('is-open');
     setOverlayState(box, true);
@@ -2091,7 +2171,7 @@
     var image = $('#lightbox-img');
     var box = $('#lightbox');
     if (image && box && box.classList.contains('is-open')) {
-      image.src = photoUrl(state.gallery[state.galleryIndex], 'big');
+      image.src = photoUrl(state.gallery[state.galleryIndex], 'big', state.product && state.product.source);
     }
   }
 

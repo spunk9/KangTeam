@@ -75,6 +75,7 @@
       <nav class="main-nav" aria-label="Navegación principal">
         <a href="#/" data-nav="home">Inicio</a>
         <a href="#/catalogo" data-nav="catalog">Catálogo</a>
+        <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="catalog">Primavera / invierno</a>
         <a href="#/equipos" data-nav="teams">Equipos</a>
         <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
         <a href="#/precios" data-nav="prices">Precios</a>
@@ -241,8 +242,8 @@
     <section class="view" id="view-catalog" aria-label="Catálogo" hidden>
       <div class="page-head">
         <div class="container">
-          <p class="eyebrow">Catálogo completo</p>
-          <h1>Toda la colección,<br><em>equipo a equipo.</em></h1>
+          <p class="eyebrow" id="catalog-eyebrow">Catálogo completo</p>
+          <h1 id="catalog-title">Toda la colección,<br><em>equipo a equipo.</em></h1>
           <p class="page-lead" id="catalog-lead">Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.</p>
         </div>
       </div>
@@ -261,6 +262,9 @@
           </button>
 
           <div class="filters" id="catalog-filters">
+            <label class="select-wrap"><span>Colección</span><select id="filter-collection"><option value="">Todas</option></select><svg><use href="#i-chevron"/></svg></label>
+            <label class="select-wrap"><span>Uso</span><select id="filter-department"><option value="">Todos</option></select><svg><use href="#i-chevron"/></svg></label>
+            <label class="select-wrap"><span>Prenda</span><select id="filter-subcategory"><option value="">Todas</option></select><svg><use href="#i-chevron"/></svg></label>
             <label class="select-wrap">
               <span>Liga</span>
               <select id="filter-league"><option value="">Todas</option></select>
@@ -469,6 +473,7 @@
     <nav aria-label="Menú móvil">
       <a href="#/" data-nav="home">Inicio</a>
       <a href="#/catalogo" data-nav="catalog">Catálogo</a>
+      <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="catalog">Primavera / invierno</a>
       <a href="#/equipos" data-nav="teams">Equipos</a>
       <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
       <a href="#/precios" data-nav="prices">Precios</a>

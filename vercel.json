@@ -13,6 +13,10 @@
   },
   "rewrites": [
     {
+      "source": "/img/:source/:folder/:hash/:filename",
+      "destination": "/api/img?source=:source&folder=:folder&hash=:hash&filename=:filename"
+    },
+    {
       "source": "/img/:folder/:hash/:filename",
       "destination": "/api/img?folder=:folder&hash=:hash&filename=:filename"
     }

@@ -536,14 +536,20 @@ var PLACEHOLDER = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="60
   '</svg>');
 
 function serveImage(req, res, pathname) {
-  // /img/minkang/<hash>/<size>.jpg
-  var match = pathname.match(/^\/img\/(minkang\/[a-z0-9]+\/[a-z0-9]+\.jpg)$/i);
-  if (!match) {
+  // Minkang keeps the legacy path; GXG images use /img/gxg/gxgtrainingwear/...
+  var legacy = pathname.match(/^\/img\/(minkang)\/([a-z0-9]+)\/(small|medium|big)\.jpg$/i);
+  var gxg = pathname.match(/^\/img\/(gxg)\/(gxgtrainingwear)\/([a-z0-9]+)\/(small|medium|big)\.jpg$/i);
+  var source = gxg ? 'gxg' : 'minkang';
+  var folder = gxg ? gxg[2] : (legacy && legacy[1]);
+  var hash = gxg ? gxg[3] : (legacy && legacy[2]);
+  var filename = gxg ? gxg[4] + '.jpg' : (legacy && legacy[3] + '.jpg');
+  if (!folder || !hash || !filename) {
     res.writeHead(404, { 'Content-Type': 'image/svg+xml' });
     return res.end(PLACEHOLDER);
   }
-  var relative = match[1];
-  var diskPath = path.join(IMG_CACHE_DIR, relative);
+  var remotePath = folder + '/' + hash + '/' + filename;
+  var cachePath = (source === 'gxg' ? 'gxg/' : '') + remotePath;
+  var diskPath = path.join(IMG_CACHE_DIR, cachePath);
 
   function sendBuffer(buffer) {
     res.writeHead(200, {
@@ -559,16 +565,17 @@ function serveImage(req, res, pathname) {
     try { return sendBuffer(fs.readFileSync(diskPath)); } catch (e) {}
   }
 
-  if (imageInFlight[relative]) {
-    imageInFlight[relative].then(sendBuffer).catch(function () {
+  if (imageInFlight[cachePath]) {
+    imageInFlight[cachePath].then(sendBuffer).catch(function () {
       res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=300' });
       res.end(PLACEHOLDER);
     });
     return;
   }
 
-  var promise = yupoo.fetchBuffer('https://photo.yupoo.com/' + relative, {
-    headers: { 'Referer': yupoo.IMAGE_REFERER, 'Accept': 'image/avif,image/webp,image/jpeg,*/*' },
+  var sourceConfig = yupoo.SOURCES[source];
+  var promise = yupoo.fetchBuffer('https://photo.yupoo.com/' + remotePath, {
+    headers: { 'Referer': sourceConfig.referer, 'Accept': 'image/avif,image/webp,image/jpeg,*/*' },
     timeout: 20000
   }).then(function (result) {
     var buffer = result.buffer;
@@ -576,14 +583,14 @@ function serveImage(req, res, pathname) {
       fs.mkdirSync(path.dirname(diskPath), { recursive: true });
       fs.writeFileSync(diskPath, buffer);
     }
-    delete imageInFlight[relative];
+    delete imageInFlight[cachePath];
     return buffer;
   }).catch(function (err) {
-    delete imageInFlight[relative];
+    delete imageInFlight[cachePath];
     throw err;
   });
 
-  imageInFlight[relative] = promise;
+  imageInFlight[cachePath] = promise;
   promise.then(sendBuffer).catch(function () {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=300' });
     res.end(PLACEHOLDER);
@@ -594,30 +601,36 @@ function serveImage(req, res, pathname) {
 //  Álbumes (galería de cada prenda)
 // ─────────────────────────────────────────────────────────────
 
-async function getAlbum(id) {
+async function getAlbum(id, source) {
+  source = source === 'gxg' ? 'gxg' : 'minkang';
+  var sourceConfig = yupoo.SOURCES[source];
+  var key = source + '-' + id;
   var now = Date.now();
-  if (albumMemory[id] && now - albumMemory[id].time < 7 * 86400000) return albumMemory[id].data;
+  if (albumMemory[key] && now - albumMemory[key].time < 7 * 86400000) return albumMemory[key].data;
 
-  var cacheFile = path.join(ALBUM_CACHE_DIR, id + '.json');
+  var cacheFile = path.join(ALBUM_CACHE_DIR, key + '.json');
   if (!IS_VERCEL) {
     try {
       var stat = fs.statSync(cacheFile);
       if (now - stat.mtimeMs < 7 * 86400000) {
         var cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-        albumMemory[id] = { time: stat.mtimeMs, data: cached };
+        albumMemory[key] = { time: stat.mtimeMs, data: cached };
         return cached;
       }
     } catch (e) {}
   }
 
-  var html = await yupoo.fetchWithRetries(yupoo.BASE + '/albums/' + id + '?uid=1', { timeout: 25000 }, 2);
+  var html = await yupoo.fetchWithRetries(sourceConfig.base + '/albums/' + id + '?uid=1', {
+    timeout: 25000,
+    headers: { 'Referer': sourceConfig.referer }
+  }, 2);
   var album = yupoo.parseAlbum(html);
   album.images = (album.images || []).slice(0, 16);
   if (!IS_VERCEL) {
     fs.mkdirSync(ALBUM_CACHE_DIR, { recursive: true });
     util.writeJsonAtomic(cacheFile, album);
   }
-  albumMemory[id] = { time: now, data: album };
+  albumMemory[key] = { time: now, data: album };
   return album;
 }
 
@@ -717,7 +730,7 @@ async function handle(req, res) {
     var id = pathname.split('/').pop();
     if (!/^\d+$/.test(id)) return sendJson(res, 400, { error: 'ID no válido' }, req);
     try {
-      var album = await getAlbum(id);
+      var album = await getAlbum(id, parsed.query.source);
       return sendJson(res, 200, album, req, { 'Cache-Control': 'public, max-age=86400' });
     } catch (err) {
       return sendJson(res, 502, { error: 'No se pudo cargar la galería', detail: err.message }, req);

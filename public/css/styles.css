@@ -1651,6 +1651,15 @@ svg { display: block; }
   .filters .select-wrap select { max-width: 115px; }
 }
 
+@media (max-width: 1400px) and (min-width: 1021px) {
+  .toolbar-inner { flex-wrap: wrap; }
+  .toolbar-inner > .searchbox { flex: 1 1 360px; }
+  .toolbar-inner > .view-switch { margin-left: auto; }
+  .filters { flex: 1 1 100%; flex-wrap: wrap; }
+  .filters .select-wrap { flex: 1 1 125px; min-width: 0; }
+  .filters .select-wrap select { max-width: none; width: 100%; }
+}
+
 @media (max-width: 1020px) {
   :root { --container: calc(100vw - 36px); }
   .main-nav { display: none; }
