@@ -40,21 +40,28 @@
 
   var numberFormat = new Intl.NumberFormat('es-ES');
   var cartStorageKey = 'kang_cart_v1';
+  var favsStorageKey = 'kang_favs_v1';
+  var ordersStorageKey = 'kang_orders_v1';
+  var customerStorageKey = 'kang_customer_v1';
+  var CART_PACK_TARGET = 3;
+  var PRICE_BAND_LABELS = { le25: 'Hasta 25 €', '26-45': '26 – 45 €', gt45: 'Más de 45 €' };
   var state = {
     catalog: null,
     items: [],
     byId: new Map(),
     config: null,
     teams: new Map(),
+    teamLogos: new Map(),
     leagues: new Map(),
     seasons: new Map(),
     types: new Map(),
-    filters: { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '' },
+    filters: { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' },
     view: 'teams',
     sort: 'new',
     gridPage: 1,
     groupPage: 1,
     route: 'home',
+    lastListHash: '#/',
     loading: true,
     product: null,
     gallery: [],
@@ -67,6 +74,11 @@
     sizeGuideOpen: false,
     sizeGuideTab: 'adult',
     cart: [],
+    favorites: [],
+    favSet: new Set(),
+    orders: [],
+    customer: { name: '', phone: '', email: '', city: '', notes: '' },
+    suggestIndex: -1,
     lastOrder: null,
     overlayCount: 0,
     returnFocus: null,
@@ -130,8 +142,23 @@
     return words.slice(0, 3).map(function (word) { return word.charAt(0); }).join('').toUpperCase();
   }
 
+  function teamLogoUrl(name) {
+    if (!name || !state.teamLogos) return '';
+    return state.teamLogos.get(name) || '';
+  }
+
   function teamMono(name) {
-    return '<span class="team-mono" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' + esc(initials(name)) + '</span>';
+    var logo = teamLogoUrl(name);
+    var label = '<span class="team-mono-text">' + esc(initials(name)) + '</span>';
+    if (!logo) {
+      return '<span class="team-mono" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' + label + '</span>';
+    }
+    return '<span class="team-mono has-logo" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' +
+      '<img src="' + esc(logo) + '" alt="" loading="lazy" decoding="async"' +
+      ' onload="this.parentNode.classList.add(\'is-logo-ready\')"' +
+      ' onerror="this.parentNode.classList.remove(\'has-logo\');this.remove()">' +
+      label +
+      '</span>';
   }
 
   function coverUrl(item, size) {
@@ -267,6 +294,20 @@
       .replace(/\bRetro\s+Jersey\b/ig, 'Camiseta Retro')
       .replace(/\bBasketball\s+Jersey\b/ig, 'Camiseta Baloncesto')
       .replace(/\bBasketball\s+Shorts\b/ig, 'Pantalón Baloncesto')
+      .replace(/\bStand\s+Collar\b/ig, 'Cuello Alto')
+      .replace(/\bCotton[-\u2011\s]?padded\b/ig, 'Acolchada')
+      .replace(/\bCotton\s+Gilet\b/ig, 'Chaleco Acolchado')
+      .replace(/\bPuffer\b/ig, 'Plumas')
+      .replace(/\bCrew\s*Neck\b/ig, 'Cuello Redondo')
+      .replace(/\bFull[-\s]?Zip(?:per)?\b/ig, 'Cremallera Completa')
+      .replace(/\bHalf[-\s]?Zip(?:per)?\b/ig, 'Media Cremallera')
+      .replace(/\bSleeveless\b/ig, 'Sin Mangas')
+      .replace(/\bTrack\s+Jacket\b/ig, 'Chaqueta Chándal')
+      .replace(/\bSweatshirt\b/ig, 'Sudadera')
+      .replace(/\bHoodie\b/ig, 'Sudadera Capucha')
+      .replace(/\bHooded\b/ig, 'con Capucha')
+      .replace(/\bPullover\b/ig, 'Jersey')
+      .replace(/\bFleece\b/ig, 'Forro Polar')
       .replace(/\bT-Shirt\b/ig, 'Camiseta')
       .replace(/\bJersey\b/ig, 'Camiseta')
       .replace(/\bKit\b/ig, 'Equipación')
@@ -284,9 +325,96 @@
     return item._cleanTitle;
   }
 
+  var TEAM_NORMALIZE_MAP = {
+    'rcd espanyol 26/27': 'Espanyol',
+    'ca osasuna 26/27': 'Osasuna',
+    'olympique de marseille 26/27': 'Olympique de Marsella',
+    'olympique de marseille 125th': 'Olympique de Marsella',
+    'olympique de marseille 09/10': 'Olympique de Marsella',
+    'olympique de marseille 1998/99': 'Olympique de Marsella',
+    'as monaco 26/27': 'Mónaco',
+    'u.c sampdoria 26/27 samp': 'Sampdoria',
+    'inte milan 24/25': 'Inter de Milán',
+    'ac 13/14 milan': 'AC Milan',
+    'ac 95/96': 'AC Milan',
+    'girondins de bordeaux 96/97': 'Girondins de Burdeos',
+    'palmeras+all sponsors+patches': 'Palmeiras',
+    'newell old boy 93/94': "Newell's Old Boys",
+    'c.d guadalajara 26/27': 'Chivas de Guadalajara',
+    'atletico 25/26': 'Atlético de Madrid',
+    'atlético 25/26': 'Atlético de Madrid',
+    'ronaldo 25/26': 'Cristiano Ronaldo',
+    'cd tenerife 26/27': 'CD Tenerife',
+    'cd tenerife 25/26': 'CD Tenerife',
+    'ceuta asociacion deportiva 98/00': 'AD Ceuta FC',
+    'sunderlandl 05/06': 'Sunderland',
+    'charlotte 26/27': 'Charlotte FC',
+    'metz 03/04 red': 'FC Metz',
+    'nk cotton gilet': 'NK',
+    'nk cotton gilet ty': 'NK',
+    'nk cotton-padded': 'NK',
+    'nk cotton‑padded': 'NK',
+    'ad cotton gilet ty': 'AD',
+    'ad cotton-padded': 'AD',
+    'ad cotton‑padded': 'AD',
+    'ad archive collar engineered': 'AD',
+    'tnf cotton gilet xs-2xl-509': 'TNF',
+    'chinese new year tang-style': 'Otros',
+    'oasis tour jacquard striped': 'Otros',
+    'silicone team emblem 25/26': 'Otros',
+    'ant 26/27 limited': 'Otros',
+    'yakos 26/27': 'Otros',
+    'ibrahimovic 25/26': 'Otros',
+    'fernandez 93/94': 'Otros',
+    'roman 00/01': 'Otros',
+    'flc 99/00': 'Otros'
+  };
+
+  var TEAM_LEAGUE_FIX = {
+    'Espanyol': 'LaLiga',
+    'Osasuna': 'LaLiga',
+    'CD Tenerife': 'LaLiga',
+    'AD Ceuta FC': 'LaLiga',
+    'Olympique de Marsella': 'Ligue 1',
+    'Mónaco': 'Ligue 1',
+    'Girondins de Burdeos': 'Ligue 1',
+    'Inter de Milán': 'Serie A',
+    'AC Milan': 'Serie A',
+    'Sampdoria': 'Serie A',
+    'Palmeiras': 'Brasileirão',
+    "Newell's Old Boys": 'Liga Profesional',
+    'Chivas de Guadalajara': 'Liga MX',
+    'Atlético de Madrid': 'LaLiga',
+    'Cristiano Ronaldo': 'Jugadores',
+    'Otros': 'Otras ligas'
+  };
+
+  function normalizeCatalogItemTeam(item) {
+    if (!item || !item.team) return;
+    var raw = String(item.team).trim();
+    var lower = raw.toLowerCase();
+    var next = TEAM_NORMALIZE_MAP[lower];
+    if (!next && /\s+\d{2,4}\/\d{2,4}$/.test(raw)) {
+      next = raw.replace(/\s+\d{2,4}\/\d{2,4}$/, '').trim();
+    }
+    if (next && next !== raw) {
+      item.team = next;
+      if (TEAM_LEAGUE_FIX[next]) item.league = TEAM_LEAGUE_FIX[next];
+    }
+  }
+
   function itemBasePriceCents(item) {
     if (!window.KangPricing || !item) return 2500;
     return KangPricing.calculate(item, {}).basePriceCents;
+  }
+
+  function matchesPriceBand(item, band) {
+    if (!band) return true;
+    var cents = itemBasePriceCents(item);
+    if (band === 'le25') return cents <= 2500;
+    if (band === '26-45') return cents > 2500 && cents <= 4500;
+    if (band === 'gt45') return cents > 4500;
+    return true;
   }
 
   function formatDate(value) {
@@ -307,6 +435,63 @@
 
   function saveCart() {
     try { localStorage.setItem(cartStorageKey, JSON.stringify(state.cart)); } catch (err) {}
+  }
+
+  function loadFavorites() {
+    try {
+      var raw = localStorage.getItem(favsStorageKey);
+      var parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(String).filter(Boolean);
+    } catch (err) { return []; }
+  }
+
+  function saveFavorites() {
+    try { localStorage.setItem(favsStorageKey, JSON.stringify(state.favorites)); } catch (err) {}
+  }
+
+  function isFavorite(id) {
+    return state.favSet.has(String(id));
+  }
+
+  function loadOrders() {
+    try {
+      var raw = localStorage.getItem(ordersStorageKey);
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 12) : [];
+    } catch (err) { return []; }
+  }
+
+  function saveOrders() {
+    try { localStorage.setItem(ordersStorageKey, JSON.stringify(state.orders.slice(0, 12))); } catch (err) {}
+  }
+
+  function loadCustomer() {
+    try {
+      var raw = localStorage.getItem(customerStorageKey);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || typeof parsed !== 'object') return { name: '', phone: '', email: '', city: '', notes: '' };
+      return {
+        name: String(parsed.name || ''),
+        phone: String(parsed.phone || ''),
+        email: String(parsed.email || ''),
+        city: String(parsed.city || ''),
+        notes: String(parsed.notes || '')
+      };
+    } catch (err) {
+      return { name: '', phone: '', email: '', city: '', notes: '' };
+    }
+  }
+
+  function saveCustomer(customer) {
+    state.customer = {
+      name: String(customer && customer.name || ''),
+      phone: String(customer && customer.phone || ''),
+      email: String(customer && customer.email || ''),
+      city: String(customer && customer.city || ''),
+      notes: String(customer && customer.notes || '')
+    };
+    try { localStorage.setItem(customerStorageKey, JSON.stringify(state.customer)); } catch (err) {}
   }
 
   function toast(message, type) {
@@ -334,6 +519,22 @@
       state.config = { store: { name: 'KANG Team', whatsapp: '', email: '', instagram: '', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
     }
     applyConfig();
+  }
+
+  async function loadTeamLogos() {
+    try {
+      var res = await fetch('/api/team-logos', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      var data = await res.json();
+      var map = data && data.logos && typeof data.logos === 'object' ? data.logos : {};
+      state.teamLogos = new Map(Object.keys(map).map(function (key) { return [key, map[key]]; }));
+      if (!state.loading && state.items.length) {
+        renderHeroMarquee();
+        renderHomeTeams();
+        renderTeamsView();
+        if (state.route === 'catalog' && state.view === 'teams') renderCatalog();
+      }
+    } catch (err) {}
   }
 
   async function loadCatalog() {
@@ -380,6 +581,7 @@
     state.items.forEach(function (item) {
       item.collection = item.collection || 'equipaciones';
       item.source = item.source || 'minkang';
+      normalizeCatalogItemTeam(item);
       var display = cleanTitle(item);
       item._search = normalize([item.team, item.title, display, item.season, item.league, typeLabel(item.type), item.subcategory, DEPARTMENT_LABELS[item.department] || ''].join(' '));
       var team = state.teams.get(item.team);
@@ -500,8 +702,13 @@
 
   function renderRoute(scroll) {
     var route = parseRoute();
+    var isProductRoute = route.path.indexOf('/producto/') === 0;
     var routeKeys = { '/': 'home', '/catalogo': 'catalog', '/equipos': 'teams', '/como-funciona': 'how', '/precios': 'prices' };
-    state.route = routeKeys[route.path] || 'home';
+    state.route = isProductRoute ? (state.route || 'catalog') : (routeKeys[route.path] || 'home');
+
+    if (!isProductRoute) {
+      state.lastListHash = location.hash || '#/';
+    }
 
     $$('.view').forEach(function (view) { view.hidden = true; });
     var navKey = 'home';
@@ -509,7 +716,7 @@
 
     if (route.path === '/catalogo') {
       viewId = 'view-catalog';
-      navKey = 'catalog';
+      navKey = route.params.get('coleccion') === 'primavera-invierno' ? 'seasonal' : 'catalog';
       state.filters = {
         q: route.params.get('q') || '',
         team: route.params.get('equipo') || '',
@@ -518,9 +725,16 @@
         type: route.params.get('tipo') || '',
         collection: route.params.get('coleccion') || '',
         department: route.params.get('uso') || '',
-        subcategory: route.params.get('subcategoria') || ''
+        subcategory: route.params.get('subcategoria') || '',
+        flag: route.params.get('extra') || '',
+        price: route.params.get('precio') || '',
+        favs: route.params.get('favoritos') || ''
       };
-      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo')) ? 'grid' : 'teams';
+      var sortParam = route.params.get('orden');
+      if (sortParam && ['new', 'price-asc', 'price-desc', 'team', 'season', 'name'].indexOf(sortParam) !== -1) {
+        state.sort = sortParam;
+      }
+      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo') || !!state.filters.favs || !!state.filters.price) ? 'grid' : 'teams';
       state.groupPage = 1;
       state.gridPage = 1;
       if (state.items.length) {
@@ -542,6 +756,13 @@
       viewId = 'view-prices';
       navKey = 'prices';
       renderPrices();
+    } else if (isProductRoute) {
+      viewId = state.route === 'catalog' ? 'view-catalog' : 'view-home';
+      navKey = state.route === 'catalog' ? 'catalog' : 'home';
+      if (state.route === 'catalog' && state.items.length) {
+        syncFilterInputs();
+        renderCatalog();
+      }
     }
 
     var view = document.getElementById(viewId);
@@ -551,13 +772,21 @@
       link.classList.toggle('is-active', link.getAttribute('data-nav') === navKey);
     });
 
-    if (scroll) {
+    if (isProductRoute && state.items.length) {
+      var productId = decodeURIComponent(route.path.slice('/producto/'.length));
+      if (!state.product || String(state.product.id) !== String(productId) || !$('#product-modal').classList.contains('is-open')) {
+        openProduct(productId, { skipHash: true });
+      }
+    }
+
+    if (scroll && !isProductRoute) {
       try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (err) { window.scrollTo(0, 0); }
     }
   }
 
   function updateCatalogHash() {
     if (state.route !== 'catalog') return;
+    if (location.hash.indexOf('#/producto/') === 0) return;
     var params = new URLSearchParams();
     if (state.filters.q) params.set('q', state.filters.q);
     if (state.filters.team) params.set('equipo', state.filters.team);
@@ -567,10 +796,16 @@
     if (state.filters.collection) params.set('coleccion', state.filters.collection);
     if (state.filters.department) params.set('uso', state.filters.department);
     if (state.filters.subcategory) params.set('subcategoria', state.filters.subcategory);
+    if (state.filters.flag) params.set('extra', state.filters.flag);
+    if (state.filters.price) params.set('precio', state.filters.price);
+    if (state.filters.favs) params.set('favoritos', state.filters.favs);
+    if (state.sort && state.sort !== 'new') params.set('orden', state.sort);
     if (state.view === 'grid') params.set('vista', 'grid');
     var query = params.toString();
+    var nextHash = '#/catalogo' + (query ? '?' + query : '');
+    state.lastListHash = nextHash;
     try {
-      history.replaceState(null, '', '#/catalogo' + (query ? '?' + query : ''));
+      history.replaceState(null, '', nextHash);
     } catch (err) {}
   }
 
@@ -637,13 +872,21 @@
       }
     }
 
-    if (marquee) {
-      var topTeams = Array.from(state.teams.values()).filter(function (team) { return team.name !== 'Otros'; }).sort(function (a, b) { return b.count - a.count; }).slice(0, 16);
-      var items = topTeams.concat(topTeams);
-      marquee.innerHTML = items.map(function (team) {
-        return '<button type="button" class="marquee-item" data-team-link="' + esc(team.name) + '"><img src="' + esc(coverUrl(team.sample, 'square')) + '" alt="" loading="lazy">' + esc(team.name) + '</button>';
-      }).join('');
-    }
+    renderHeroMarquee();
+  }
+
+  function renderHeroMarquee() {
+    var marquee = $('#marquee-track');
+    if (!marquee || !state.teams.size) return;
+    var topTeams = Array.from(state.teams.values()).filter(function (team) { return team.name !== 'Otros'; }).sort(function (a, b) { return b.count - a.count; }).slice(0, 16);
+    var items = topTeams.concat(topTeams);
+    marquee.innerHTML = items.map(function (team) {
+      var logo = teamLogoUrl(team.name);
+      var fallback = coverUrl(team.sample, 'square');
+      var src = logo || fallback;
+      var cls = logo ? ' class="is-crest"' : '';
+      return '<button type="button" class="marquee-item" data-team-link="' + esc(team.name) + '"><img' + cls + ' src="' + esc(src) + '" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.classList.remove(\'is-crest\');this.src=\'' + esc(fallback) + '\'">' + esc(team.name) + '</button>';
+    }).join('');
   }
 
   function renderHomeSeasons() {
@@ -705,11 +948,13 @@
       ? '+2 € nombre/dorsal · +1 € parche'
       : (hasSpecialSize ? '3XL/4XL +3 €' : 'Tallas ' + (item.sizeRange || 'S-2XL'));
 
+    var favActive = isFavorite(item.id);
     return '<article class="card" data-product="' + esc(item.id) + '">' +
       '<div class="card-media">' +
         '<button class="card-open" type="button" aria-label="Ver ' + esc(title) + '"></button>' +
         imgTag(coverUrl(item, 'small'), title) +
         '<div class="card-badges" aria-hidden="true">' + badges + '</div>' +
+        '<button class="card-fav' + (favActive ? ' is-active' : '') + '" type="button" data-fav-toggle="' + esc(item.id) + '" aria-pressed="' + favActive + '" aria-label="' + (favActive ? 'Quitar de favoritos ' : 'Guardar en favoritos ') + esc(title) + '"><svg><use href="#i-heart"/></svg></button>' +
         '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(title) + '"><svg><use href="#i-plus"/></svg></button>' +
       '</div>' +
       '<div class="card-body">' +
@@ -823,8 +1068,12 @@
     var collection = state.filters.collection;
     var department = state.filters.department;
     var subcategory = state.filters.subcategory;
+    var flag = state.filters.flag;
+    var price = state.filters.price;
+    var onlyFavs = state.filters.favs === '1';
 
     var items = state.items.filter(function (item) {
+      if (onlyFavs && !isFavorite(item.id)) return false;
       if (team && item.team !== team) return false;
       if (league && item.league !== league) return false;
       if (season && item.seasonGroup !== season) return false;
@@ -832,6 +1081,8 @@
       if (collection && item.collection !== collection) return false;
       if (department && item.department !== department) return false;
       if (subcategory && item.subcategory !== subcategory) return false;
+      if (flag && (!Array.isArray(item.flags) || item.flags.indexOf(flag) === -1)) return false;
+      if (price && !matchesPriceBand(item, price)) return false;
       if (q && item._search.indexOf(q) === -1) return false;
       return true;
     });
@@ -841,7 +1092,19 @@
 
   function sortItems(list) {
     var items = list.slice();
-    if (state.sort === 'team') {
+    if (state.sort === 'price-asc') {
+      items.sort(function (a, b) {
+        return itemBasePriceCents(a) - itemBasePriceCents(b) ||
+          (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) ||
+          a.title.localeCompare(b.title, 'es');
+      });
+    } else if (state.sort === 'price-desc') {
+      items.sort(function (a, b) {
+        return itemBasePriceCents(b) - itemBasePriceCents(a) ||
+          (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) ||
+          a.title.localeCompare(b.title, 'es');
+      });
+    } else if (state.sort === 'team') {
       items.sort(function (a, b) {
         return a.team.localeCompare(b.team, 'es') ||
           seasonRank(a) - seasonRank(b) ||
@@ -869,6 +1132,9 @@
     if (filters.collection) params.set('coleccion', filters.collection);
     if (filters.department) params.set('uso', filters.department);
     if (filters.subcategory) params.set('subcategoria', filters.subcategory);
+    if (filters.flag) params.set('extra', filters.flag);
+    if (filters.price) params.set('precio', filters.price);
+    if (filters.favs) params.set('favoritos', filters.favs);
     if (view === 'grid') params.set('vista', 'grid');
     var query = params.toString();
     return '#/catalogo' + (query ? '?' + query : '');
@@ -890,8 +1156,9 @@
     var groups = Array.from(map.values());
     groups.forEach(function (group) {
       group.items.sort(function (a, b) {
-        return (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) ||
-          a.title.localeCompare(b.title, 'es');
+        if (state.sort === 'price-asc') return itemBasePriceCents(a) - itemBasePriceCents(b) || (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0);
+        if (state.sort === 'price-desc') return itemBasePriceCents(b) - itemBasePriceCents(a) || (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0);
+        return (Number(b.seasonSort) || 0) - (Number(a.seasonSort) || 0) || a.title.localeCompare(b.title, 'es');
       });
     });
 
@@ -902,14 +1169,42 @@
     return groups;
   }
 
+  function renderQuickFilters() {
+    var container = $('#quick-filters');
+    if (!container) return;
+    var favCount = state.favorites.length;
+    var chips = [];
+    chips.push('<button type="button" class="quick-chip is-fav' + (state.filters.favs === '1' ? ' is-active' : '') + '" data-quick-fav aria-pressed="' + (state.filters.favs === '1') + '"><svg><use href="#i-heart"/></svg>Favoritos' + (favCount ? ' (' + favCount + ')' : '') + '</button>');
+    [
+      ['kids', 'Niños'],
+      ['women', 'Mujer'],
+      ['retro', 'Retro'],
+      ['player', 'Player']
+    ].forEach(function (entry) {
+      var active = state.filters.flag === entry[0];
+      chips.push('<button type="button" class="quick-chip' + (active ? ' is-active' : '') + '" data-quick-flag="' + entry[0] + '" aria-pressed="' + active + '">' + entry[1] + '</button>');
+    });
+    chips.push('<span class="quick-chip-sep" aria-hidden="true"></span>');
+    [
+      ['le25', '≤ 25 €'],
+      ['26-45', '26 – 45 €'],
+      ['gt45', '+45 €']
+    ].forEach(function (entry) {
+      var active = state.filters.price === entry[0];
+      chips.push('<button type="button" class="quick-chip' + (active ? ' is-active' : '') + '" data-quick-price="' + entry[0] + '" aria-pressed="' + active + '">' + entry[1] + '</button>');
+    });
+    container.innerHTML = chips.join('');
+  }
+
   function renderCatalog() {
     if (!state.items.length) return;
     var results = $('#catalog-results');
     if (!results) return;
 
     var items = getFilteredItems();
-    var useGrid = state.view === 'grid' || !!state.filters.team;
+    var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || state.sort === 'price-asc' || state.sort === 'price-desc';
 
+    renderQuickFilters();
     renderActiveFilters();
     updateFilterCount();
 
@@ -1014,7 +1309,7 @@
   }
 
   function activeFilterCount() {
-    return ['q', 'team', 'league', 'season', 'type', 'collection', 'department', 'subcategory'].filter(function (key) {
+    return ['q', 'team', 'league', 'season', 'type', 'collection', 'department', 'subcategory', 'flag', 'price', 'favs'].filter(function (key) {
       return !!state.filters[key];
     }).length;
   }
@@ -1047,6 +1342,9 @@
     if (state.filters.collection) chips.push(chip('collection', 'Colección: ' + (COLLECTION_LABELS[state.filters.collection] || state.filters.collection)));
     if (state.filters.department) chips.push(chip('department', 'Uso: ' + (DEPARTMENT_LABELS[state.filters.department] || state.filters.department)));
     if (state.filters.subcategory) chips.push(chip('subcategory', state.filters.subcategory));
+    if (state.filters.flag) chips.push(chip('flag', 'Extra: ' + flagLabel(state.filters.flag)));
+    if (state.filters.price) chips.push(chip('price', 'Precio: ' + (PRICE_BAND_LABELS[state.filters.price] || state.filters.price)));
+    if (state.filters.favs) chips.push(chip('favs', 'Solo favoritos'));
 
     if (!chips.length) {
       container.innerHTML = '';
@@ -1073,6 +1371,9 @@
       if (team && team.league !== state.filters.league) state.filters.team = '';
     }
     if ('team' in patch && state.filters.team) state.view = 'grid';
+    if (('flag' in patch && state.filters.flag) || ('price' in patch && state.filters.price) || ('favs' in patch && state.filters.favs)) {
+      state.view = 'grid';
+    }
 
     state.gridPage = 1;
     state.groupPage = 1;
@@ -1083,7 +1384,7 @@
   }
 
   function clearAllFilters() {
-    state.filters = { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '' };
+    state.filters = { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' };
     state.gridPage = 1;
     state.groupPage = 1;
     syncFilterInputs();
@@ -1095,7 +1396,9 @@
 
   function itemsForFacet(excludedFilter) {
     var q = normalize(state.filters.q);
+    var onlyFavs = state.filters.favs === '1';
     return state.items.filter(function (item) {
+      if (excludedFilter !== 'favs' && onlyFavs && !isFavorite(item.id)) return false;
       if (excludedFilter !== 'team' && state.filters.team && item.team !== state.filters.team) return false;
       if (excludedFilter !== 'league' && state.filters.league && item.league !== state.filters.league) return false;
       if (excludedFilter !== 'season' && state.filters.season && item.seasonGroup !== state.filters.season) return false;
@@ -1103,6 +1406,8 @@
       if (excludedFilter !== 'collection' && state.filters.collection && item.collection !== state.filters.collection) return false;
       if (excludedFilter !== 'department' && state.filters.department && item.department !== state.filters.department) return false;
       if (excludedFilter !== 'subcategory' && state.filters.subcategory && item.subcategory !== state.filters.subcategory) return false;
+      if (excludedFilter !== 'flag' && state.filters.flag && (!Array.isArray(item.flags) || item.flags.indexOf(state.filters.flag) === -1)) return false;
+      if (excludedFilter !== 'price' && state.filters.price && !matchesPriceBand(item, state.filters.price)) return false;
       if (excludedFilter !== 'q' && q && item._search.indexOf(q) === -1) return false;
       return true;
     });
@@ -1229,6 +1534,20 @@
       body.innerHTML =
         '<label class="searchbox"><svg><use href="#i-search"/></svg>' +
           '<input type="search" id="drawer-search" placeholder="Busca una prenda o equipo…" autocomplete="off"></label>' +
+        '<p class="filter-section-title">Filtros rápidos</p>' +
+        '<div class="filter-chips" id="drawer-quick-flags">' +
+          '<button type="button" data-drawer-flag="kids">Niños</button>' +
+          '<button type="button" data-drawer-flag="women">Mujer</button>' +
+          '<button type="button" data-drawer-flag="retro">Retro</button>' +
+          '<button type="button" data-drawer-flag="player">Player</button>' +
+        '</div>' +
+        '<p class="filter-section-title">Precio base</p>' +
+        '<div class="filter-chips" id="drawer-prices">' +
+          '<button type="button" data-drawer-price="">Todos</button>' +
+          '<button type="button" data-drawer-price="le25">≤ 25 €</button>' +
+          '<button type="button" data-drawer-price="26-45">26 – 45 €</button>' +
+          '<button type="button" data-drawer-price="gt45">+45 €</button>' +
+        '</div>' +
         '<p class="filter-section-title">Temporada</p>' +
         '<div class="filter-chips" id="drawer-seasons"></div>' +
         '<p class="filter-section-title">Tipo de prenda</p>' +
@@ -1311,12 +1630,116 @@
       if (select) select.value = state.filters[key] || '';
     });
 
+    $$('#drawer-quick-flags button').forEach(function (button) {
+      button.classList.toggle('is-active', (button.getAttribute('data-drawer-flag') || '') === (state.filters.flag || ''));
+    });
+    $$('#drawer-prices button').forEach(function (button) {
+      button.classList.toggle('is-active', (button.getAttribute('data-drawer-price') || '') === (state.filters.price || ''));
+    });
     $$('#drawer-seasons button').forEach(function (button) {
       button.classList.toggle('is-active', (button.getAttribute('data-season') || '') === (state.filters.season || ''));
     });
     $$('#drawer-types button').forEach(function (button) {
       button.classList.toggle('is-active', (button.getAttribute('data-type') || '') === (state.filters.type || ''));
     });
+  }
+
+  // ── Autocompletado predictivo del buscador ───────────────
+
+  function hideSearchSuggest() {
+    var box = $('#search-suggest');
+    var input = $('#catalog-search');
+    if (box) box.hidden = true;
+    if (input) input.setAttribute('aria-expanded', 'false');
+    state.suggestIndex = -1;
+  }
+
+  function renderSearchSuggest(rawQuery) {
+    var box = $('#search-suggest');
+    var input = $('#catalog-search');
+    if (!box || !input) return;
+
+    var q = normalize(rawQuery);
+    if (q.length < 2 || !state.items.length) {
+      hideSearchSuggest();
+      return;
+    }
+
+    var teams = Array.from(state.teams.values())
+      .filter(function (team) { return team.name !== 'Otros' && normalize(team.name).indexOf(q) !== -1; })
+      .sort(function (a, b) {
+        var aStart = normalize(a.name).indexOf(q) === 0 ? 0 : 1;
+        var bStart = normalize(b.name).indexOf(q) === 0 ? 0 : 1;
+        return (aStart - bStart) || (b.count - a.count);
+      })
+      .slice(0, 4);
+
+    var leagues = Array.from(state.leagues.entries())
+      .filter(function (row) { return normalize(row[0]).indexOf(q) !== -1; })
+      .sort(function (a, b) { return b[1] - a[1]; })
+      .slice(0, 2);
+
+    var tokens = q.split(' ').filter(Boolean);
+    var products = [];
+    for (var i = 0; i < state.items.length && products.length < 5; i++) {
+      var item = state.items[i];
+      var match = true;
+      for (var t = 0; t < tokens.length; t++) {
+        if (item._search.indexOf(tokens[t]) === -1) { match = false; break; }
+      }
+      if (match) products.push(item);
+    }
+
+    if (!teams.length && !leagues.length && !products.length) {
+      hideSearchSuggest();
+      return;
+    }
+
+    var html = '';
+    if (teams.length) {
+      html += '<div class="suggest-group-label">Equipos</div>';
+      html += teams.map(function (team) {
+        return '<button type="button" class="suggest-item" role="option" data-suggest-team="' + esc(team.name) + '">' +
+          teamMono(team.name) +
+          '<div class="suggest-copy"><strong>' + esc(team.name) + '</strong><span>' + esc(team.league) + ' · ' + fmt(team.count) + ' prendas</span></div>' +
+        '</button>';
+      }).join('');
+    }
+    if (leagues.length) {
+      html += '<div class="suggest-group-label">Ligas</div>';
+      html += leagues.map(function (row) {
+        return '<button type="button" class="suggest-item is-league-tag" role="option" data-suggest-league="' + esc(row[0]) + '">' +
+          '<svg><use href="#i-layers"/></svg>' +
+          '<div class="suggest-copy"><strong>' + esc(row[0]) + '</strong><span>' + fmt(row[1]) + ' prendas</span></div>' +
+        '</button>';
+      }).join('');
+    }
+    if (products.length) {
+      html += '<div class="suggest-group-label">Prendas destacadas</div>';
+      html += products.map(function (item) {
+        return '<button type="button" class="suggest-item" role="option" data-suggest-product="' + esc(item.id) + '">' +
+          '<div class="suggest-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+          '<div class="suggest-copy"><strong>' + esc(cleanTitle(item)) + '</strong><span>' + esc(item.team) + ' · ' + esc(item.season) + '</span></div>' +
+          '<span class="suggest-price">' + esc(KangPricing.money(itemBasePriceCents(item))) + '</span>' +
+        '</button>';
+      }).join('');
+    }
+
+    box.innerHTML = html;
+    box.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    state.suggestIndex = -1;
+  }
+
+  function stepSearchSuggest(delta) {
+    var box = $('#search-suggest');
+    if (!box || box.hidden) return false;
+    var items = $$('.suggest-item', box);
+    if (!items.length) return false;
+    state.suggestIndex = (state.suggestIndex + delta + items.length) % items.length;
+    items.forEach(function (el, idx) { el.classList.toggle('is-selected', idx === state.suggestIndex); });
+    try { items[state.suggestIndex].scrollIntoView({ block: 'nearest' }); } catch (err) {}
+    return true;
   }
 
   // ── Cierre y apertura del panel de filtros ───────────────
@@ -1365,11 +1788,85 @@
     if (search) {
       search.addEventListener('input', debounce(function () {
         applyFilters({ q: search.value });
-      }, 200));
+        renderSearchSuggest(search.value);
+      }, 180));
+      search.addEventListener('focus', function () {
+        if (search.value.trim().length >= 2) renderSearchSuggest(search.value);
+      });
       search.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && search.value) {
-          search.value = '';
-          applyFilters({ q: '' });
+        if (event.key === 'ArrowDown') {
+          if (stepSearchSuggest(1)) event.preventDefault();
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          if (stepSearchSuggest(-1)) event.preventDefault();
+          return;
+        }
+        if (event.key === 'Enter') {
+          var box = $('#search-suggest');
+          var selected = box && !box.hidden && state.suggestIndex >= 0 ? $$('.suggest-item', box)[state.suggestIndex] : null;
+          if (selected) {
+            event.preventDefault();
+            selected.click();
+            return;
+          }
+          hideSearchSuggest();
+          return;
+        }
+        if (event.key === 'Escape') {
+          var suggest = $('#search-suggest');
+          if (suggest && !suggest.hidden) {
+            hideSearchSuggest();
+            return;
+          }
+          if (search.value) {
+            search.value = '';
+            applyFilters({ q: '' });
+          }
+        }
+      });
+    }
+
+    var suggestBox = $('#search-suggest');
+    if (suggestBox) {
+      suggestBox.addEventListener('click', function (event) {
+        var teamBtn = event.target.closest('[data-suggest-team]');
+        if (teamBtn) {
+          hideSearchSuggest();
+          applyFilters({ q: '', team: teamBtn.getAttribute('data-suggest-team') });
+          return;
+        }
+        var leagueBtn = event.target.closest('[data-suggest-league]');
+        if (leagueBtn) {
+          hideSearchSuggest();
+          applyFilters({ q: '', league: leagueBtn.getAttribute('data-suggest-league') });
+          return;
+        }
+        var prodBtn = event.target.closest('[data-suggest-product]');
+        if (prodBtn) {
+          hideSearchSuggest();
+          openProduct(prodBtn.getAttribute('data-suggest-product'));
+        }
+      });
+    }
+
+    var quickFilters = $('#quick-filters');
+    if (quickFilters) {
+      quickFilters.addEventListener('click', function (event) {
+        if (event.target.closest('[data-quick-fav]')) {
+          applyFilters({ favs: state.filters.favs === '1' ? '' : '1' });
+          return;
+        }
+        var flagBtn = event.target.closest('[data-quick-flag]');
+        if (flagBtn) {
+          var flag = flagBtn.getAttribute('data-quick-flag');
+          applyFilters({ flag: state.filters.flag === flag ? '' : flag });
+          return;
+        }
+        var priceBtn = event.target.closest('[data-quick-price]');
+        if (priceBtn) {
+          var price = priceBtn.getAttribute('data-quick-price');
+          applyFilters({ price: state.filters.price === price ? '' : price });
         }
       });
     }
@@ -1434,6 +1931,17 @@
         else if (event.target.id === 'drawer-subcategory') applyFilters({ subcategory: event.target.value });
       });
       drawerBody.addEventListener('click', function (event) {
+        var flag = event.target.closest('[data-drawer-flag]');
+        if (flag) {
+          var val = flag.getAttribute('data-drawer-flag');
+          applyFilters({ flag: state.filters.flag === val ? '' : val });
+          return;
+        }
+        var price = event.target.closest('[data-drawer-price]');
+        if (price) {
+          applyFilters({ price: price.getAttribute('data-drawer-price') });
+          return;
+        }
         var season = event.target.closest('[data-season]');
         if (season) {
           applyFilters({ season: season.getAttribute('data-season') });
@@ -1445,6 +1953,7 @@
     }
 
     document.addEventListener('click', function (event) {
+      if (!event.target.closest('#search-wrap')) hideSearchSuggest();
       var clearOne = event.target.closest('[data-clear-filter]');
       if (clearOne) {
         var patch = {};
@@ -1500,7 +2009,7 @@
   }
 
   function initOverlays() {
-    ['product-modal', 'cart-drawer', 'filters-drawer', 'checkout-modal', 'mobile-menu', 'lightbox'].forEach(function (id) {
+    ['product-modal', 'cart-drawer', 'favs-drawer', 'orders-drawer', 'filters-drawer', 'checkout-modal', 'mobile-menu', 'lightbox'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el && !el.classList.contains('is-open')) setOverlayState(el, false);
     });
@@ -1543,7 +2052,8 @@
 
   // ── Ficha de producto ────────────────────────────────────
 
-  function openProduct(id) {
+  function openProduct(id, options) {
+    options = options || {};
     var item = state.byId.get(String(id));
     if (!item) {
       toast('Esta prenda ya no está disponible', 'error');
@@ -1568,6 +2078,16 @@
     var sizes = expandSizes(item.sizeRange);
     state.selectedSize = sizes.indexOf('M') !== -1 ? 'M' : (sizes[0] || 'S');
 
+    if (!options.skipHash) {
+      if (location.hash.indexOf('#/producto/') !== 0) {
+        state.lastListHash = location.hash || '#/';
+      }
+      var targetHash = '#/producto/' + enc(item.id);
+      if (location.hash !== targetHash) {
+        try { history.pushState(null, '', targetHash); } catch (err) {}
+      }
+    }
+
     renderProduct();
     renderGallery();
 
@@ -1591,7 +2111,7 @@
     loadAlbum(item);
   }
 
-  function closeProduct() {
+  function closeProduct(skipHashRestore) {
     var modal = $('#product-modal');
     if (!modal || !modal.classList.contains('is-open')) return;
     releaseFocus(modal);
@@ -1603,6 +2123,9 @@
       setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
     }
     unlockScroll();
+    if (!skipHashRestore && location.hash.indexOf('#/producto/') === 0) {
+      try { history.replaceState(null, '', state.lastListHash || '#/'); } catch (err) {}
+    }
     if (state.returnFocus && state.returnFocus.isConnected) {
       try { state.returnFocus.focus(); } catch (err) {}
     }
@@ -1836,14 +2359,25 @@
       '<div class="custom-panel">' +
         '<div class="custom-panel-head"><strong>Nombre y dorsal</strong>' +
           '<span><svg><use href="#i-spark"/></svg> +2,00 €</span></div>' +
-        '<div class="custom-fields">' +
-          '<label class="field"><span>Nombre</span>' +
-            '<input type="text" id="custom-name" maxlength="14" placeholder="TU NOMBRE" autocomplete="off" style="text-transform:uppercase" value="' + esc(state.customName) + '"></label>' +
-          '<label class="field"><span>Dorsal</span>' +
-            '<input type="text" id="custom-number" maxlength="2" inputmode="numeric" placeholder="10" autocomplete="off" value="' + esc(state.customNumber) + '"></label>' +
+        '<div class="custom-panel-grid">' +
+          '<div>' +
+            '<div class="custom-fields">' +
+              '<label class="field"><span>Nombre</span>' +
+                '<input type="text" id="custom-name" maxlength="14" placeholder="TU NOMBRE" autocomplete="off" style="text-transform:uppercase" value="' + esc(state.customName) + '"></label>' +
+              '<label class="field"><span>Dorsal</span>' +
+                '<input type="text" id="custom-number" maxlength="2" inputmode="numeric" placeholder="10" autocomplete="off" value="' + esc(state.customNumber) + '"></label>' +
+            '</div>' +
+            '<p class="field-label" style="margin-top:14px">Parches <span>+1,00 € / ud. · Opcional</span></p>' +
+            '<div class="patch-row" id="patch-row">' + patches + '</div>' +
+          '</div>' +
+          '<div class="product-jersey-preview" aria-hidden="true">' +
+            '<div class="product-jersey-shirt">' +
+              '<span class="product-jersey-name' + (state.customName ? '' : ' is-placeholder') + '" id="product-preview-name">' + esc((state.customName || 'TU NOMBRE').toUpperCase()) + '</span>' +
+              '<span class="product-jersey-number' + (state.customNumber ? '' : ' is-placeholder') + '" id="product-preview-number">' + esc(state.customNumber || '10') + '</span>' +
+            '</div>' +
+            '<span class="product-jersey-patches" id="product-preview-patches">' + (selectedPatches.length ? 'Parches: ' + esc(selectedPatches.join(', ')) : 'Vista previa en vivo') + '</span>' +
+          '</div>' +
         '</div>' +
-        '<p class="field-label" style="margin-top:14px">Parches <span>+1,00 € / ud. · Opcional</span></p>' +
-        '<div class="patch-row" id="patch-row">' + patches + '</div>' +
         '<p class="custom-note"><svg><use href="#i-shield"/></svg> Nombre y dorsal: +2,00 € por prenda. Cada parche añade 1,00 €. El nombre se imprime en mayúsculas y el dorsal debe ser del 0 al 99.</p>' +
       '</div>' :
       '<div class="not-customizable"><svg><use href="#i-shirt"/></svg>' +
@@ -1851,12 +2385,17 @@
 
     var title = cleanTitle(item);
     var fitText = sizeFitHintText(state.selectedSize, item);
+    var favActive = isFavorite(item.id);
 
     info.innerHTML =
       '<div class="product-info-top">' +
         '<span class="product-league">' + esc(item.league || 'Catálogo') + '</span>' +
         '<span class="product-season">' + esc(seasonLabel(item.seasonGroup)) + '</span>' +
         (item.custom ? '<span class="product-tag is-accent">Personalizable</span>' : '') +
+        '<div class="product-info-actions">' +
+          '<button type="button" class="product-action-btn is-fav' + (favActive ? ' is-active' : '') + '" id="product-fav" data-fav-toggle="' + esc(item.id) + '" aria-pressed="' + favActive + '"><svg><use href="#i-heart"/></svg><span>' + (favActive ? 'Guardado' : 'Favorito') + '</span></button>' +
+          '<button type="button" class="product-action-btn" id="product-share" data-share-product><svg><use href="#i-share"/></svg><span>Compartir</span></button>' +
+        '</div>' +
       '</div>' +
       '<h2 id="product-title">' + esc(title) + '</h2>' +
       '<p class="product-team">' + esc(item.team) + ' · ' + esc(item.season) + ' · Tallas ' + esc(item.sizeRange) + '</p>' +
@@ -1884,6 +2423,44 @@
     updateProductPricing();
   }
 
+  function updateCustomPreview() {
+    var nameEl = $('#product-preview-name');
+    var numEl = $('#product-preview-number');
+    var patchesEl = $('#product-preview-patches');
+    var name = String(state.customName || '').trim().toUpperCase().slice(0, 14);
+    var number = String(state.customNumber || '').replace(/\D/g, '').slice(0, 2);
+    if (nameEl) {
+      nameEl.textContent = name || 'TU NOMBRE';
+      nameEl.classList.toggle('is-placeholder', !name);
+    }
+    if (numEl) {
+      numEl.textContent = number || '10';
+      numEl.classList.toggle('is-placeholder', !number);
+    }
+    if (patchesEl) {
+      patchesEl.textContent = state.patches && state.patches !== 'No' ? 'Parches: ' + state.patches : 'Vista previa en vivo';
+    }
+  }
+
+  function shareCurrentProduct() {
+    var item = state.product;
+    if (!item) return;
+    var url = location.origin + location.pathname + '#/producto/' + enc(item.id);
+    var title = cleanTitle(item) + ' · ' + item.team;
+    if (navigator.share) {
+      navigator.share({ title: title, text: title + ' en KANG Team', url: url }).catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        copyText(url).then(function () { toast('Enlace del producto copiado'); }).catch(function () { toast('No se pudo copiar el enlace', 'error'); });
+      });
+      return;
+    }
+    copyText(url).then(function () {
+      toast('Enlace del producto copiado');
+    }).catch(function () {
+      toast('No se pudo copiar el enlace', 'error');
+    });
+  }
+
   function selectSize(size) {
     state.selectedSize = size;
     $$('#product-info .size-btn').forEach(function (button) {
@@ -1905,6 +2482,7 @@
       option.classList.toggle('is-active', active);
       option.setAttribute('aria-pressed', String(active));
     });
+    updateCustomPreview();
     updateProductPricing();
   }
 
@@ -1919,6 +2497,10 @@
     var info = $('#product-info');
     if (info) {
       info.addEventListener('click', function (event) {
+        if (event.target.closest('[data-share-product]')) {
+          shareCurrentProduct();
+          return;
+        }
         if (event.target.closest('#size-guide-toggle')) {
           state.sizeGuideOpen = !state.sizeGuideOpen;
           updateSizeGuidePanel();
@@ -1956,11 +2538,13 @@
       info.addEventListener('input', function (event) {
         if (event.target.id === 'custom-name') {
           state.customName = event.target.value.slice(0, 14);
+          updateCustomPreview();
           updateProductPricing();
         } else if (event.target.id === 'custom-number') {
           var cleaned = event.target.value.replace(/\D/g, '').slice(0, 2);
           if (event.target.value !== cleaned) event.target.value = cleaned;
           state.customNumber = cleaned;
+          updateCustomPreview();
           updateProductPricing();
         }
       });
@@ -2034,6 +2618,25 @@
     return state.cart.reduce(function (sum, line) { return sum + (parseInt(line.qty, 10) || 0); }, 0);
   }
 
+  function renderCartProgress(total) {
+    var box = $('#cart-progress');
+    if (!box) return;
+    if (!total) {
+      box.innerHTML = '';
+      box.classList.remove('is-complete');
+      return;
+    }
+    var remaining = Math.max(0, CART_PACK_TARGET - total);
+    var pct = Math.min(100, Math.round((total / CART_PACK_TARGET) * 100));
+    box.classList.toggle('is-complete', remaining === 0);
+    box.innerHTML = '<div class="cart-progress-copy">' +
+      (remaining === 0
+        ? '<span><strong>Envío combinado listo</strong> · ' + total + ' prendas optimizan el envío</span><strong>100%</strong>'
+        : '<span>Añade <strong>' + remaining + (remaining === 1 ? ' prenda más' : ' prendas más') + '</strong> para optimizar tu envío combinado (' + total + '/' + CART_PACK_TARGET + ')</span><strong>' + pct + '%</strong>') +
+      '</div>' +
+      '<div class="cart-progress-track"><div class="cart-progress-fill" style="width:' + pct + '%"></div></div>';
+  }
+
   function updateCartUI() {
     var total = cartTotalItems();
     var count = $('#cart-count');
@@ -2049,6 +2652,7 @@
     if (priceEl) priceEl.textContent = KangPricing.money(cartPriceCents());
     var foot = $('#cart-foot');
     if (foot) foot.hidden = total === 0;
+    renderCartProgress(total);
     renderCartBody();
   }
 
@@ -2192,6 +2796,328 @@
 
     var checkout = $('#checkout-open');
     if (checkout) checkout.addEventListener('click', openCheckout);
+
+    var cartOrdersBtn = $('#cart-orders-btn');
+    if (cartOrdersBtn) {
+      cartOrdersBtn.addEventListener('click', function () {
+        closeCart();
+        openOrders();
+      });
+    }
+  }
+
+  // ── Favoritos ────────────────────────────────────────────
+
+  function toggleFavorite(id) {
+    var key = String(id || '');
+    if (!key || !state.byId.has(key)) return;
+    var active;
+    if (state.favSet.has(key)) {
+      state.favSet.delete(key);
+      state.favorites = state.favorites.filter(function (itemId) { return itemId !== key; });
+      active = false;
+      toast('Eliminado de favoritos');
+    } else {
+      state.favSet.add(key);
+      state.favorites.unshift(key);
+      active = true;
+      toast('Guardado en favoritos');
+    }
+    saveFavorites();
+    updateFavsUI();
+
+    $$('[data-fav-toggle]').forEach(function (btn) {
+      if (btn.getAttribute('data-fav-toggle') !== key) return;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+      if (btn.id === 'product-fav') {
+        var span = btn.querySelector('span');
+        if (span) span.textContent = active ? 'Guardado' : 'Favorito';
+      }
+    });
+
+    if (state.route === 'catalog') {
+      renderQuickFilters();
+      if (state.filters.favs === '1') renderCatalog();
+    }
+  }
+
+  function updateFavsUI() {
+    var total = state.favorites.length;
+    var count = $('#favs-count');
+    if (count) {
+      count.textContent = String(total);
+      count.classList.toggle('is-empty', total === 0);
+    }
+    var titleCount = $('#favs-title-count');
+    if (titleCount) titleCount.textContent = '(' + total + ')';
+    var foot = $('#favs-foot');
+    if (foot) foot.hidden = total === 0;
+    renderFavsBody();
+  }
+
+  function renderFavsBody() {
+    var body = $('#favs-body');
+    if (!body) return;
+    var valid = state.favorites.map(function (id) { return state.byId.get(id); }).filter(Boolean);
+    if (!valid.length) {
+      body.innerHTML = '<div class="cart-empty">' +
+        '<svg><use href="#i-heart"/></svg>' +
+        '<h3>Aún no tienes favoritos</h3>' +
+        '<p>Pulsa el corazón en cualquier prenda para guardarla aquí y volver cuando quieras.</p>' +
+        '<button class="btn btn-primary" type="button" id="favs-continue">Explorar catálogo</button>' +
+        '</div>';
+      return;
+    }
+
+    body.innerHTML = valid.map(function (item) {
+      var title = cleanTitle(item);
+      return '<article class="fav-item" data-fav-item="' + esc(item.id) + '">' +
+        '<div class="fav-thumb" data-fav-open="' + esc(item.id) + '"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+        '<div class="fav-copy" data-fav-open="' + esc(item.id) + '">' +
+          '<span>' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
+          '<h4>' + esc(title) + '</h4>' +
+          '<strong>' + esc(KangPricing.money(itemBasePriceCents(item))) + '</strong>' +
+        '</div>' +
+        '<button class="cart-remove" type="button" data-fav-toggle="' + esc(item.id) + '" aria-label="Quitar de favoritos"><svg><use href="#i-trash"/></svg></button>' +
+      '</article>';
+    }).join('');
+  }
+
+  function openFavs() {
+    var drawer = $('#favs-drawer');
+    var backdrop = $('#favs-backdrop');
+    if (!drawer || drawer.classList.contains('is-open')) return;
+    renderFavsBody();
+    drawer.classList.add('is-open');
+    setOverlayState(drawer, true);
+    if (backdrop) {
+      backdrop.hidden = false;
+      requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    }
+    lockScroll();
+    setTimeout(function () { var close = $('#favs-close'); if (close) close.focus(); }, 220);
+  }
+
+  function closeFavs() {
+    var drawer = $('#favs-drawer');
+    if (!drawer || !drawer.classList.contains('is-open')) return;
+    releaseFocus(drawer);
+    drawer.classList.remove('is-open');
+    setOverlayState(drawer, false);
+    var backdrop = $('#favs-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+  }
+
+  function bindFavsEvents() {
+    var open = $('#favs-open');
+    if (open) open.addEventListener('click', openFavs);
+    var close = $('#favs-close');
+    if (close) close.addEventListener('click', closeFavs);
+    var backdrop = $('#favs-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeFavs);
+
+    var body = $('#favs-body');
+    if (body) {
+      body.addEventListener('click', function (event) {
+        var openItem = event.target.closest('[data-fav-open]');
+        if (openItem) {
+          var id = openItem.getAttribute('data-fav-open');
+          closeFavs();
+          openProduct(id);
+          return;
+        }
+        if (event.target.closest('#favs-continue')) {
+          closeFavs();
+          location.hash = '#/catalogo';
+        }
+      });
+    }
+
+    var viewCat = $('#favs-view-catalog');
+    if (viewCat) viewCat.addEventListener('click', closeFavs);
+
+    var clearBtn = $('#favs-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        if (!state.favorites.length) return;
+        state.favorites = [];
+        state.favSet.clear();
+        saveFavorites();
+        updateFavsUI();
+        $$('[data-fav-toggle].is-active').forEach(function (el) {
+          el.classList.remove('is-active');
+          el.setAttribute('aria-pressed', 'false');
+        });
+        if (state.route === 'catalog') renderCatalog();
+        toast('Favoritos vaciados');
+      });
+    }
+  }
+
+  // ── Pedidos recientes ────────────────────────────────────
+
+  function updateOrdersUI() {
+    var total = state.orders.length;
+    var dot = $('#orders-dot');
+    if (dot) dot.hidden = total === 0;
+    var titleCount = $('#orders-title-count');
+    if (titleCount) titleCount.textContent = '(' + total + ')';
+    var foot = $('#orders-foot');
+    if (foot) foot.hidden = total === 0;
+    var cartBtn = $('#cart-orders-btn');
+    if (cartBtn) cartBtn.hidden = total === 0;
+    renderOrdersBody();
+  }
+
+  function renderOrdersBody() {
+    var body = $('#orders-body');
+    if (!body) return;
+    if (!state.orders.length) {
+      body.innerHTML = '<div class="cart-empty">' +
+        '<svg><use href="#i-clock"/></svg>' +
+        '<h3>Sin pedidos recientes</h3>' +
+        '<p>Cuando envíes un pedido quedará guardado aquí para consultarlo o repetirlo en un clic.</p>' +
+        '<button class="btn btn-primary" type="button" id="orders-continue">Explorar catálogo</button>' +
+        '</div>';
+      return;
+    }
+
+    body.innerHTML = state.orders.map(function (order) {
+      var rows = (order.items || []).slice(0, 4).map(function (line) {
+        var item = state.byId.get(String(line.id));
+        var title = item ? cleanTitle(item) : (line.title || 'Prenda del catálogo');
+        var thumb = item ? coverUrl(item, 'small') : '/placeholder.svg';
+        var detail = 'Talla ' + esc(line.size) + ' · x' + esc(line.qty) +
+          (line.name ? ' · ' + esc(line.name) : '') +
+          (line.number ? ' #' + esc(line.number) : '');
+        return '<div class="order-history-item">' +
+          '<img src="' + esc(thumb) + '" alt="" loading="lazy">' +
+          '<div class="order-history-item-copy"><b>' + esc(title) + '</b><small>' + detail + '</small></div>' +
+        '</div>';
+      }).join('');
+
+      var extra = (order.items || []).length > 4 ? '<div class="order-history-item"><small>+ ' + (order.items.length - 4) + ' prendas más</small></div>' : '';
+
+      return '<article class="order-history-card">' +
+        '<div class="order-history-head">' +
+          '<div><strong>PEDIDO ' + esc(order.id) + '</strong><span>' + esc(formatDate(order.createdAt)) + ' · ' + esc(order.totalItems || 0) + ' art.</span></div>' +
+          '<strong class="order-history-total">' + esc(KangPricing.money(order.totalPriceCents || 0)) + '</strong>' +
+        '</div>' +
+        '<div class="order-history-items">' + rows + extra + '</div>' +
+        '<div class="order-history-actions">' +
+          '<button type="button" class="btn btn-primary" data-repeat-order="' + esc(order.id) + '">Repetir pedido</button>' +
+          '<button type="button" class="btn-link" data-delete-order="' + esc(order.id) + '">Quitar</button>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+
+  function repeatOrder(orderId) {
+    var order = state.orders.filter(function (row) { return String(row.id) === String(orderId); })[0];
+    if (!order || !Array.isArray(order.items)) return;
+
+    var added = 0;
+    var skipped = 0;
+    order.items.forEach(function (line) {
+      var item = state.byId.get(String(line.id));
+      if (!item) { skipped += 1; return; }
+      var name = item.custom ? String(line.name || '').trim().toUpperCase().slice(0, 14) : '';
+      var number = item.custom ? String(line.number || '').replace(/\D/g, '').slice(0, 2) : '';
+      var patches = item.custom ? (line.patches || 'No') : 'No';
+      var key = [item.id, line.size || 'M', name, number, patches].join('|');
+      var existing = findCartLine(key);
+      var qty = Math.min(30, Math.max(1, parseInt(line.qty, 10) || 1));
+      if (existing) existing.qty = Math.min(30, existing.qty + qty);
+      else state.cart.push({ key: key, id: item.id, size: line.size || 'M', qty: qty, name: name, number: number, patches: patches });
+      added += qty;
+    });
+
+    if (!added) {
+      toast('Las prendas de ese pedido ya no están disponibles', 'error');
+      return;
+    }
+
+    saveCart();
+    updateCartUI();
+    closeOrders();
+    openCart();
+    toast(skipped ? 'Prendas disponibles añadidas (' + skipped + ' no disponibles)' : 'Pedido cargado en el carrito');
+  }
+
+  function openOrders() {
+    var drawer = $('#orders-drawer');
+    var backdrop = $('#orders-backdrop');
+    if (!drawer || drawer.classList.contains('is-open')) return;
+    renderOrdersBody();
+    drawer.classList.add('is-open');
+    setOverlayState(drawer, true);
+    if (backdrop) {
+      backdrop.hidden = false;
+      requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    }
+    lockScroll();
+    setTimeout(function () { var close = $('#orders-close'); if (close) close.focus(); }, 220);
+  }
+
+  function closeOrders() {
+    var drawer = $('#orders-drawer');
+    if (!drawer || !drawer.classList.contains('is-open')) return;
+    releaseFocus(drawer);
+    drawer.classList.remove('is-open');
+    setOverlayState(drawer, false);
+    var backdrop = $('#orders-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+  }
+
+  function bindOrdersEvents() {
+    var open = $('#orders-open');
+    if (open) open.addEventListener('click', openOrders);
+    var close = $('#orders-close');
+    if (close) close.addEventListener('click', closeOrders);
+    var backdrop = $('#orders-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeOrders);
+
+    var body = $('#orders-body');
+    if (body) {
+      body.addEventListener('click', function (event) {
+        var repeatBtn = event.target.closest('[data-repeat-order]');
+        if (repeatBtn) {
+          repeatOrder(repeatBtn.getAttribute('data-repeat-order'));
+          return;
+        }
+        var delBtn = event.target.closest('[data-delete-order]');
+        if (delBtn) {
+          var id = delBtn.getAttribute('data-delete-order');
+          state.orders = state.orders.filter(function (row) { return String(row.id) !== String(id); });
+          saveOrders();
+          updateOrdersUI();
+          return;
+        }
+        if (event.target.closest('#orders-continue')) {
+          closeOrders();
+          location.hash = '#/catalogo';
+        }
+      });
+    }
+
+    var clearBtn = $('#orders-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        state.orders = [];
+        saveOrders();
+        updateOrdersUI();
+        toast('Historial borrado');
+      });
+    }
   }
 
   // ── Pedido ───────────────────────────────────────────────
@@ -2218,20 +3144,23 @@
     if (!content) return;
     var total = cartTotalItems();
     var storeName = state.config && state.config.store && state.config.store.name ? state.config.store.name : 'KANG Team';
+    var saved = state.customer || { name: '', phone: '', email: '', city: '', notes: '' };
+    var hasSaved = !!(saved.name || saved.phone);
 
     content.innerHTML = '<div class="checkout-grid">' +
       '<div class="checkout-form-wrap">' +
         '<p class="eyebrow">Último paso</p>' +
         '<h2 id="checkout-title">Confirma tu pedido</h2>' +
         '<p class="checkout-sub">Déjanos tus datos y te escribimos para confirmar disponibilidad y envío. Sin pago online.</p>' +
+        (hasSaved ? '<div class="checkout-autofill-note"><span>Datos rellenados de tu último pedido</span><button type="button" id="checkout-clear-customer">Usar otros datos</button></div>' : '') +
         '<form id="checkout-form" novalidate>' +
           '<div class="form-error" id="checkout-error" role="alert"></div>' +
           '<div class="form-grid">' +
-            '<label class="field"><span>Nombre y apellidos *</span><input name="name" type="text" autocomplete="name" maxlength="80" required></label>' +
-            '<label class="field"><span>Teléfono / WhatsApp *</span><input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>' +
-            '<label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="120"></label>' +
-            '<label class="field"><span>Ciudad</span><input name="city" type="text" autocomplete="address-level2" maxlength="80"></label>' +
-            '<label class="field field-full"><span>Notas (dirección, talla, dudas…)</span><textarea name="notes" maxlength="600"></textarea></label>' +
+            '<label class="field"><span>Nombre y apellidos *</span><input name="name" type="text" autocomplete="name" maxlength="80" value="' + esc(saved.name) + '" required></label>' +
+            '<label class="field"><span>Teléfono / WhatsApp *</span><input name="phone" type="tel" autocomplete="tel" maxlength="30" value="' + esc(saved.phone) + '" required></label>' +
+            '<label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="120" value="' + esc(saved.email) + '"></label>' +
+            '<label class="field"><span>Ciudad</span><input name="city" type="text" autocomplete="address-level2" maxlength="80" value="' + esc(saved.city) + '"></label>' +
+            '<label class="field field-full"><span>Notas (dirección, talla, dudas…)</span><textarea name="notes" maxlength="600">' + esc(saved.notes) + '</textarea></label>' +
           '</div>' +
           '<label class="form-consent"><input type="checkbox" id="checkout-consent">' +
             '<span>Acepto que ' + esc(storeName) + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.</span></label>' +
@@ -2365,6 +3294,22 @@
         throw new Error(data && data.error ? data.error : 'No se pudo enviar el pedido. Inténtalo de nuevo.');
       }
 
+      saveCustomer(payload.customer);
+      var snapshotItems = payload.items.map(function (line) {
+        var item = state.byId.get(line.id);
+        return Object.assign({}, line, { title: item ? cleanTitle(item) : '' });
+      });
+      state.orders.unshift({
+        id: data && data.order && data.order.id ? data.order.id : String(Date.now()),
+        createdAt: new Date().toISOString(),
+        totalItems: payload.items.reduce(function (sum, l) { return sum + (parseInt(l.qty, 10) || 1); }, 0),
+        totalPriceCents: data && data.order ? data.order.totalPriceCents : cartPriceCents(),
+        items: snapshotItems
+      });
+      state.orders = state.orders.slice(0, 12);
+      saveOrders();
+      updateOrdersUI();
+
       state.lastOrder = data;
       state.cart = [];
       saveCart();
@@ -2445,6 +3390,12 @@
     var content = $('#checkout-content');
     if (content) {
       content.addEventListener('submit', submitOrder);
+      content.addEventListener('click', function (event) {
+        if (event.target.closest('#checkout-clear-customer')) {
+          saveCustomer({ name: '', phone: '', email: '', city: '', notes: '' });
+          renderCheckout();
+        }
+      });
     }
     var close = $('#checkout-close');
     if (close) close.addEventListener('click', closeCheckout);
@@ -2524,6 +3475,10 @@
     if (product && product.classList.contains('is-open')) return closeProduct();
     var cart = $('#cart-drawer');
     if (cart && cart.classList.contains('is-open')) return closeCart();
+    var favs = $('#favs-drawer');
+    if (favs && favs.classList.contains('is-open')) return closeFavs();
+    var orders = $('#orders-drawer');
+    if (orders && orders.classList.contains('is-open')) return closeOrders();
     var filters = $('#filters-drawer');
     if (filters && filters.classList.contains('is-open')) return closeFilters();
     var menu = $('#mobile-menu');
@@ -2541,6 +3496,10 @@
         if (event.target.closest('a')) closeMenu();
       });
     }
+    var mobileFavs = $('#mobile-favs-btn');
+    if (mobileFavs) mobileFavs.addEventListener('click', function () { closeMenu(); openFavs(); });
+    var mobileOrders = $('#mobile-orders-btn');
+    if (mobileOrders) mobileOrders.addEventListener('click', function () { closeMenu(); openOrders(); });
 
     var lightbox = $('#lightbox');
     if (lightbox) {
@@ -2552,6 +3511,13 @@
     if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
 
     document.addEventListener('click', function (event) {
+      var favBtn = event.target.closest('[data-fav-toggle]');
+      if (favBtn) {
+        event.stopPropagation();
+        toggleFavorite(favBtn.getAttribute('data-fav-toggle'));
+        return;
+      }
+
       if (event.target.closest('[data-copy-order]')) {
         var text = state.lastOrder && state.lastOrder.text ? state.lastOrder.text : '';
         if (!text) return;
@@ -2603,13 +3569,14 @@
     });
 
     window.addEventListener('hashchange', function () {
+      var isProd = location.hash.indexOf('#/producto/') === 0;
       var product = $('#product-modal');
-      if (product && product.classList.contains('is-open')) closeProduct();
+      if (!isProd && product && product.classList.contains('is-open')) closeProduct(true);
       var checkout = $('#checkout-modal');
       if (checkout && checkout.classList.contains('is-open')) closeCheckout();
       var menu = $('#mobile-menu');
       if (menu && menu.classList.contains('is-open')) closeMenu();
-      renderRoute(true);
+      renderRoute(!isProd);
     });
   }
 
@@ -2620,6 +3587,10 @@
     if (year) year.textContent = String(new Date().getFullYear());
 
     state.cart = loadCart();
+    state.favorites = loadFavorites();
+    state.favSet = new Set(state.favorites);
+    state.orders = loadOrders();
+    state.customer = loadCustomer();
     state.galleryToken = 0;
 
     initOverlays();
@@ -2627,16 +3598,25 @@
     bindCatalogEvents();
     bindProductEvents();
     bindCartEvents();
+    bindFavsEvents();
+    bindOrdersEvents();
     bindCheckoutEvents();
 
     renderRoute(false);
     updateCartUI();
+    updateFavsUI();
+    updateOrdersUI();
 
-    await Promise.all([loadConfig(), loadCatalog()]);
+    await Promise.all([loadConfig(), loadCatalog(), loadTeamLogos()]);
 
     state.cart = state.cart.filter(function (line) { return state.byId.has(line.id); });
     saveCart();
+    state.favorites = state.favorites.filter(function (id) { return state.byId.has(id); });
+    state.favSet = new Set(state.favorites);
+    saveFavorites();
     updateCartUI();
+    updateFavsUI();
+    updateOrdersUI();
     renderRoute(false);
   }
 

@@ -10,6 +10,7 @@ var urlLib = require('url');
 
 var util = require('./lib/util');
 var yupoo = require('./lib/yupoo');
+var logos = require('./lib/logos');
 var syncModule = require('./scripts/sync');
 var pricing = require('./public/js/pricing');
 
@@ -703,6 +704,11 @@ async function handle(req, res) {
       return sendJson(res, 503, { syncing: true, status: syncModule.state }, req);
     }
     return sendJson(res, 200, catalog, req);
+  }
+
+  if (pathname === '/api/team-logos' && req.method === 'GET') {
+    var logoData = await logos.getTeamLogos(catalog.items, catalog.meta.generatedAt || catalog.items.length);
+    return sendJson(res, 200, logoData, req, { 'Cache-Control': 'public, max-age=3600, s-maxage=3600' });
   }
 
   if (pathname === '/api/sync' && req.method === 'GET') {

@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261113-14">
+  <link rel="stylesheet" href="/css/styles.css?v=20261114-18">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -42,6 +42,9 @@
     <symbol id="i-shirt" viewBox="0 0 24 24"><path d="M8 4 4 6l1.5 5L8 10v10h8V10l2.5 1L20 6l-4-2a4 4 0 0 1-8 0Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
     <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 8h18v8H3zM7 8v4m4-4v3m4-3v4m4-4v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.6L19.5 10l-5.6 1.4L12 17l-1.9-5.6L4.5 10l5.6-1.4L12 3Z" fill="currentColor"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-7-4.35-9.2-8.7C1 8.2 3.2 4.5 6.9 4.5c2.1 0 3.9 1.1 5.1 2.9 1.2-1.8 3-2.9 5.1-2.9 3.7 0 5.9 3.7 4.1 7.3-2.2 4.35-9.2 8.7-9.2 8.7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8.2 10.9 7.6-4.3M8.2 13.1l7.6 4.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v4.8l3.2 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </svg>
 
   <div class="announcement" id="announcement">
@@ -76,7 +79,7 @@
       <nav class="main-nav" aria-label="Navegación principal">
         <a href="#/" data-nav="home">Inicio</a>
         <a href="#/catalogo" data-nav="catalog">Catálogo</a>
-        <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="catalog">Primavera / invierno</a>
+        <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="seasonal">Primavera / invierno</a>
         <a href="#/equipos" data-nav="teams">Equipos</a>
         <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
         <a href="#/precios" data-nav="prices">Precios</a>
@@ -86,6 +89,14 @@
         <a class="icon-btn header-search-link" href="#/catalogo?focus=search" aria-label="Buscar en el catálogo">
           <svg><use href="#i-search"/></svg>
         </a>
+        <button class="icon-btn header-orders-btn" id="orders-open" type="button" aria-label="Pedidos recientes" title="Pedidos recientes">
+          <svg><use href="#i-clock"/></svg>
+          <span class="icon-dot" id="orders-dot" hidden></span>
+        </button>
+        <button class="icon-btn favs-btn" id="favs-open" type="button" aria-label="Abrir favoritos" title="Favoritos">
+          <svg><use href="#i-heart"/></svg>
+          <span class="cart-count is-empty" id="favs-count">0</span>
+        </button>
         <button class="icon-btn cart-btn" id="cart-open" type="button" aria-label="Abrir carrito">
           <svg><use href="#i-cart"/></svg>
           <span class="cart-count" id="cart-count">0</span>
@@ -251,11 +262,14 @@
 
       <div class="catalog-toolbar" id="catalog-toolbar">
         <div class="container toolbar-inner">
-          <label class="searchbox" for="catalog-search">
-            <svg><use href="#i-search"/></svg>
-            <input type="search" id="catalog-search" placeholder="Busca un equipo o una camiseta…" autocomplete="off">
-            <kbd>⌘K</kbd>
-          </label>
+          <div class="search-wrap" id="search-wrap">
+            <label class="searchbox" for="catalog-search">
+              <svg><use href="#i-search"/></svg>
+              <input type="search" id="catalog-search" placeholder="Busca un equipo o una camiseta…" autocomplete="off" aria-autocomplete="list" aria-controls="search-suggest" aria-expanded="false">
+              <kbd>⌘K</kbd>
+            </label>
+            <div class="search-suggest" id="search-suggest" hidden role="listbox" aria-label="Sugerencias de búsqueda"></div>
+          </div>
 
           <button class="btn-filter" id="filters-open" type="button" aria-expanded="false">
             <svg><use href="#i-filter"/></svg>
@@ -307,6 +321,8 @@
             <label for="sort-select">Ordenar por</label>
             <select id="sort-select">
               <option value="new">Novedades</option>
+              <option value="price-asc">Precio: menor a mayor</option>
+              <option value="price-desc">Precio: mayor a menor</option>
               <option value="team">Equipo A-Z</option>
               <option value="season">Temporada</option>
               <option value="name">Nombre A-Z</option>
@@ -314,6 +330,7 @@
           </div>
         </div>
 
+        <div class="quick-filters" id="quick-filters" aria-label="Filtros rápidos"></div>
         <div class="active-filters" id="active-filters"></div>
         <div id="catalog-results" class="catalog-results"></div>
         <div class="load-more-wrap" id="load-more-wrap" hidden>
@@ -474,12 +491,16 @@
     <nav aria-label="Menú móvil">
       <a href="#/" data-nav="home">Inicio</a>
       <a href="#/catalogo" data-nav="catalog">Catálogo</a>
-      <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="catalog">Primavera / invierno</a>
+      <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="seasonal">Primavera / invierno</a>
       <a href="#/equipos" data-nav="teams">Equipos</a>
       <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
       <a href="#/precios" data-nav="prices">Precios</a>
     </nav>
     <div class="mobile-menu-foot">
+      <div class="mobile-menu-shortcuts">
+        <button class="btn btn-outline" type="button" id="mobile-favs-btn"><svg><use href="#i-heart"/></svg> Favoritos</button>
+        <button class="btn btn-outline" type="button" id="mobile-orders-btn"><svg><use href="#i-clock"/></svg> Mis pedidos</button>
+      </div>
       <p>Personaliza tu camiseta con nombre, dorsal y parches.</p>
       <a class="btn btn-primary" href="#/catalogo">Explorar catálogo <svg><use href="#i-arrow"/></svg></a>
     </div>
@@ -499,6 +520,39 @@
     </div>
   </aside>
 
+  <!-- ══════════════════════ FAVORITOS ══════════════════════ -->
+  <div class="drawer-backdrop" id="favs-backdrop" hidden></div>
+  <aside class="cart-drawer favs-drawer" id="favs-drawer" aria-hidden="true" aria-label="Tus favoritos">
+    <div class="drawer-head">
+      <div>
+        <p class="eyebrow">Guardados</p>
+        <h2>Favoritos <span id="favs-title-count">(0)</span></h2>
+      </div>
+      <button class="icon-btn" id="favs-close" type="button" aria-label="Cerrar favoritos"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="cart-body" id="favs-body"></div>
+    <div class="cart-foot" id="favs-foot" hidden>
+      <a class="btn btn-primary btn-block" href="#/catalogo?favoritos=1" id="favs-view-catalog">Filtrar favoritos en catálogo <svg><use href="#i-arrow"/></svg></a>
+      <button class="btn-link" id="favs-clear-btn" type="button">Vaciar favoritos</button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ PEDIDOS RECIENTES ══════════════════════ -->
+  <div class="drawer-backdrop" id="orders-backdrop" hidden></div>
+  <aside class="cart-drawer orders-drawer" id="orders-drawer" aria-hidden="true" aria-label="Pedidos recientes">
+    <div class="drawer-head">
+      <div>
+        <p class="eyebrow">Historial local</p>
+        <h2>Pedidos recientes <span id="orders-title-count">(0)</span></h2>
+      </div>
+      <button class="icon-btn" id="orders-close" type="button" aria-label="Cerrar pedidos"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="cart-body" id="orders-body"></div>
+    <div class="cart-foot" id="orders-foot" hidden>
+      <button class="btn-link" id="orders-clear-btn" type="button">Limpiar historial local</button>
+    </div>
+  </aside>
+
   <!-- ══════════════════════ CARRITO ══════════════════════ -->
   <div class="drawer-backdrop" id="cart-backdrop" hidden></div>
   <aside class="cart-drawer" id="cart-drawer" aria-hidden="true" aria-label="Carrito de la compra">
@@ -511,6 +565,7 @@
     </div>
     <div class="cart-body" id="cart-body"></div>
     <div class="cart-foot" id="cart-foot" hidden>
+      <div class="cart-progress" id="cart-progress"></div>
       <div class="cart-total">
         <span>Artículos</span>
         <strong id="cart-total-items">0</strong>
@@ -518,7 +573,10 @@
       <div class="cart-total"><span>Total del pedido</span><strong id="cart-total-price">0,00 €</strong></div>
       <p class="cart-note"><svg><use href="#i-shield"/></svg> Envío por confirmar. Sin pago online.</p>
       <button class="btn btn-primary btn-block" id="checkout-open" type="button">Solicitar pedido <svg><use href="#i-arrow"/></svg></button>
-      <button class="btn-link" id="cart-empty-btn" type="button">Vaciar carrito</button>
+      <div class="cart-foot-links">
+        <button class="btn-link" id="cart-empty-btn" type="button">Vaciar carrito</button>
+        <button class="btn-link" id="cart-orders-btn" type="button" hidden>Pedidos recientes</button>
+      </div>
     </div>
   </aside>
 
@@ -557,6 +615,6 @@
   </noscript>
 
   <script src="/js/pricing.js?v=20261113-15" defer></script>
-  <script src="/js/app.js?v=20261113-14" defer></script>
+  <script src="/js/app.js?v=20261114-18" defer></script>
 </body>
 </html>

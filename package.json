@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "build": "node --check server.js && node --check scripts/sync.js && node --check public/js/app.js && node --check public/js/pricing.js",
-    "lint": "node --check server.js && node --check lib/parse.js && node --check lib/teams.js && node --check lib/util.js && node --check lib/yupoo.js && node --check scripts/sync.js && node --check public/js/app.js && node --check public/js/pricing.js",
+    "lint": "node --check server.js && node --check lib/logos.js && node --check lib/parse.js && node --check lib/teams.js && node --check lib/util.js && node --check lib/yupoo.js && node --check scripts/sync.js && node --check public/js/app.js && node --check public/js/pricing.js",
     "sync": "node scripts/sync.js",
     "sync:force": "node scripts/sync.js --force"
   },
