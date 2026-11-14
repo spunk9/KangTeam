@@ -193,17 +193,27 @@ async function runSync(options) {
     });
 
     items.sort(function (a, b) {
-      return Number(b.id) - Number(a.id);
+      var aGxg = a.source === 'gxg' ? 1 : 0;
+      var bGxg = b.source === 'gxg' ? 1 : 0;
+      if (aGxg !== bGxg) return aGxg - bGxg;
+      var aNum = Number(a.albumId || a.id);
+      var bNum = Number(b.albumId || b.id);
+      if (isFinite(aNum) && isFinite(bNum) && aNum !== bNum) return bNum - aNum;
+      return String(b.id).localeCompare(String(a.id));
     });
 
     var previous = null;
     try { previous = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8')); } catch (e) {}
 
+    if (!items.length && previous && Array.isArray(previous.items) && previous.items.length) {
+      throw new Error('La sincronización devolvió 0 prendas; se conserva el catálogo anterior.');
+    }
+
     var catalog = {
       meta: {
         generatedAt: new Date().toISOString(),
-      source: 'https://minkang.x.yupoo.com/categories/712891',
-      sources: ['https://minkang.x.yupoo.com/categories/712891', 'https://gxgtrainingwear.x.yupoo.com/albums'],
+        source: 'https://minkang.x.yupoo.com/categories/712891',
+        sources: ['https://minkang.x.yupoo.com/categories/712891', 'https://gxgtrainingwear.x.yupoo.com/albums'],
         store: 'KANG Team Official',
         total: items.length,
         pages: totalPages

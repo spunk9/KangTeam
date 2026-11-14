@@ -33,31 +33,52 @@ jobs:
         run: npm run sync
 
       - name: Descartar cambios si solo cambió la fecha de generación
+        shell: bash
         run: |
-          node <<'NODE'
+          if [ ! -f data/catalog.json ]; then
+            echo "No existe data/catalog.json."
+            exit 0
+          fi
+          if ! git cat-file -e HEAD:data/catalog.json 2>/dev/null; then
+            echo "Primer guardado de data/catalog.json en el repositorio."
+            exit 0
+          fi
+          PREV_FILE="${RUNNER_TEMP:-/tmp}/prev-catalog.json"
+          git show HEAD:data/catalog.json > "$PREV_FILE"
+          PREV_FILE="$PREV_FILE" node <<'NODE'
           const fs = require('fs');
           const { execFileSync } = require('child_process');
           const current = JSON.parse(fs.readFileSync('data/catalog.json', 'utf8'));
-          const previous = JSON.parse(execFileSync('git', ['show', 'HEAD:data/catalog.json'], { encoding: 'utf8' }));
+          const previous = JSON.parse(fs.readFileSync(process.env.PREV_FILE, 'utf8'));
           const sameContent = JSON.stringify(current.items) === JSON.stringify(previous.items)
             && current.meta.source === previous.meta.source
+            && JSON.stringify(current.meta.sources || []) === JSON.stringify(previous.meta.sources || [])
             && current.meta.store === previous.meta.store
             && current.meta.total === previous.meta.total
             && current.meta.pages === previous.meta.pages;
           if (sameContent) {
             execFileSync('git', ['checkout', 'HEAD', '--', 'data/catalog.json']);
             console.log('El catálogo no cambió; no se creará ningún commit.');
+          } else {
+            console.log('Cambios detectados en el catálogo:', previous.meta.total, '->', current.meta.total);
           }
           NODE
+          rm -f "$PREV_FILE"
 
       - name: Publicar cambios del catálogo
+        shell: bash
         run: |
-          if git diff --quiet -- data/catalog.json; then
-            echo "Sin cambios en el catálogo."
+          if [ -z "$(git status --porcelain -- data/catalog.json)" ]; then
+            echo "Sin cambios en el catálogo; no se hace nada."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/catalog.json
+          if git diff --cached --quiet -- data/catalog.json; then
+            echo "Sin cambios que publicar en el catálogo."
+            exit 0
+          fi
           git commit -m "Actualizar catálogo automáticamente"
+          git pull --rebase origin "${GITHUB_REF_NAME:-main}"
           git push
