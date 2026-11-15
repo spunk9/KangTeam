@@ -997,7 +997,7 @@
       if (!res.ok) throw new Error('config');
       state.config = await res.json();
     } catch (err) {
-      state.config = { store: { name: 'KANG Team', whatsapp: '', bizum: '', bizumName: '', email: '', instagram: '', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
+      state.config = { store: { name: 'KANG Team', whatsapp: '34699234010', bizum: '699234010', bizumName: '', email: 'santol86@gmail.com', instagram: 'tolillo9', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
     }
     applyConfig();
   }
@@ -1092,18 +1092,37 @@
     var store = state.config && state.config.store ? state.config.store : {};
     if (state.route === 'home') updateDocumentTitle('');
 
-    var waNumber = (store.whatsapp || '').replace(/\D/g, '');
-    var waHref = waNumber ? 'https://wa.me/' + waNumber : 'https://wa.me/';
+    var rawWa = (store.whatsapp || '').replace(/\D/g, '');
+    var waNumber = (rawWa && rawWa !== '34600000000' && rawWa !== '600000000') ? rawWa : '34699234010';
+    var waHref = 'https://wa.me/' + waNumber;
     ['cta-whatsapp', 'contact-whatsapp', 'footer-whatsapp', 'help-whatsapp'].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.href = waHref;
+      if (el) {
+        el.href = waHref;
+        el.target = '_blank';
+        el.rel = 'noopener';
+      }
     });
-    var email = store.email || '';
+    var rawEmail = (store.email || '').trim();
+    var email = (rawEmail && rawEmail.toLowerCase() !== 'pedidos@tudominio.com') ? rawEmail : 'santol86@gmail.com';
     ['contact-email', 'footer-email'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) {
-        if (email) el.href = 'mailto:' + email;
-        else el.href = '#/como-funciona';
+        el.href = 'mailto:' + email;
+        if (id === 'footer-email') el.textContent = email;
+      }
+    });
+
+    var rawIg = (store.instagram || '').trim().replace(/^@/, '');
+    var igHandle = (rawIg && rawIg.toLowerCase() !== 'kangteam') ? rawIg : 'tolillo9';
+    var igHref = 'https://instagram.com/' + encodeURIComponent(igHandle);
+    ['contact-instagram', 'footer-instagram'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.href = igHref;
+        el.target = '_blank';
+        el.rel = 'noopener';
+        if (id === 'footer-instagram') el.textContent = 'Instagram (@' + igHandle + ')';
       }
     });
 
@@ -1112,7 +1131,7 @@
       var html = '';
       if (waNumber) html += '<a href="' + waHref + '" target="_blank" rel="noopener" aria-label="WhatsApp"><svg><use href="#i-whatsapp"/></svg></a>';
       if (email) html += '<a href="mailto:' + esc(email) + '" aria-label="Email"><svg><use href="#i-mail"/></svg></a>';
-      if (store.instagram) html += '<a href="https://instagram.com/' + esc(store.instagram.replace(/^@/, '')) + '" target="_blank" rel="noopener" aria-label="Instagram"><svg><use href="#i-instagram"/></svg></a>';
+      if (igHandle) html += '<a href="' + igHref + '" target="_blank" rel="noopener" aria-label="Instagram"><svg><use href="#i-instagram"/></svg></a>';
       social.innerHTML = html;
     }
 

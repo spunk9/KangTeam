@@ -26,13 +26,16 @@ var ALBUM_CACHE_DIR = path.join(DATA_DIR, 'cache', 'albums');
 var ORDERS_DIR = path.join(DATA_DIR, 'orders');
 
 var PORT = parseInt(process.env.PORT || '3000', 10);
+var envWhatsapp = (process.env.STORE_WHATSAPP || '').replace(/[^\d]/g, '');
+var envEmail = (process.env.STORE_EMAIL || '').trim();
+var envInstagram = (process.env.STORE_INSTAGRAM || '').trim();
 var STORE = {
   name: process.env.STORE_NAME || 'KANG Team',
-  whatsapp: (process.env.STORE_WHATSAPP || '').replace(/[^\d]/g, ''),
-  bizum: (process.env.STORE_BIZUM || '').replace(/[^\d]/g, ''),
+  whatsapp: (envWhatsapp && envWhatsapp !== '34600000000' && envWhatsapp !== '600000000') ? envWhatsapp : '34699234010',
+  bizum: (process.env.STORE_BIZUM || '699234010').replace(/[^\d]/g, ''),
   bizumName: (process.env.STORE_BIZUM_NAME || '').trim(),
-  email: process.env.STORE_EMAIL || '',
-  instagram: process.env.STORE_INSTAGRAM || '',
+  email: (envEmail && envEmail.toLowerCase() !== 'pedidos@tudominio.com') ? envEmail : 'santol86@gmail.com',
+  instagram: (envInstagram && envInstagram.replace(/^@/, '').toLowerCase() !== 'kangteam') ? envInstagram : 'tolillo9',
   yupoo: 'https://minkang.x.yupoo.com/categories/712891'
 };
 var SYNC_INTERVAL_HOURS = parseFloat(process.env.SYNC_INTERVAL_HOURS || '6');
