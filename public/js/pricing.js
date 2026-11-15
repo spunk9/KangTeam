@@ -142,6 +142,44 @@
       unitPriceCents: base + custom + patches + special
     };
   }
+  var VOLUME_TIERS = [
+    { minQty: 15, perItemCents: 300, label: '15+ prendas (-3,00 €/ud)' },
+    { minQty: 10, perItemCents: 200, label: '10–14 prendas (-2,00 €/ud)' },
+    { minQty: 5, perItemCents: 100, label: '5–9 prendas (-1,00 €/ud)' }
+  ];
+
+  function getVolumeDiscount(totalItems) {
+    var qty = Math.max(0, parseInt(totalItems, 10) || 0);
+    for (var i = 0; i < VOLUME_TIERS.length; i++) {
+      if (qty >= VOLUME_TIERS[i].minQty) {
+        return {
+          tierMin: VOLUME_TIERS[i].minQty,
+          perItemCents: VOLUME_TIERS[i].perItemCents,
+          discountCents: VOLUME_TIERS[i].perItemCents * qty,
+          label: VOLUME_TIERS[i].label
+        };
+      }
+    }
+    return { tierMin: 0, perItemCents: 0, discountCents: 0, label: '' };
+  }
+
+  function nextVolumeTier(totalItems) {
+    var qty = Math.max(0, parseInt(totalItems, 10) || 0);
+    for (var i = VOLUME_TIERS.length - 1; i >= 0; i--) {
+      if (qty < VOLUME_TIERS[i].minQty) return VOLUME_TIERS[i];
+    }
+    return null;
+  }
+
   function money(cents) { return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format((Number(cents) || 0) / 100); }
-  return { groups: groups, calculate: calculate, money: money };
+
+  return {
+    groups: groups,
+    VOLUME_TIERS: VOLUME_TIERS,
+    getVolumeDiscount: getVolumeDiscount,
+    nextVolumeTier: nextVolumeTier,
+    calculate: calculate,
+    money: money
+  };
 }));
+

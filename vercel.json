@@ -13,6 +13,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/promo/validate",
+      "destination": "/api/handler?__api=/api/promo/validate"
+    },
+    {
       "source": "/api/orders/track",
       "destination": "/api/handler?__api=/api/orders/track"
     },

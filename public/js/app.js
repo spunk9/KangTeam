@@ -44,7 +44,7 @@
   var favsStorageKey = 'kang_favs_v1';
   var ordersStorageKey = 'kang_orders_v1';
   var customerStorageKey = 'kang_customer_v1';
-  var CART_PACK_TARGET = 3;
+  var CART_PACK_TARGET = 5;
   var PRICE_BAND_LABELS = { le25: 'Hasta 25 €', '26-45': '26 – 45 €', gt45: 'Más de 45 €' };
   var state = {
     catalog: null,
@@ -82,6 +82,11 @@
     favSet: new Set(),
     orders: [],
     customer: { name: '', phone: '', email: '', city: '', notes: '' },
+    deliveryMethod: 'pickup_cordoba',
+    appliedPromo: null,
+    promoError: '',
+    promoInput: '',
+    promoLoading: false,
     suggestIndex: -1,
     lastOrder: null,
     overlayCount: 0,
@@ -108,7 +113,10 @@
     adminError: '',
     adminStatusFilter: '',
     adminSearch: '',
-    adminNeedsToken: false
+    adminNeedsToken: false,
+    adminDeleteConfirmId: '',
+    deferredInstallPrompt: null,
+    analyticsInitialized: false
   };
 
   // ── Utilidades ───────────────────────────────────────────
@@ -903,6 +911,10 @@
   }
 
   function saveCart() {
+    if (state.appliedPromo) {
+      state.appliedPromo = null;
+      state.promoError = '';
+    }
     try { localStorage.setItem(cartStorageKey, JSON.stringify(state.cart)); } catch (err) {}
   }
 
@@ -1153,21 +1165,46 @@
   function renderPrices() {
     var target = $('#prices-content');
     if (!target || !window.KangPricing) return;
-    target.innerHTML = KangPricing.groups.map(function (group, index) {
+    var cards = KangPricing.groups.map(function (group, index) {
       return '<article class="price-card">' +
         '<div class="price-card-head"><span>PRECIOS KANG TEAM</span><span>' + String(index + 1).padStart(2, '0') + '</span></div>' +
         '<h2>' + esc(group.title) + '</h2><ul>' + group.items.map(function (entry) {
         return '<li><span>' + esc(entry[0]) + '</span><strong>' + esc(KangPricing.money(entry[1])) + '</strong></li>';
       }).join('') + '</ul></article>';
-    }).join('');
+    });
+    cards.push(
+      '<article class="price-card is-highlight">' +
+        '<div class="price-card-head"><span>AHORRO Y ENTREGA</span><span>' + String(cards.length + 1).padStart(2, '0') + '</span></div>' +
+        '<h2>Descuentos de grupo y entrega</h2>' +
+        '<ul>' +
+          '<li><span>De 5 a 9 prendas en el pedido</span><strong>-1,00 € / ud.</strong></li>' +
+          '<li><span>De 10 a 14 prendas en el pedido</span><strong>-2,00 € / ud.</strong></li>' +
+          '<li><span>15 o más prendas en el pedido</span><strong>-3,00 € / ud.</strong></li>' +
+          '<li><span>Recogida en mano (Córdoba capital)</span><strong>Gratis (0,00 €)</strong></li>' +
+          '<li><span>Plazo estimado tras pedir al proveedor</span><strong>2–3 semanas</strong></li>' +
+        '</ul>' +
+      '</article>'
+    );
+    target.innerHTML = cards.join('');
   }
 
   function linePricing(line, item) {
     return KangPricing.calculate(item, line);
   }
 
+  function cartSubtotalCents() {
+    return state.cart.reduce(function (sum, line) { var item = state.byId.get(line.id); return sum + (item ? linePricing(line, item).unitPriceCents * (parseInt(line.qty, 10) || 0) : 0); }, 0);
+  }
+
+  function cartVolumeDiscount() {
+    if (window.KangPricing && typeof KangPricing.getVolumeDiscount === 'function') {
+      return KangPricing.getVolumeDiscount(cartTotalItems());
+    }
+    return { tierMin: 0, perItemCents: 0, discountCents: 0, label: '' };
+  }
+
   function cartPriceCents() {
-    return state.cart.reduce(function (sum, line) { var item = state.byId.get(line.id); return sum + (item ? linePricing(line, item).unitPriceCents * (parseInt(line.qty,10)||0) : 0); }, 0);
+    return Math.max(0, cartSubtotalCents() - cartVolumeDiscount().discountCents);
   }
 
   function navigate(path) {
@@ -3826,14 +3863,19 @@
       box.classList.remove('is-complete');
       return;
     }
-    var remaining = Math.max(0, CART_PACK_TARGET - total);
-    var pct = Math.min(100, Math.round((total / CART_PACK_TARGET) * 100));
-    box.classList.toggle('is-complete', remaining === 0);
-    box.innerHTML = '<div class="cart-progress-copy">' +
-      (remaining === 0
-        ? '<span><strong>Envío combinado listo</strong> · ' + total + ' prendas optimizan el envío</span><strong>100%</strong>'
-        : '<span>Añade <strong>' + remaining + (remaining === 1 ? ' prenda más' : ' prendas más') + '</strong> para optimizar tu envío combinado (' + total + '/' + CART_PACK_TARGET + ')</span><strong>' + pct + '%</strong>') +
-      '</div>' +
+    var cur = cartVolumeDiscount();
+    var next = (window.KangPricing && typeof KangPricing.nextVolumeTier === 'function') ? KangPricing.nextVolumeTier(total) : null;
+    var pct = next ? Math.min(100, Math.round((total / next.minQty) * 100)) : 100;
+    box.classList.toggle('is-complete', cur.discountCents > 0);
+    var copyHtml = '';
+    if (next) {
+      var remaining = next.minQty - total;
+      var perItemTxt = KangPricing.money(next.perItemCents);
+      copyHtml = '<span>Añade <strong>' + remaining + (remaining === 1 ? ' prenda más' : ' prendas más') + '</strong> para aplicar <strong>-' + esc(perItemTxt) + '/ud.</strong> (' + total + '/' + next.minQty + ')</span><strong>' + pct + '%</strong>';
+    } else {
+      copyHtml = '<span><strong>Descuento máximo activo</strong> · Ahorras <strong>' + esc(KangPricing.money(cur.discountCents)) + '</strong> (' + esc(cur.label) + ')</span><strong>-3 €/ud</strong>';
+    }
+    box.innerHTML = '<div class="cart-progress-copy">' + copyHtml + '</div>' +
       '<div class="cart-progress-track"><div class="cart-progress-fill" style="width:' + pct + '%"></div></div>';
   }
 
@@ -3848,6 +3890,15 @@
     if (titleCount) titleCount.textContent = '(' + total + ')';
     var totalEl = $('#cart-total-items');
     if (totalEl) totalEl.textContent = total + (total === 1 ? ' artículo' : ' artículos');
+
+    var vol = cartVolumeDiscount();
+    var discRow = $('#cart-discount-row');
+    var discLabel = $('#cart-discount-label');
+    var discAmt = $('#cart-discount-amount');
+    if (discRow) discRow.hidden = !(vol.discountCents > 0);
+    if (discLabel && vol.discountCents > 0) discLabel.textContent = 'Descuento grupo (' + vol.label + ')';
+    if (discAmt && vol.discountCents > 0) discAmt.textContent = '-' + KangPricing.money(vol.discountCents);
+
     var priceEl = $('#cart-total-price');
     if (priceEl) priceEl.textContent = KangPricing.money(cartPriceCents());
     var foot = $('#cart-foot');
@@ -4368,26 +4419,127 @@
     return clean;
   }
 
+  function checkoutTotals() {
+    var subtotalCents = cartSubtotalCents();
+    var vol = cartVolumeDiscount();
+    var afterVolumeCents = Math.max(0, subtotalCents - vol.discountCents);
+    var promoDiscountCents = 0;
+    if (state.appliedPromo && state.appliedPromo.discountCents > 0) {
+      promoDiscountCents = Math.min(afterVolumeCents, state.appliedPromo.discountCents);
+    }
+    var totalCents = Math.max(0, afterVolumeCents - promoDiscountCents);
+    return {
+      subtotalCents: subtotalCents,
+      volume: vol,
+      afterVolumeCents: afterVolumeCents,
+      promo: state.appliedPromo,
+      promoDiscountCents: promoDiscountCents,
+      totalCents: totalCents
+    };
+  }
+
+  function renderCheckoutSummaryTotalsHtml() {
+    var total = cartTotalItems();
+    var t = checkoutTotals();
+    var isOutside = state.deliveryMethod === 'outside_cordoba';
+    var html = '<div><span>Artículos (' + total + ')</span><strong>' + esc(KangPricing.money(t.subtotalCents)) + '</strong></div>';
+    if (t.volume.discountCents > 0) {
+      html += '<div class="is-discount"><span>Dto. grupo (' + esc(t.volume.label) + ')</span><strong>-' + esc(KangPricing.money(t.volume.discountCents)) + '</strong></div>';
+    }
+    if (t.promo && t.promoDiscountCents > 0) {
+      html += '<div class="is-discount"><span>Cupón ' + esc(t.promo.code) + (t.promo.label ? ' (' + esc(t.promo.label) + ')' : '') + '</span><strong>-' + esc(KangPricing.money(t.promoDiscountCents)) + '</strong></div>';
+    }
+    html += '<div><span>Entrega</span><strong>' + (isOutside ? 'Fuera de Córdoba (a consultar)' : 'Recogida en Córdoba · Gratis') + '</strong></div>';
+    html += '<div><span>Total del pedido</span><strong>' + esc(KangPricing.money(t.totalCents)) + '</strong></div>';
+    return html;
+  }
+
+  function updateCheckoutSummaryUI() {
+    var totalsBox = $('#checkout-summary-totals');
+    if (totalsBox) totalsBox.innerHTML = renderCheckoutSummaryTotalsHtml();
+    var note = $('#checkout-summary-note');
+    if (note) {
+      note.textContent = state.deliveryMethod === 'outside_cordoba'
+        ? 'Pedidos fuera de Córdoba solo para compras grandes. Confirmamos gastos de envío por WhatsApp.'
+        : 'Recogida gratuita en Córdoba capital. Plazo estimado de entrega: 2–3 semanas.';
+    }
+  }
+
   function updateCheckoutPaymentUI(form) {
     if (!form) return;
     var method = form.elements.paymentMethod ? form.elements.paymentMethod.value : 'confirm';
     var isBizum = method === 'bizum';
+    var deliveryVal = form.elements.deliveryMethod ? form.elements.deliveryMethod.value : 'pickup_cordoba';
+    state.deliveryMethod = deliveryVal === 'outside_cordoba' ? 'outside_cordoba' : 'pickup_cordoba';
     $$('.payment-option', form).forEach(function (card) {
-      var input = card.querySelector('input[name="paymentMethod"]');
+      var input = card.querySelector('input[type="radio"]');
       card.classList.toggle('is-active', !!(input && input.checked));
     });
     var preview = $('#checkout-bizum-preview');
     if (preview) preview.hidden = !isBizum;
+    var outsidePreview = $('#checkout-outside-preview');
+    if (outsidePreview) outsidePreview.hidden = state.deliveryMethod !== 'outside_cordoba';
     var consentCopy = $('#checkout-consent-copy');
     var storeName = state.config && state.config.store && state.config.store.name ? state.config.store.name : 'KANG Team';
     if (consentCopy) {
       consentCopy.textContent = isBizum
-        ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. El envío y la disponibilidad se confirman por WhatsApp o email.'
+        ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. La disponibilidad y la recogida en Córdoba (plazo 2–3 semanas) se coordinan por WhatsApp o email.'
         : 'Acepto que ' + storeName + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.';
     }
     var submitBtn = $('#checkout-submit');
     if (submitBtn && !submitBtn.disabled) {
       submitBtn.innerHTML = (isBizum ? 'Confirmar y ver datos Bizum' : 'Enviar pedido') + ' <svg><use href="#i-arrow"/></svg>';
+    }
+    updateCheckoutSummaryUI();
+  }
+
+  async function applyCheckoutPromo() {
+    var inp = $('#checkout-promo-input');
+    var msgEl = $('#checkout-promo-msg');
+    var btn = $('#checkout-promo-apply');
+    var code = String(inp ? inp.value : state.promoInput || '').trim().toUpperCase();
+    state.promoInput = code;
+    if (!code) {
+      state.appliedPromo = null;
+      state.promoError = 'Introduce un código de cupón.';
+      if (msgEl) { msgEl.textContent = state.promoError; msgEl.className = 'promo-msg is-error'; }
+      updateCheckoutSummaryUI();
+      return;
+    }
+    var totals = checkoutTotals();
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      var res = await fetch('/api/promo/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          code: code,
+          baseCents: totals.afterVolumeCents,
+          totalItems: cartTotalItems()
+        })
+      });
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(extractApiError(data, 'Cupón no válido o caducado'));
+      state.appliedPromo = data.promo;
+      state.promoError = '';
+      if (msgEl) {
+        msgEl.textContent = 'Cupón ' + data.promo.code + ' aplicado: -' + KangPricing.money(data.promo.discountCents);
+        msgEl.className = 'promo-msg is-ok';
+      }
+      var clearBtn = $('#checkout-promo-clear');
+      if (clearBtn) clearBtn.hidden = false;
+      updateCheckoutSummaryUI();
+      toast('Cupón ' + data.promo.code + ' aplicado');
+    } catch (err) {
+      state.appliedPromo = null;
+      state.promoError = err.message || 'Cupón no válido';
+      if (msgEl) { msgEl.textContent = state.promoError; msgEl.className = 'promo-msg is-error'; }
+      var clearBtn2 = $('#checkout-promo-clear');
+      if (clearBtn2) clearBtn2.hidden = true;
+      updateCheckoutSummaryUI();
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Aplicar'; }
     }
   }
 
@@ -4400,21 +4552,45 @@
     var saved = state.customer || { name: '', phone: '', email: '', city: '', notes: '' };
     var hasSaved = !!(saved.name || saved.phone);
     var defaultMethod = store.bizum ? 'bizum' : 'confirm';
+    var delivery = state.deliveryMethod === 'outside_cordoba' ? 'outside_cordoba' : 'pickup_cordoba';
+    var promoOpen = !!(state.appliedPromo || state.promoError);
 
     content.innerHTML = '<div class="checkout-grid">' +
       '<div class="checkout-form-wrap">' +
         '<p class="eyebrow">Último paso</p>' +
         '<h2 id="checkout-title">Confirma tu pedido</h2>' +
-        '<p class="checkout-sub">Déjanos tus datos y elige si prefieres pagar ya por Bizum directo o confirmar antes por WhatsApp.</p>' +
+        '<p class="checkout-sub">Déjanos tus datos y elige cómo prefieres pagar y recoger tu pedido.</p>' +
         (hasSaved ? '<div class="checkout-autofill-note"><span>Datos rellenados de tu último pedido</span><button type="button" id="checkout-clear-customer">Usar otros datos</button></div>' : '') +
         '<form id="checkout-form" novalidate>' +
           '<div class="form-error" id="checkout-error" role="alert"></div>' +
           '<div class="form-grid">' +
             '<label class="field"><span>Nombre y apellidos *</span><input name="name" type="text" autocomplete="name" maxlength="80" value="' + esc(saved.name) + '" required></label>' +
             '<label class="field"><span>Teléfono / WhatsApp *</span><input name="phone" type="tel" autocomplete="tel" maxlength="30" value="' + esc(saved.phone) + '" required></label>' +
-            '<label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="120" value="' + esc(saved.email) + '"></label>' +
-            '<label class="field"><span>Ciudad</span><input name="city" type="text" autocomplete="address-level2" maxlength="80" value="' + esc(saved.city) + '"></label>' +
-            '<label class="field field-full"><span>Notas (dirección, talla, dudas…)</span><textarea name="notes" maxlength="600">' + esc(saved.notes) + '</textarea></label>' +
+            '<label class="field"><span>Email (para avisos de estado)</span><input name="email" type="email" autocomplete="email" maxlength="120" value="' + esc(saved.email) + '"></label>' +
+            '<label class="field"><span>Localidad / Zona</span><input name="city" type="text" autocomplete="address-level2" maxlength="80" placeholder="Córdoba" value="' + esc(saved.city) + '"></label>' +
+            '<label class="field field-full"><span>Notas (disponibilidad para recoger, dudas de talla…)</span><textarea name="notes" maxlength="600">' + esc(saved.notes) + '</textarea></label>' +
+          '</div>' +
+          '<div class="checkout-payment-block">' +
+            '<p class="field-label">Entrega</p>' +
+            '<div class="payment-methods" role="radiogroup" aria-label="Tipo de entrega">' +
+              '<label class="payment-option' + (delivery === 'pickup_cordoba' ? ' is-active' : '') + '">' +
+                '<input type="radio" name="deliveryMethod" value="pickup_cordoba"' + (delivery === 'pickup_cordoba' ? ' checked' : '') + '>' +
+                '<span class="payment-option-copy">' +
+                  '<span class="payment-option-title">Recogida en Córdoba <span class="bizum-badge">Gratis</span></span>' +
+                  '<small>Entrega en mano en Córdoba capital (2–3 semanas).</small>' +
+                '</span>' +
+              '</label>' +
+              '<label class="payment-option' + (delivery === 'outside_cordoba' ? ' is-active' : '') + '">' +
+                '<input type="radio" name="deliveryMethod" value="outside_cordoba"' + (delivery === 'outside_cordoba' ? ' checked' : '') + '>' +
+                '<span class="payment-option-copy">' +
+                  '<span class="payment-option-title">Fuera de Córdoba</span>' +
+                  '<small>Solo pedidos grandes · A consultar por WhatsApp.</small>' +
+                '</span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="payment-outside-preview" id="checkout-outside-preview"' + (delivery === 'outside_cordoba' ? '' : ' hidden') + '>' +
+              'Los envíos fuera de Córdoba se valoran únicamente para pedidos de varias prendas. Te confirmaremos si aplica y el importe por WhatsApp.' +
+            '</div>' +
           '</div>' +
           '<div class="checkout-payment-block">' +
             '<p class="field-label">Método de pago</p>' +
@@ -4423,25 +4599,25 @@
                 '<input type="radio" name="paymentMethod" value="bizum"' + (defaultMethod === 'bizum' ? ' checked' : '') + '>' +
                 '<span class="payment-option-copy">' +
                   '<span class="payment-option-title">Bizum <span class="bizum-badge">Directo</span></span>' +
-                  '<small>Verás el número, importe exacto y código para el concepto.</small>' +
+                  '<small>Sin comisiones. Te damos el número, importe y concepto.</small>' +
                 '</span>' +
               '</label>' +
               '<label class="payment-option' + (defaultMethod === 'confirm' ? ' is-active' : '') + '">' +
                 '<input type="radio" name="paymentMethod" value="confirm"' + (defaultMethod === 'confirm' ? ' checked' : '') + '>' +
                 '<span class="payment-option-copy">' +
                   '<span class="payment-option-title">Confirmar antes</span>' +
-                  '<small>Revisamos stock y envío por WhatsApp o email primero.</small>' +
+                  '<small>Revisamos disponibilidad por WhatsApp antes de pagar.</small>' +
                 '</span>' +
               '</label>' +
             '</div>' +
             '<div class="payment-bizum-preview" id="checkout-bizum-preview"' + (defaultMethod === 'bizum' ? '' : ' hidden') + '>' +
-              'Al enviar el pedido obtendrás tu referencia <strong>KT-...</strong> y los datos para hacer el Bizum sin comisiones (el envío se confirma aparte).' +
+              'Al enviar el pedido obtendrás tu referencia <strong>KT-...</strong> y los datos de Bizum directo sin comisiones. Cuando hagas el Bizum, avísanos por WhatsApp.' +
             '</div>' +
           '</div>' +
           '<label class="form-consent"><input type="checkbox" id="checkout-consent">' +
             '<span id="checkout-consent-copy">' +
               (defaultMethod === 'bizum'
-                ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. El envío y la disponibilidad se confirman por WhatsApp o email.'
+                ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. La disponibilidad y la recogida en Córdoba (plazo 2–3 semanas) se coordinan por WhatsApp o email.'
                 : 'Acepto que ' + esc(storeName) + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.') +
             '</span></label>' +
           '<button class="btn btn-primary btn-block" id="checkout-submit" type="submit">' + (defaultMethod === 'bizum' ? 'Confirmar y ver datos Bizum' : 'Enviar pedido') + ' <svg><use href="#i-arrow"/></svg></button>' +
@@ -4450,12 +4626,23 @@
       '<aside class="checkout-summary">' +
         '<h3 class="summary-title">Tu selección <span>' + total + ' art.</span></h3>' +
         '<div class="summary-items">' + cartSummaryHtml() + '</div>' +
-        '<div class="summary-totals">' +
-          '<div><span>Artículos</span><strong>' + total + '</strong></div>' +
-          '<div><span>Envío</span><strong>Por confirmar</strong></div>' +
-          '<div><span>Total del pedido</span><strong>' + esc(KangPricing.money(cartPriceCents())) + '</strong></div>' +
-        '</div>' +
-        '<p class="summary-note">Los gastos de envío se confirman aparte. Puedes añadir o quitar prendas antes de enviar.</p>' +
+        '<details class="promo-box"' + (promoOpen ? ' open' : '') + '>' +
+          '<summary>¿Tienes un cupón privado?</summary>' +
+          '<div class="promo-row">' +
+            '<input type="text" id="checkout-promo-input" maxlength="32" placeholder="CÓDIGO" value="' + esc(state.appliedPromo ? state.appliedPromo.code : state.promoInput) + '">' +
+            '<button type="button" class="btn btn-outline" id="checkout-promo-apply">Aplicar</button>' +
+            '<button type="button" class="btn-link" id="checkout-promo-clear"' + (state.appliedPromo ? '' : ' hidden') + '>Quitar</button>' +
+          '</div>' +
+          '<p class="promo-msg ' + (state.appliedPromo ? 'is-ok' : (state.promoError ? 'is-error' : '')) + '" id="checkout-promo-msg">' +
+            (state.appliedPromo ? ('Cupón ' + esc(state.appliedPromo.code) + ' aplicado: -' + esc(KangPricing.money(state.appliedPromo.discountCents))) : esc(state.promoError || '')) +
+          '</p>' +
+        '</details>' +
+        '<div class="summary-totals" id="checkout-summary-totals">' + renderCheckoutSummaryTotalsHtml() + '</div>' +
+        '<p class="summary-note" id="checkout-summary-note">' +
+          (delivery === 'outside_cordoba'
+            ? 'Pedidos fuera de Córdoba solo para compras grandes. Confirmamos gastos de envío por WhatsApp.'
+            : 'Recogida gratuita en Córdoba capital. Plazo estimado de entrega: 2–3 semanas.') +
+        '</p>' +
       '</aside>' +
     '</div>';
   }
@@ -4542,8 +4729,11 @@
     }
 
     var paymentMethod = form.elements.paymentMethod ? form.elements.paymentMethod.value : 'confirm';
+    var deliveryMethod = form.elements.deliveryMethod ? form.elements.deliveryMethod.value : state.deliveryMethod;
     var payload = {
       paymentMethod: paymentMethod,
+      deliveryMethod: deliveryMethod === 'outside_cordoba' ? 'outside_cordoba' : 'pickup_cordoba',
+      promoCode: state.appliedPromo ? state.appliedPromo.code : '',
       customer: {
         name: form.elements.name.value.trim(),
         phone: form.elements.phone.value.trim(),
@@ -4586,10 +4776,11 @@
         id: data && data.order && data.order.id ? data.order.id : String(Date.now()),
         createdAt: new Date().toISOString(),
         paymentMethod: data && data.order && data.order.paymentMethod ? data.order.paymentMethod : paymentMethod,
+        deliveryMethod: data && data.order && data.order.deliveryMethod ? data.order.deliveryMethod : payload.deliveryMethod,
         status: data && data.order && data.order.status ? data.order.status : (paymentMethod === 'bizum' ? 'bizum_pending' : 'pending'),
         phone4: orderPhone4,
         totalItems: payload.items.reduce(function (sum, l) { return sum + (parseInt(l.qty, 10) || 1); }, 0),
-        totalPriceCents: data && data.order ? data.order.totalPriceCents : cartPriceCents(),
+        totalPriceCents: data && data.order ? data.order.totalPriceCents : checkoutTotals().totalCents,
         items: snapshotItems
       });
       state.orders = state.orders.slice(0, 12);
@@ -4597,6 +4788,9 @@
       updateOrdersUI();
 
       state.lastOrder = data;
+      state.appliedPromo = null;
+      state.promoError = '';
+      state.promoInput = '';
       state.cart = [];
       saveCart();
       updateCartUI();
@@ -4618,6 +4812,7 @@
     var id = order.id || '';
     var trackHref = id ? '#/seguimiento?id=' + enc(id) + (phone4 ? '&phone4=' + enc(phone4) : '') : '#/seguimiento';
     var isBizum = order.paymentMethod === 'bizum';
+    var isOutside = order.deliveryMethod === 'outside_cordoba';
     var store = state.config && state.config.store ? state.config.store : {};
     var bizumDigits = store.bizum || '';
     var bizumCopyPhone = bizumDisplayNumber(bizumDigits);
@@ -4628,6 +4823,10 @@
     var wa = (data && data.whatsappUrl) || ('https://wa.me/?text=' + encodeURIComponent(text));
     var mail = (data && data.mailtoUrl) || ('mailto:?subject=' + encodeURIComponent('Pedido ' + id) + '&body=' + encodeURIComponent(text));
     var automatic = data && data.delivery && (data.delivery.email || data.delivery.whatsapp);
+
+    var savingsParts = [];
+    if (order.volumeDiscountCents > 0) savingsParts.push('Dto. grupo -' + KangPricing.money(order.volumeDiscountCents));
+    if (order.promoDiscountCents > 0) savingsParts.push('Cupón ' + order.promoCode + ' -' + KangPricing.money(order.promoDiscountCents));
 
     var bizumHtml = '';
     if (isBizum) {
@@ -4648,7 +4847,7 @@
             : '') +
           (amountText
             ? '<div class="bizum-row">' +
-                '<div><span class="bizum-row-label">Importe prendas</span><strong class="bizum-row-val is-volt">' + esc(amountText) + '</strong></div>' +
+                '<div><span class="bizum-row-label">Importe total</span><strong class="bizum-row-val is-volt">' + esc(amountText) + '</strong></div>' +
                 '<button class="bizum-copy-btn" type="button" data-copy-value="' + esc(amountCopy) + '" data-copy-label="Importe copiado">Copiar</button>' +
               '</div>'
             : '') +
@@ -4659,27 +4858,27 @@
               '</div>'
             : '') +
         '</div>' +
-        '<p class="bizum-box-foot">Envía el comprobante por WhatsApp tras hacer el Bizum. Si prefieres sumar primero el coste del envío, consúltanos antes de enviarlo.</p>' +
+        '<p class="bizum-box-foot">Haz el Bizum sin comisiones y avísanos por WhatsApp para confirmarlo al momento. Plazo estimado tras pedir al proveedor: 2–3 semanas.</p>' +
       '</div>';
     }
 
     content.innerHTML = '<div class="success-panel">' +
       '<div class="success-icon"><svg><use href="#i-check"/></svg></div>' +
       '<h2 id="checkout-title" tabindex="-1">Pedido recibido</h2>' +
-      '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido y te contactaremos para confirmar disponibilidad y envío.</p>' +
-      (data && data.order ? '<p class="success-total">Total del pedido: <strong>' + esc(KangPricing.money(data.order.totalPriceCents)) + '</strong> · envío por confirmar</p>' : '') +
+      '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido. ' + (isOutside ? 'Revisaremos tu solicitud para fuera de Córdoba por WhatsApp.' : 'Entrega mediante recogida gratuita en Córdoba capital (plazo estimado 2–3 semanas).') + '</p>' +
+      (data && data.order ? '<p class="success-total">Total del pedido: <strong>' + esc(KangPricing.money(data.order.totalPriceCents)) + '</strong>' + (savingsParts.length ? ' · ' + esc(savingsParts.join(' · ')) : '') + ' · ' + (isOutside ? 'Fuera de Córdoba (a consultar)' : 'Recogida en Córdoba · Gratis') + '</p>' : '') +
       '<span class="order-ref">PEDIDO ' + esc(id) + '</span>' +
       bizumHtml +
       '<div class="success-actions">' +
-        '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> ' + (isBizum ? 'Enviar pedido / justificante por WhatsApp' : 'Enviar por WhatsApp') + '</a>' +
+        '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> ' + (isBizum ? 'Avisar del Bizum / enviar pedido por WhatsApp' : 'Enviar por WhatsApp') + '</a>' +
         '<a class="btn btn-outline" href="' + esc(trackHref) + '" data-close-checkout><svg><use href="#i-truck"/></svg> Seguir estado del pedido</a>' +
         '<a class="btn btn-outline" href="' + esc(mail) + '"><svg><use href="#i-mail"/></svg> Enviar por email</a>' +
         '<button class="btn btn-ghost" type="button" data-copy-order>Copiar resumen del pedido</button>' +
         '<a class="btn btn-ghost" href="#/catalogo" data-close-checkout>Seguir explorando</a>' +
       '</div>' +
       '<p class="success-note">' +
-        (automatic ? 'También hemos intentado avisar a la tienda automáticamente. ' : 'Para asegurarte de que lo recibimos, envía el resumen con uno de los botones. ') +
-        'Guarda tu número de pedido por si necesitas consultarnos.' +
+        (automatic ? 'También hemos avisado a la tienda automáticamente. ' : 'Para agilizar la confirmación, envía el resumen con el botón de WhatsApp. ') +
+        'Guarda tu número de pedido para ver su estado en cualquier momento.' +
       '</p>' +
     '</div>';
 
@@ -4722,14 +4921,37 @@
     if (content) {
       content.addEventListener('submit', submitOrder);
       content.addEventListener('change', function (event) {
-        if (event.target && event.target.name === 'paymentMethod') {
+        if (event.target && (event.target.name === 'paymentMethod' || event.target.name === 'deliveryMethod')) {
           updateCheckoutPaymentUI(event.target.form);
+        }
+      });
+      content.addEventListener('keydown', function (event) {
+        if (event.target && event.target.id === 'checkout-promo-input' && event.key === 'Enter') {
+          event.preventDefault();
+          applyCheckoutPromo();
         }
       });
       content.addEventListener('click', function (event) {
         if (event.target.closest('#checkout-clear-customer')) {
           saveCustomer({ name: '', phone: '', email: '', city: '', notes: '' });
           renderCheckout();
+          return;
+        }
+        if (event.target.closest('#checkout-promo-apply')) {
+          applyCheckoutPromo();
+          return;
+        }
+        if (event.target.closest('#checkout-promo-clear')) {
+          state.appliedPromo = null;
+          state.promoError = '';
+          state.promoInput = '';
+          var inp = $('#checkout-promo-input');
+          if (inp) inp.value = '';
+          var msg = $('#checkout-promo-msg');
+          if (msg) { msg.textContent = ''; msg.className = 'promo-msg'; }
+          var clr = $('#checkout-promo-clear');
+          if (clr) clr.hidden = true;
+          updateCheckoutSummaryUI();
         }
       });
     }
@@ -4875,8 +5097,10 @@
     }
     if (topicId === 'shipping') {
       return '<div class="help-bubble">' +
-        '<strong>Envíos y plazos:</strong><br>' +
-        'El envío se confirma según destino tras recibir el pedido. Si juntas <strong>3 o más prendas</strong> en el carrito optimizas el envío combinado.' +
+        '<strong>Entrega, plazos y descuentos:</strong><br>' +
+        '• Entrega principal: <strong>recogida gratuita en Córdoba capital</strong> (fuera de Córdoba solo pedidos grandes a consultar).<br>' +
+        '• Plazo estimado: <strong>2–3 semanas</strong> desde el pedido a proveedor.<br>' +
+        '• Descuentos automáticos por volumen: <strong>5–9 uds (-1 €/ud.)</strong>, <strong>10–14 uds (-2 €/ud.)</strong>, <strong>15+ uds (-3 €/ud.)</strong>.' +
       '</div>';
     }
     if (topicId === 'patches') {
@@ -5148,6 +5372,141 @@
 
   // ── Arranque ─────────────────────────────────────────────
 
+  function updateOfflineBanner() {
+    var banner = $('#offline-banner');
+    if (banner) banner.hidden = navigator.onLine !== false;
+  }
+
+  function isIosBrowser() {
+    var ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+  }
+
+  function isStandalonePwa() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+
+  function refreshPwaInstallButtons() {
+    var visible = !isStandalonePwa() && (!!state.deferredInstallPrompt || isIosBrowser());
+    var mobileBtn = $('#pwa-install-btn');
+    var footerBtn = $('#pwa-footer-install');
+    if (mobileBtn) mobileBtn.hidden = !visible;
+    if (footerBtn) footerBtn.hidden = !visible;
+  }
+
+  function openIosPwaModal() {
+    var modal = $('#pwa-ios-modal');
+    var backdrop = $('#pwa-ios-backdrop');
+    if (!modal) return;
+    modal.hidden = false;
+    modal.classList.add('is-open');
+    setOverlayState(modal, true);
+    if (backdrop) {
+      backdrop.hidden = false;
+      requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
+    }
+    lockScroll();
+  }
+
+  function closeIosPwaModal() {
+    var modal = $('#pwa-ios-modal');
+    if (!modal || !modal.classList.contains('is-open')) return;
+    releaseFocus(modal);
+    modal.classList.remove('is-open');
+    setOverlayState(modal, false);
+    modal.hidden = true;
+    var backdrop = $('#pwa-ios-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('is-open');
+      setTimeout(function () { if (!backdrop.classList.contains('is-open')) backdrop.hidden = true; }, 320);
+    }
+    unlockScroll();
+  }
+
+  async function triggerPwaInstall() {
+    if (state.deferredInstallPrompt) {
+      var promptEvt = state.deferredInstallPrompt;
+      state.deferredInstallPrompt = null;
+      refreshPwaInstallButtons();
+      try {
+        promptEvt.prompt();
+        var choice = await promptEvt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          toast('Instalando app de KANG Team…');
+        }
+      } catch (e) {}
+      return;
+    }
+    if (isIosBrowser()) {
+      openIosPwaModal();
+    }
+  }
+
+  function initPWA() {
+    updateOfflineBanner();
+    window.addEventListener('online', function () {
+      updateOfflineBanner();
+      toast('Conexión recuperada');
+    });
+    window.addEventListener('offline', updateOfflineBanner);
+
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      navigator.serviceWorker.register('/sw.js').catch(function () {});
+    }
+
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      state.deferredInstallPrompt = event;
+      refreshPwaInstallButtons();
+    });
+    window.addEventListener('appinstalled', function () {
+      state.deferredInstallPrompt = null;
+      refreshPwaInstallButtons();
+      toast('KANG Team añadida a tu pantalla de inicio');
+    });
+
+    var mobileBtn = $('#pwa-install-btn');
+    if (mobileBtn) mobileBtn.addEventListener('click', function () { closeMenu(); triggerPwaInstall(); });
+    var footerBtn = $('#pwa-footer-install');
+    if (footerBtn) footerBtn.addEventListener('click', triggerPwaInstall);
+
+    var iosClose = $('#pwa-ios-close');
+    if (iosClose) iosClose.addEventListener('click', closeIosPwaModal);
+    var iosDone = $('#pwa-ios-done');
+    if (iosDone) iosDone.addEventListener('click', closeIosPwaModal);
+    var iosBackdrop = $('#pwa-ios-backdrop');
+    if (iosBackdrop) iosBackdrop.addEventListener('click', closeIosPwaModal);
+
+    refreshPwaInstallButtons();
+  }
+
+  function initAnalytics() {
+    if (state.analyticsInitialized) return;
+    state.analyticsInitialized = true;
+    var host = String(location.hostname || '').toLowerCase();
+    var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+    var isAiStudio = /\.run\.app$/i.test(host) || /\.googleusercontent\.com$/i.test(host);
+
+    if (!isLocal && !isAiStudio) {
+      var va = document.createElement('script');
+      va.defer = true;
+      va.src = '/_vercel/insights/script.js';
+      document.head.appendChild(va);
+    }
+
+    var gaId = state.config && state.config.analyticsGaId ? String(state.config.analyticsGaId).trim() : '';
+    if (gaId && /^[A-Z0-9-]+$/i.test(gaId) && !isLocal) {
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = function () { window.dataLayer.push(arguments); };
+      window.gtag('js', new Date());
+      window.gtag('config', gaId);
+      var gs = document.createElement('script');
+      gs.async = true;
+      gs.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(gaId);
+      document.head.appendChild(gs);
+    }
+  }
+
   async function init() {
     var year = $('#year');
     if (year) year.textContent = String(new Date().getFullYear());
@@ -5160,6 +5519,7 @@
     state.galleryToken = 0;
 
     initOverlays();
+    initPWA();
     bindGlobalEvents();
     bindCatalogEvents();
     bindProductEvents();
@@ -5177,6 +5537,7 @@
     updateOrdersUI();
 
     await Promise.all([loadConfig(), loadCatalog(), loadTeamLogos()]);
+    initAnalytics();
 
     var prevCartLen = state.cart.length;
     state.cart = state.cart.filter(function (line) { return state.byId.has(line.id); });
@@ -5200,16 +5561,17 @@
     pending: { label: 'Recibido · Pendiente', cls: 'is-pending', step: 0 },
     bizum_pending: { label: 'Esperando Bizum', cls: 'is-bizum', step: 0 },
     paid: { label: 'Pago confirmado', cls: 'is-paid', step: 1 },
-    ordered: { label: 'En preparación / Proveedor', cls: 'is-ordered', step: 2 },
-    shipped: { label: 'Enviado', cls: 'is-shipped', step: 3 },
+    ordered: { label: 'Pedido a proveedor', cls: 'is-ordered', step: 2 },
+    shipped: { label: 'En camino (2–3 sem.)', cls: 'is-shipped', step: 2 },
+    ready: { label: 'Listo para recogida (Córdoba)', cls: 'is-ready', step: 3 },
     delivered: { label: 'Entregado', cls: 'is-delivered', step: 4 },
     cancelled: { label: 'Cancelado', cls: 'is-cancelled', step: -1 }
   };
   var ORDER_STEPS = [
     { key: 'received', label: 'Recibido' },
     { key: 'paid', label: 'Pago OK' },
-    { key: 'ordered', label: 'En preparación' },
-    { key: 'shipped', label: 'Enviado' },
+    { key: 'transit', label: 'En camino (2–3 sem.)' },
+    { key: 'ready', label: 'Listo en Córdoba' },
     { key: 'delivered', label: 'Entregado' }
   ];
 
@@ -5225,6 +5587,44 @@
     }
     if (typeof data.message === 'string' && data.message) return data.message;
     return fallback;
+  }
+
+  function formatShortEsDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  }
+
+  function buildTrackEtaBox(order) {
+    if (!order || order.status === 'cancelled') return '';
+    if (order.status === 'ready') {
+      return '<div class="track-eta-box is-ready">' +
+        '<div><span>Recogida en Córdoba capital</span>' +
+        '<strong>¡Tu pedido ya está listo para recoger!</strong>' +
+        '<p>Escríbenos por WhatsApp para coordinar el punto y hora de recogida.</p></div>' +
+      '</div>';
+    }
+    if (order.status === 'delivered') {
+      return '<div class="track-eta-box is-delivered">' +
+        '<div><span>Pedido completado</span><strong>Entregado</strong></div>' +
+      '</div>';
+    }
+    var rangeText = '2 a 3 semanas desde el pedido al proveedor';
+    var subText = order.deliveryMethod === 'outside_cordoba'
+      ? 'Entrega fuera de Córdoba · te confirmamos detalles por WhatsApp cuando llegue.'
+      : 'Cuando llegue te avisaremos para recogerlo en mano en Córdoba capital.';
+    if (order.supplierOrderedAt) {
+      var baseMs = new Date(order.supplierOrderedAt).getTime();
+      if (!isNaN(baseMs)) {
+        var minIso = new Date(baseMs + 14 * 86400000).toISOString();
+        var maxIso = new Date(baseMs + 21 * 86400000).toISOString();
+        rangeText = 'Llegada estimada: ' + formatShortEsDate(minIso) + ' – ' + formatShortEsDate(maxIso) + ' (2–3 semanas)';
+      }
+    }
+    return '<div class="track-eta-box">' +
+      '<div><span>Plazo estimado</span><strong>' + esc(rangeText) + '</strong><p>' + esc(subText) + '</p></div>' +
+    '</div>';
   }
 
   async function lookupOrderTrack(id, phone4) {
@@ -5277,17 +5677,7 @@
             return '<li class="' + (done ? 'is-done' : (cur ? 'is-current' : '')) + '"><span class="track-step-dot">' + (done ? '✓' : (idx + 1)) + '</span><b>' + esc(step.label) + '</b></li>';
           }).join('') + '</ol>';
 
-      var trackingHtml = o.trackingCode
-        ? '<div class="track-tracking-box">' +
-            '<div><span>Código de seguimiento' + (o.trackingCarrier ? ' · ' + esc(o.trackingCarrier) : '') + '</span>' +
-            '<strong>' + esc(o.trackingCode) + '</strong></div>' +
-            '<div class="track-tracking-actions">' +
-              '<button type="button" class="btn btn-outline" data-copy-value="' + esc(o.trackingCode) + '" data-copy-label="Tracking copiado">Copiar</button>' +
-              '<a class="btn btn-primary" href="https://t.17track.net/es#nums=' + enc(o.trackingCode) + '" target="_blank" rel="noopener">Rastrear envío</a>' +
-            '</div>' +
-          '</div>'
-        : '';
-
+      var etaHtml = buildTrackEtaBox(o);
       var notesHtml = o.adminNotes ? '<div class="track-note-box"><span>Nota de la tienda</span><p>' + esc(o.adminNotes) + '</p></div>' : '';
 
       var itemsHtml = (o.items || []).map(function (it) {
@@ -5295,21 +5685,32 @@
         return '<li><div><strong>' + esc(it.title) + '</strong><small>' + esc(extra) + '</small></div><b>' + esc(KangPricing.money(it.lineTotalCents || 0)) + '</b></li>';
       }).join('');
 
+      var discountRows = '';
+      if ((o.volumeDiscountCents || 0) > 0 || (o.promoDiscountCents || 0) > 0) {
+        discountRows = '<div class="track-discounts">' +
+          '<div><span>Subtotal prendas</span><b>' + esc(KangPricing.money(o.subtotalCents || o.totalPriceCents || 0)) + '</b></div>' +
+          ((o.volumeDiscountCents || 0) > 0 ? '<div class="is-discount"><span>Descuento grupo (' + esc(o.volumeDiscountLabel || '') + ')</span><b>-' + esc(KangPricing.money(o.volumeDiscountCents)) + '</b></div>' : '') +
+          ((o.promoDiscountCents || 0) > 0 ? '<div class="is-discount"><span>Cupón ' + esc(o.promoCode || '') + '</span><b>-' + esc(KangPricing.money(o.promoDiscountCents)) + '</b></div>' : '') +
+        '</div>';
+      }
+
       var historyHtml = Array.isArray(o.statusHistory) && o.statusHistory.length
         ? '<div class="track-history"><h3>Historial</h3><ul>' + o.statusHistory.slice().reverse().map(function (h) {
             return '<li><span>' + esc(formatDate(h.at)) + '</span><b>' + esc(h.note || orderStatusInfo(h.status).label) + '</b></li>';
           }).join('') + '</ul></div>'
         : '';
 
+      var deliveryLabel = o.deliveryMethod === 'outside_cordoba' ? 'Fuera de Córdoba (a consultar)' : 'Recogida en Córdoba · Gratis';
+
       resultHtml = '<article class="track-card">' +
         '<div class="track-card-head">' +
-          '<div><span class="track-id-label">Pedido ' + esc(o.id) + '</span><h2>' + esc(st.label) + '</h2><p>Creado el ' + esc(formatDate(o.createdAt)) + ' · ' + (o.paymentMethod === 'bizum' ? 'Pago por Bizum' : 'Confirmación WhatsApp / Email') + '</p></div>' +
+          '<div><span class="track-id-label">Pedido ' + esc(o.id) + '</span><h2>' + esc(st.label) + '</h2><p>Creado el ' + esc(formatDate(o.createdAt)) + ' · ' + (o.paymentMethod === 'bizum' ? 'Pago por Bizum' : 'Confirmación WhatsApp / Email') + ' · ' + esc(deliveryLabel) + '</p></div>' +
           '<div class="track-total-col"><span class="admin-status-badge ' + esc(st.cls) + '">' + esc(st.label) + '</span><strong>' + esc(KangPricing.money(o.totalPriceCents || 0)) + '</strong></div>' +
         '</div>' +
         timelineHtml +
-        trackingHtml +
+        etaHtml +
         notesHtml +
-        '<div class="track-items"><h3>Prendas (' + (o.totalItems || 0) + ')</h3><ul>' + itemsHtml + '</ul></div>' +
+        '<div class="track-items"><h3>Prendas (' + (o.totalItems || 0) + ')</h3><ul>' + itemsHtml + '</ul>' + discountRows + '</div>' +
         historyHtml +
       '</article>';
     }
@@ -5398,11 +5799,79 @@
       var data = null;
       try { data = await res.json(); } catch (e) {}
       if (!res.ok) throw new Error(extractApiError(data, 'No se pudo actualizar (' + res.status + ')'));
-      toast('Pedido ' + orderId + ' actualizado');
+      toast('Pedido ' + orderId + ' actualizado' + (data && data.emailSent ? ' · Email enviado al cliente' : ''));
       await loadAdminOrders();
     } catch (err) {
       toast(err.message || 'No se pudo guardar', 'error');
     }
+  }
+
+  async function deleteAdminOrder(orderId) {
+    try {
+      var headers = { 'Accept': 'application/json' };
+      if (state.adminToken) headers['x-admin-token'] = state.adminToken;
+      var res = await fetch('/api/admin/orders/' + enc(orderId), {
+        method: 'DELETE',
+        headers: headers
+      });
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(extractApiError(data, 'No se pudo eliminar (' + res.status + ')'));
+      state.adminDeleteConfirmId = '';
+      toast('Pedido ' + orderId + ' eliminado');
+      await loadAdminOrders();
+    } catch (err) {
+      toast(err.message || 'Error al eliminar pedido', 'error');
+    }
+  }
+
+  function exportAdminCsv() {
+    var rows = state.adminOrders || [];
+    if (!rows.length) {
+      toast('No hay pedidos para exportar', 'error');
+      return;
+    }
+    function csvCell(v) {
+      var s = String(v === undefined || v === null ? '' : v).replace(/\r?\n/g, ' ');
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    var header = ['ID', 'Fecha', 'Estado', 'Cliente', 'Telefono', 'Email', 'Ciudad', 'Entrega', 'MetodoPago', 'Prendas', 'SubtotalEUR', 'DtoGrupoEUR', 'Cupon', 'DtoCuponEUR', 'TotalEUR', 'TransportistaInterno', 'TrackingInterno', 'Notas'];
+    var lines = [header.map(csvCell).join(',')];
+    rows.forEach(function (o) {
+      var st = orderStatusInfo(o.status).label;
+      var deliveryTxt = o.deliveryMethod === 'outside_cordoba' ? 'Fuera de Córdoba' : 'Recogida Córdoba';
+      var eur = function (cents) { return ((Number(cents) || 0) / 100).toFixed(2); };
+      lines.push([
+        o.id,
+        o.createdAt || '',
+        st,
+        o.customer && o.customer.name,
+        o.customer && o.customer.phone,
+        o.customer && o.customer.email,
+        o.customer && o.customer.city,
+        deliveryTxt,
+        o.paymentMethod || '',
+        o.totalItems || 0,
+        eur(o.subtotalCents || o.totalPriceCents),
+        eur(o.volumeDiscountCents || 0),
+        o.promoCode || '',
+        eur(o.promoDiscountCents || 0),
+        eur(o.totalPriceCents || 0),
+        o.trackingCarrier || '',
+        o.trackingCode || '',
+        o.adminNotes || ''
+      ].map(csvCell).join(','));
+    });
+    var blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'kang-team-pedidos-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('CSV exportado (' + rows.length + ' pedidos)');
   }
 
   async function adminTriggerSync() {
@@ -5425,16 +5894,17 @@
     var st = orderStatusInfo(order.status).label;
     var phone4 = String((order.customer && order.customer.phone) || '').replace(/\D/g, '').slice(-4);
     var trackUrl = location.origin + '/#/seguimiento?id=' + encodeURIComponent(order.id) + (phone4 ? '&phone4=' + encodeURIComponent(phone4) : '');
-    var lines = [
-      'Hola ' + ((order.customer && order.customer.name) || '') + ', te escribimos de KANG Team sobre tu pedido ' + order.id + '.',
-      'Estado actual: ' + st + '.'
-    ];
-    if (order.trackingCode) {
-      lines.push('Código de seguimiento' + (order.trackingCarrier ? ' (' + order.trackingCarrier + ')' : '') + ': ' + order.trackingCode);
-      lines.push('Rastreo: https://t.17track.net/es#nums=' + encodeURIComponent(order.trackingCode));
+    var name = (order.customer && order.customer.name) || '';
+    var lines = ['Hola' + (name ? ' ' + name : '') + ', te escribimos de KANG Team sobre tu pedido ' + order.id + '.'];
+    if (order.status === 'ready') {
+      lines.push('¡Buenas noticias! Tu pedido ya está listo para recoger en Córdoba capital. ¿Cuándo te viene bien quedar?');
+    } else if (order.status === 'ordered' || order.status === 'shipped') {
+      lines.push('Tu pedido ya está tramitado / en camino. El plazo estimado de llegada es de 2 a 3 semanas.');
+    } else {
+      lines.push('Estado actual: ' + st + '.');
     }
     if (order.adminNotes) lines.push('Nota: ' + order.adminNotes);
-    lines.push('Consulta tu pedido cuando quieras: ' + trackUrl);
+    lines.push('Consulta el estado cuando quieras aquí: ' + trackUrl);
     return (phone ? 'https://wa.me/' + phone : 'https://wa.me/') + '?text=' + encodeURIComponent(lines.join('\n'));
   }
 
@@ -5483,17 +5953,21 @@
       ? filtered.map(function (o) {
           var st = orderStatusInfo(o.status);
           var waHref = buildCustomerWhatsappUrl(o);
+          var isConfirmDelete = state.adminDeleteConfirmId === o.id;
+          var hasEmail = !!(o.customer && o.customer.email);
           var itemsList = (o.items || []).map(function (it) {
             return '<li><span>' + esc(it.title) + '</span><b>Talla ' + esc(it.size) + ' ×' + (it.qty || 1) + (it.name ? ' · ' + esc(it.name) : '') + (it.number ? ' #' + esc(it.number) : '') + (it.patches && it.patches !== 'No' ? ' · ' + esc(it.patches) : '') + '</b></li>';
           }).join('');
           var statusOptions = Object.keys(ORDER_STATUS_META).map(function (k) {
             return '<option value="' + esc(k) + '"' + (o.status === k ? ' selected' : '') + '>' + esc(ORDER_STATUS_META[k].label) + '</option>';
           }).join('');
+          var promoBadge = o.promoCode ? '<span class="admin-pay-tag is-promo">Cupón ' + esc(o.promoCode) + '</span>' : '';
+          var deliveryTag = o.deliveryMethod === 'outside_cordoba' ? 'Fuera Córdoba' : 'Recogida Córdoba';
           return '<article class="admin-order-card" data-admin-order="' + esc(o.id) + '">' +
             '<div class="admin-order-head">' +
               '<div>' +
-                '<div class="admin-order-title-row"><strong>' + esc(o.id) + '</strong><span class="admin-status-badge ' + esc(st.cls) + '">' + esc(st.label) + '</span><span class="admin-pay-tag">' + (o.paymentMethod === 'bizum' ? 'Bizum' : 'WhatsApp/Email') + '</span></div>' +
-                '<p class="admin-customer-line">' + esc(o.customer && o.customer.name) + ' · ' + esc(o.customer && o.customer.phone) + (o.customer && o.customer.city ? ' · ' + esc(o.customer.city) : '') + (o.customer && o.customer.email ? ' · ' + esc(o.customer.email) : '') + '</p>' +
+                '<div class="admin-order-title-row"><strong>' + esc(o.id) + '</strong><span class="admin-status-badge ' + esc(st.cls) + '">' + esc(st.label) + '</span><span class="admin-pay-tag">' + (o.paymentMethod === 'bizum' ? 'Bizum' : 'WhatsApp/Email') + '</span><span class="admin-pay-tag">' + esc(deliveryTag) + '</span>' + promoBadge + '</div>' +
+                '<p class="admin-customer-line">' + esc(o.customer && o.customer.name) + ' · ' + esc(o.customer && o.customer.phone) + (o.customer && o.customer.city ? ' · ' + esc(o.customer.city) : '') + (hasEmail ? ' · ' + esc(o.customer.email) : '') + '</p>' +
                 (o.customer && o.customer.notes ? '<p class="admin-customer-notes">Nota cliente: ' + esc(o.customer.notes) + '</p>' : '') +
               '</div>' +
               '<div class="admin-order-total"><strong>' + esc(KangPricing.money(o.totalPriceCents || 0)) + '</strong><span>' + esc(formatDate(o.createdAt)) + ' · ' + (o.totalItems || 0) + ' art.</span></div>' +
@@ -5501,12 +5975,19 @@
             '<ul class="admin-order-items">' + itemsList + '</ul>' +
             '<form class="admin-order-edit" data-admin-edit="' + esc(o.id) + '">' +
               '<label class="field"><span>Estado</span><select name="status">' + statusOptions + '</select></label>' +
-              '<label class="field"><span>Transportista</span><input type="text" name="trackingCarrier" placeholder="Correos / DHL / 17TRACK" value="' + esc(o.trackingCarrier || '') + '"></label>' +
-              '<label class="field"><span>Código tracking</span><input type="text" name="trackingCode" placeholder="ES1234567890" value="' + esc(o.trackingCode || '') + '"></label>' +
-              '<label class="field admin-field-notes"><span>Nota interna / cliente</span><input type="text" name="adminNotes" placeholder="Visible en seguimiento..." value="' + esc(o.adminNotes || '') + '"></label>' +
+              '<label class="field"><span>Transportista (interno)</span><input type="text" name="trackingCarrier" placeholder="17TRACK / YunExpress..." value="' + esc(o.trackingCarrier || '') + '"></label>' +
+              '<label class="field"><span>Tracking privado</span><div class="admin-tracking-wrap"><input type="text" name="trackingCode" placeholder="Oculto al cliente" value="' + esc(o.trackingCode || '') + '">' + (o.trackingCode ? '<a class="admin-track-ext" href="https://t.17track.net/es#nums=' + enc(o.trackingCode) + '" target="_blank" rel="noopener" title="Abrir en 17TRACK (solo admin)">17TRACK</a>' : '') + '</div></label>' +
+              '<label class="field admin-field-notes"><span>Nota (visible en seguimiento)</span><input type="text" name="adminNotes" placeholder="Ej: Llega aprox. la semana próxima" value="' + esc(o.adminNotes || '') + '"></label>' +
               '<div class="admin-order-btns">' +
                 '<button type="submit" class="btn btn-primary">Guardar</button>' +
-                '<a class="btn btn-whatsapp" href="' + esc(waHref) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Avisar cliente</a>' +
+                '<a class="btn btn-whatsapp" href="' + esc(waHref) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> WhatsApp</a>' +
+                '<button type="button" class="btn btn-outline admin-delete-btn' + (isConfirmDelete ? ' is-confirm' : '') + '" data-admin-delete="' + esc(o.id) + '" title="Eliminar pedido">' + (isConfirmDelete ? '¿Confirmar?' : 'Eliminar') + '</button>' +
+              '</div>' +
+              '<div class="admin-edit-meta">' +
+                (hasEmail
+                  ? '<label class="admin-notify-check"><input type="checkbox" name="notifyEmail" checked> Avisar por email si cambia estado</label>'
+                  : '<span class="admin-notify-muted">Sin email para aviso automático</span>') +
+                '<span class="admin-private-hint">El código tracking es privado y nunca se muestra al cliente.</span>' +
               '</div>' +
             '</form>' +
           '</article>';
@@ -5518,6 +5999,7 @@
         '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
         '<div class="admin-topbar-actions">' +
           (!meta.isVercel ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
+          '<button type="button" class="btn btn-outline" id="admin-export-csv">Exportar CSV</button>' +
           '<button type="button" class="btn btn-outline" id="admin-refresh-btn">Actualizar</button>' +
           (state.adminToken ? '<button type="button" class="btn btn-ghost" id="admin-logout-btn">Cerrar sesión</button>' : '') +
         '</div>' +
@@ -5554,17 +6036,23 @@
       if (editForm) {
         event.preventDefault();
         var orderId = editForm.getAttribute('data-admin-edit');
+        var notifyCb = editForm.elements.notifyEmail;
         updateAdminOrder(orderId, {
           status: editForm.elements.status.value,
           trackingCarrier: editForm.elements.trackingCarrier.value.trim(),
           trackingCode: editForm.elements.trackingCode.value.trim(),
-          adminNotes: editForm.elements.adminNotes.value.trim()
+          adminNotes: editForm.elements.adminNotes.value.trim(),
+          notifyEmail: notifyCb ? !!notifyCb.checked : true
         });
       }
     });
     box.addEventListener('click', function (event) {
       if (event.target.closest('#admin-refresh-btn') || event.target.closest('#admin-retry-btn')) {
         loadAdminOrders();
+        return;
+      }
+      if (event.target.closest('#admin-export-csv')) {
+        exportAdminCsv();
         return;
       }
       if (event.target.closest('#admin-sync-btn')) {
@@ -5578,9 +6066,21 @@
         renderAdminView();
         return;
       }
+      var delBtn = event.target.closest('[data-admin-delete]');
+      if (delBtn) {
+        var delId = delBtn.getAttribute('data-admin-delete') || '';
+        if (state.adminDeleteConfirmId === delId) {
+          deleteAdminOrder(delId);
+        } else {
+          state.adminDeleteConfirmId = delId;
+          renderAdminView();
+        }
+        return;
+      }
       var chip = event.target.closest('[data-admin-status]');
       if (chip) {
         state.adminStatusFilter = chip.getAttribute('data-admin-status') || '';
+        state.adminDeleteConfirmId = '';
         renderAdminView();
       }
     });

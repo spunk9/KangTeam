@@ -4248,5 +4248,261 @@ svg { display: block; }
   .lightbox-nav-btn.is-next { right:10px; }
 }
 
+/* ── Sección 4: PWA, Descuentos, Entrega Córdoba, ETA y Admin ── */
+.offline-banner {
+  background:rgba(255,91,46,.16);
+  border-bottom:1px solid rgba(255,91,46,.45);
+  color:#ffd5c7;
+  font-size:12.5px;
+  font-weight:600;
+  text-align:center;
+  padding:7px 14px;
+}
+.footer-install-link {
+  background:none;
+  border:0;
+  padding:0;
+  color:var(--volt);
+  font:inherit;
+  font-weight:600;
+  text-align:left;
+  cursor:pointer;
+}
+.footer-install-link:hover { text-decoration:underline; }
+
+.pwa-ios-modal {
+  max-width:440px;
+  width:calc(100% - 32px);
+  padding:28px 26px;
+}
+.pwa-ios-content h2 {
+  margin:4px 0 8px;
+  font-size:24px;
+}
+.pwa-ios-lead {
+  color:var(--muted);
+  font-size:14px;
+  margin:0 0 14px;
+}
+.pwa-ios-steps {
+  margin:0 0 20px;
+  padding-left:20px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  font-size:14px;
+  color:var(--text);
+}
+
+.price-card.is-highlight {
+  border-color:rgba(217,255,63,.42);
+  background:linear-gradient(180deg, rgba(217,255,63,.06), var(--surface));
+}
+.price-card.is-highlight .price-card-head span:first-child {
+  color:var(--volt);
+}
+
+.cart-total.is-discount span,
+.cart-total.is-discount strong {
+  color:var(--volt);
+  font-size:13.5px;
+}
+
+.payment-outside-preview {
+  margin-top:8px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(255,184,0,.09);
+  border:1px solid rgba(255,184,0,.35);
+  color:#ffe194;
+  font-size:12.5px;
+  line-height:1.45;
+}
+
+.promo-box {
+  margin:14px 0 12px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px dashed var(--line-strong);
+  background:rgba(255,255,255,.02);
+}
+.promo-box summary {
+  cursor:pointer;
+  font-size:12.5px;
+  font-weight:600;
+  color:var(--muted);
+  list-style:none;
+}
+.promo-box summary::-webkit-details-marker { display:none; }
+.promo-box[open] summary { color:var(--text); margin-bottom:10px; }
+.promo-row {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.promo-row input {
+  flex:1;
+  min-width:0;
+  height:36px;
+  padding:0 10px;
+  border-radius:8px;
+  border:1px solid var(--line-strong);
+  background:var(--surface-2);
+  color:var(--text);
+  font-size:13px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.promo-row .btn { height:36px; padding:0 12px; font-size:12px; }
+.promo-msg {
+  margin:6px 0 0;
+  font-size:12px;
+}
+.promo-msg.is-ok { color:var(--volt); font-weight:600; }
+.promo-msg.is-error { color:var(--orange); }
+
+.summary-totals .is-discount span,
+.summary-totals .is-discount strong {
+  color:var(--volt);
+}
+
+.track-eta-box {
+  margin:14px 0;
+  padding:14px 16px;
+  border-radius:12px;
+  border:1px solid var(--line-strong);
+  background:var(--surface-2);
+}
+.track-eta-box span {
+  display:block;
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+.track-eta-box strong {
+  display:block;
+  font-size:15px;
+  color:var(--text);
+}
+.track-eta-box p {
+  margin:4px 0 0;
+  font-size:13px;
+  color:var(--muted);
+}
+.track-eta-box.is-ready {
+  border-color:rgba(217,255,63,.55);
+  background:rgba(217,255,63,.09);
+}
+.track-eta-box.is-ready span,
+.track-eta-box.is-ready strong {
+  color:var(--volt);
+}
+.track-eta-box.is-delivered {
+  border-color:rgba(37,211,102,.45);
+  background:rgba(37,211,102,.08);
+}
+
+.track-discounts {
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  font-size:13px;
+}
+.track-discounts > div {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  color:var(--muted);
+}
+.track-discounts > div.is-discount {
+  color:var(--volt);
+}
+
+.admin-status-badge.is-ready {
+  border-color:rgba(217,255,63,.65);
+  background:rgba(217,255,63,.16);
+  color:var(--volt);
+}
+.admin-pay-tag.is-promo {
+  border-color:rgba(217,255,63,.45);
+  color:var(--volt);
+}
+.admin-tracking-wrap {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.admin-tracking-wrap input {
+  flex:1;
+  min-width:0;
+}
+.admin-track-ext {
+  height:40px;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid var(--line-strong);
+  background:var(--surface-2);
+  color:var(--volt);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.04em;
+  display:inline-flex;
+  align-items:center;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.admin-track-ext:hover {
+  border-color:var(--volt);
+}
+.admin-edit-meta {
+  grid-column:1 / -1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+  padding-top:4px;
+  border-top:1px solid var(--line);
+}
+.admin-notify-check {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size:12.5px;
+  color:var(--text);
+  cursor:pointer;
+}
+.admin-notify-check input {
+  accent-color:var(--volt);
+  width:15px;
+  height:15px;
+}
+.admin-notify-muted,
+.admin-private-hint {
+  font-size:11.5px;
+  color:var(--muted);
+}
+.admin-delete-btn {
+  border-color:rgba(255,91,46,.35);
+  color:#ff9b80;
+}
+.admin-delete-btn:hover {
+  border-color:var(--orange);
+  color:var(--orange);
+}
+.admin-delete-btn.is-confirm {
+  background:rgba(255,91,46,.22);
+  border-color:var(--orange);
+  color:#ffd5c7;
+}
+
+
 
 

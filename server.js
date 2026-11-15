@@ -51,6 +51,7 @@ var MIME = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
   '.webmanifest': 'application/manifest+json'
 };
 
@@ -63,13 +64,14 @@ var orderRate = {};
 var blobStore = new Map();
 var TMP_ORDERS_DIR = '/tmp/kang-orders';
 
-var ORDER_STATUSES = ['pending', 'bizum_pending', 'paid', 'ordered', 'shipped', 'delivered', 'cancelled'];
+var ORDER_STATUSES = ['pending', 'bizum_pending', 'paid', 'ordered', 'shipped', 'ready', 'delivered', 'cancelled'];
 var ORDER_STATUS_LABELS = {
   pending: 'Pendiente de confirmar',
   bizum_pending: 'Esperando Bizum',
   paid: 'Pagado',
-  ordered: 'Pedido a proveedor',
-  shipped: 'Enviado',
+  ordered: 'Pedido a proveedor (2-3 sem.)',
+  shipped: 'En camino (2-3 sem.)',
+  ready: 'Listo para recogida (Córdoba)',
   delivered: 'Entregado',
   cancelled: 'Cancelado'
 };
@@ -261,6 +263,60 @@ function sanitizeShort(value, max) {
   return String(value || '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function parsePromoRules() {
+  var raw = String(process.env.PROMO_CODES || '').trim();
+  if (!raw) return [];
+  var rules = [];
+  raw.split(',').forEach(function (entry) {
+    entry = entry.trim();
+    if (!entry) return;
+    var colonIdx = entry.indexOf(':');
+    var eqIdx = entry.indexOf('=');
+    var sep = (colonIdx !== -1 && (eqIdx === -1 || colonIdx < eqIdx)) ? colonIdx : eqIdx;
+    if (sep <= 0) return;
+    var code = entry.slice(0, sep).trim().toUpperCase();
+    var spec = entry.slice(sep + 1).trim();
+    if (!/^[A-Z0-9_-]{2,24}$/.test(code) || !spec) return;
+    var parts = spec.split(':');
+    var valRaw = parts[0].trim();
+    var minItems = Math.max(0, parseInt(parts[1] || '0', 10) || 0);
+    var pctMatch = valRaw.match(/^-?(\d+(?:[.,]\d+)?)\s*%$/);
+    if (pctMatch) {
+      var pct = Math.min(50, Math.max(1, parseFloat(pctMatch[1].replace(',', '.'))));
+      rules.push({ code: code, kind: 'percent', value: pct, minItems: minItems, label: '-' + pct + '%' });
+      return;
+    }
+    var eurMatch = valRaw.match(/^-?(\d+(?:[.,]\d+)?)\s*(?:€|e|eur)?$/i);
+    if (eurMatch) {
+      var eur = parseFloat(eurMatch[1].replace(',', '.'));
+      var cents = Math.round(eur * 100);
+      if (cents > 0) {
+        rules.push({ code: code, kind: 'fixed', value: cents, minItems: minItems, label: '-' + pricing.money(cents) });
+      }
+    }
+  });
+  return rules;
+}
+
+function evaluatePromo(code, baseCents, totalItems) {
+  var clean = String(code || '').trim().toUpperCase();
+  if (!clean) return { ok: true, code: '', discountCents: 0, label: '' };
+  var rules = parsePromoRules();
+  var rule = null;
+  for (var i = 0; i < rules.length; i++) {
+    if (rules[i].code === clean) { rule = rules[i]; break; }
+  }
+  if (!rule) return { ok: false, error: 'Cupón privado no válido o caducado.' };
+  if (rule.minItems && totalItems < rule.minItems) {
+    return { ok: false, error: 'Este cupón requiere al menos ' + rule.minItems + ' prendas en el pedido.' };
+  }
+  var discount = rule.kind === 'percent'
+    ? Math.round((Math.max(0, baseCents) * rule.value) / 100)
+    : rule.value;
+  discount = Math.min(Math.max(0, baseCents), Math.max(0, discount));
+  return { ok: true, code: rule.code, discountCents: discount, label: rule.label };
+}
+
 function validateOrder(payload) {
   if (!payload || typeof payload !== 'object') throw new Error('Pedido no válido');
   var customer = payload.customer || {};
@@ -333,12 +389,25 @@ function validateOrder(payload) {
     paymentMethod = payload.paymentMethod;
   }
 
+  var deliveryMethod = 'pickup_cordoba';
+  if (payload.deliveryMethod === 'outside_cordoba') deliveryMethod = 'outside_cordoba';
+
+  var totalItems = cleanItems.reduce(function (sum, item) { return sum + item.qty; }, 0);
+  var subtotalCents = cleanItems.reduce(function (sum, item) { return sum + item.lineTotalCents; }, 0);
+  var vol = pricing.getVolumeDiscount ? pricing.getVolumeDiscount(totalItems) : { discountCents: 0, label: '' };
+  var afterVolumeCents = Math.max(0, subtotalCents - (vol.discountCents || 0));
+
+  var promoEval = evaluatePromo(payload.promoCode || '', afterVolumeCents, totalItems);
+  if (!promoEval.ok) throw new Error(promoEval.error);
+  var finalTotalCents = Math.max(0, afterVolumeCents - (promoEval.discountCents || 0));
+
   var nowIso = new Date().toISOString();
   var initialStatus = paymentMethod === 'bizum' ? 'bizum_pending' : 'pending';
   return {
     id: 'KT-' + nowIso.slice(2, 10).replace(/-/g, '') + '-' + crypto.randomBytes(2).toString('hex').toUpperCase(),
     createdAt: nowIso,
     updatedAt: nowIso,
+    supplierOrderedAt: '',
     status: initialStatus,
     trackingCode: '',
     trackingCarrier: '',
@@ -351,10 +420,16 @@ function validateOrder(payload) {
       }
     ],
     paymentMethod: paymentMethod,
-    customer: { name: name, phone: phone, email: email, city: city, notes: notes },
+    deliveryMethod: deliveryMethod,
+    customer: { name: name, phone: phone, email: email, city: city || 'Córdoba', notes: notes },
     items: cleanItems,
-    totalItems: cleanItems.reduce(function (sum, item) { return sum + item.qty; }, 0),
-    totalPriceCents: cleanItems.reduce(function (sum, item) { return sum + item.lineTotalCents; }, 0)
+    totalItems: totalItems,
+    subtotalCents: subtotalCents,
+    volumeDiscountCents: vol.discountCents || 0,
+    volumeDiscountLabel: vol.label || '',
+    promoCode: promoEval.code || '',
+    promoDiscountCents: promoEval.discountCents || 0,
+    totalPriceCents: finalTotalCents
   };
 }
 
@@ -404,9 +479,19 @@ function orderToText(order) {
   if (order.customer.notes) lines.push('Notas: ' + order.customer.notes);
   lines.push('');
   lines.push('Total artículos: ' + order.totalItems);
+  if (order.subtotalCents && order.subtotalCents !== order.totalPriceCents) {
+    lines.push('Subtotal prendas: ' + pricing.money(order.subtotalCents));
+  }
+  if (order.volumeDiscountCents) {
+    lines.push('Descuento volumen (' + (order.volumeDiscountLabel || 'grupo') + '): -' + pricing.money(order.volumeDiscountCents));
+  }
+  if (order.promoDiscountCents) {
+    lines.push('Cupón privado (' + order.promoCode + '): -' + pricing.money(order.promoDiscountCents));
+  }
   lines.push('TOTAL DEL PEDIDO: ' + pricing.money(order.totalPriceCents));
   lines.push('Método de pago: ' + (order.paymentMethod === 'bizum' ? 'Bizum directo' : 'Confirmar primero (WhatsApp / Email)'));
-  lines.push('Gastos de envío: por confirmar');
+  lines.push('Entrega: ' + (order.deliveryMethod === 'outside_cordoba' ? 'Fuera de Córdoba (pedido grande · a consultar)' : 'Recogida en mano en Córdoba capital (Gratis)'));
+  lines.push('Plazo estimado: 2-3 semanas desde pedido a proveedor');
   return lines.join('\n');
 }
 
@@ -429,6 +514,17 @@ function orderToHtml(order) {
     '</tr>';
   }).join('');
 
+  var discountLine = '';
+  if (order.volumeDiscountCents) {
+    discountLine += '<br><span style="font-size:13px;color:#1b7e3c">Descuento volumen: -' + escapeHtml(pricing.money(order.volumeDiscountCents)) + '</span>';
+  }
+  if (order.promoDiscountCents) {
+    discountLine += '<br><span style="font-size:13px;color:#1b7e3c">Cupón ' + escapeHtml(order.promoCode) + ': -' + escapeHtml(pricing.money(order.promoDiscountCents)) + '</span>';
+  }
+  var deliveryText = order.deliveryMethod === 'outside_cordoba'
+    ? 'Fuera de Córdoba (pedido grande · a consultar)'
+    : 'Recogida en Córdoba capital (Gratis · plazo 2-3 semanas)';
+
   return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;color:#111">' +
     '<h1 style="font-size:22px;margin:0 0 4px">Nuevo pedido · ' + escapeHtml(STORE.name) + '</h1>' +
     '<p style="color:#666;margin:0 0 18px">' + escapeHtml(order.id) + ' · ' + escapeHtml(new Date(order.createdAt).toLocaleString('es-ES')) + '</p>' +
@@ -439,7 +535,10 @@ function orderToHtml(order) {
         '<th style="padding:10px 12px">Uds.</th><th style="padding:10px 12px">Precio unidad</th><th style="padding:10px 12px">Subtotal</th>' +
       '</tr></thead><tbody>' + rows + '</tbody>' +
     '</table>' +
-    '<p style="text-align:right;font-size:18px"><strong>Total del pedido: ' + escapeHtml(pricing.money(order.totalPriceCents)) + '</strong><br><span style="font-size:12px;color:#777">Gastos de envío por confirmar</span></p>' +
+    '<p style="text-align:right;font-size:18px">' + discountLine + (discountLine ? '<br>' : '') +
+      '<strong>Total del pedido: ' + escapeHtml(pricing.money(order.totalPriceCents)) + '</strong><br>' +
+      '<span style="font-size:12px;color:#777">' + escapeHtml(deliveryText) + '</span>' +
+    '</p>' +
     '<h2 style="font-size:16px;margin:24px 0 8px">Cliente</h2>' +
     '<p style="font-size:14px;line-height:1.6;margin:0">' +
       '<strong>' + escapeHtml(order.customer.name) + '</strong><br>' +
@@ -450,7 +549,7 @@ function orderToHtml(order) {
     '</p>' +
     '<p style="color:#888;font-size:12px;margin-top:24px">' +
       (order.paymentMethod === 'bizum'
-        ? 'Método elegido: Bizum directo (concepto ' + escapeHtml(order.id) + '). Pendiente de confirmar envío y justificante.'
+        ? 'Método elegido: Bizum directo (concepto ' + escapeHtml(order.id) + ').'
         : 'Pedido generado desde el catálogo online. No se ha realizado ningún cobro.') +
     '</p>' +
   '</div>';
@@ -631,6 +730,28 @@ async function listAllOrders() {
   });
 }
 
+async function deleteOrderById(id) {
+  var cleanId = String(id || '').trim().toUpperCase();
+  if (!/^KT-\d{6}-[A-F0-9]{4,8}$/.test(cleanId)) return false;
+  if (IS_VERCEL) {
+    var blobAuth = resolveBlobAuthOptions();
+    if (blobAuth) {
+      var blob = await import('@vercel/blob');
+      await blob.del('orders/' + cleanId + '.json', blobAuth);
+      return true;
+    }
+    blobStore.delete('orders/' + cleanId + '.json');
+    try { fs.unlinkSync(path.join(TMP_ORDERS_DIR, cleanId + '.json')); } catch (e) {}
+    return true;
+  }
+  try {
+    fs.unlinkSync(path.join(ORDERS_DIR, cleanId + '.json'));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function isAdminAuthorized(req, parsed) {
   var remote = req.socket.remoteAddress || '';
   var isLocal = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
@@ -647,18 +768,27 @@ function isAdminAuthorized(req, parsed) {
 }
 
 function publicOrderView(order) {
+  var safeHistory = (order.statusHistory || []).map(function (h) {
+    var cleanNote = String(h.note || '').replace(/\s*·\s*Tracking:.*$/i, '').trim();
+    return { status: h.status, at: h.at, note: cleanNote || (ORDER_STATUS_LABELS[h.status] || h.status) };
+  });
   return {
     id: order.id,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
+    supplierOrderedAt: order.supplierOrderedAt || '',
     status: order.status,
     statusLabel: ORDER_STATUS_LABELS[order.status] || order.status,
     paymentMethod: order.paymentMethod,
-    trackingCode: order.trackingCode || '',
-    trackingCarrier: order.trackingCarrier || '',
+    deliveryMethod: order.deliveryMethod || 'pickup_cordoba',
     adminNotes: order.adminNotes || '',
-    statusHistory: order.statusHistory || [],
+    statusHistory: safeHistory,
     totalItems: order.totalItems,
+    subtotalCents: order.subtotalCents || order.totalPriceCents,
+    volumeDiscountCents: order.volumeDiscountCents || 0,
+    volumeDiscountLabel: order.volumeDiscountLabel || '',
+    promoCode: order.promoCode || '',
+    promoDiscountCents: order.promoDiscountCents || 0,
     totalPriceCents: order.totalPriceCents,
     items: (order.items || []).map(function (i) {
       return {
@@ -678,14 +808,15 @@ function publicOrderView(order) {
   };
 }
 
-async function notifyOrder(order) {
-  var result = { email: false, whatsapp: false, webhook: false, errors: [] };
-  var subject = 'Nuevo pedido ' + order.id + ' · ' + order.totalItems + ' art. · ' + order.customer.name;
-  var text = orderToText(order);
-  var html = orderToHtml(order);
-  var to = process.env.ORDER_TO || STORE.email;
+async function sendEmailMessage(opts) {
+  var to = opts && opts.to;
+  var subject = (opts && opts.subject) || '';
+  var text = (opts && opts.text) || '';
+  var html = (opts && opts.html) || '';
+  var out = { sent: false, errors: [] };
+  if (!to) return out;
 
-  if (process.env.RESEND_API_KEY && to) {
+  if (process.env.RESEND_API_KEY) {
     try {
       var resend = await postJson('https://api.resend.com/emails', {
         Authorization: 'Bearer ' + process.env.RESEND_API_KEY
@@ -696,12 +827,12 @@ async function notifyOrder(order) {
         text: text,
         html: html
       });
-      if (resend.status >= 200 && resend.status < 300) result.email = true;
-      else result.errors.push('Resend: ' + resend.status + ' ' + resend.body.slice(0, 200));
-    } catch (err) { result.errors.push('Resend: ' + err.message); }
+      if (resend.status >= 200 && resend.status < 300) { out.sent = true; return out; }
+      out.errors.push('Resend: ' + resend.status + ' ' + resend.body.slice(0, 200));
+    } catch (err) { out.errors.push('Resend: ' + err.message); }
   }
 
-  if (!result.email && process.env.BREVO_API_KEY && to) {
+  if (process.env.BREVO_API_KEY) {
     try {
       var from = process.env.ORDER_FROM || '';
       var fromEmail = (from.match(/<([^>]+)>/) || [])[1] || from || STORE.email;
@@ -715,12 +846,12 @@ async function notifyOrder(order) {
         textContent: text,
         htmlContent: html
       });
-      if (brevo.status >= 200 && brevo.status < 300) result.email = true;
-      else result.errors.push('Brevo: ' + brevo.status + ' ' + brevo.body.slice(0, 200));
-    } catch (err) { result.errors.push('Brevo: ' + err.message); }
+      if (brevo.status >= 200 && brevo.status < 300) { out.sent = true; return out; }
+      out.errors.push('Brevo: ' + brevo.status + ' ' + brevo.body.slice(0, 200));
+    } catch (err) { out.errors.push('Brevo: ' + err.message); }
   }
 
-  if (!result.email && process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && to) {
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
     try {
       var nodemailer = require('nodemailer');
       var gmail = nodemailer.createTransport({
@@ -737,10 +868,57 @@ async function notifyOrder(order) {
         text: text,
         html: html
       });
-      if (gmailResult && gmailResult.messageId) result.email = true;
-      else result.errors.push('Gmail: el servidor no confirmó el envío');
-    } catch (err) { result.errors.push('Gmail: ' + err.message); }
+      if (gmailResult && gmailResult.messageId) { out.sent = true; return out; }
+      out.errors.push('Gmail: el servidor no confirmó el envío');
+    } catch (err) { out.errors.push('Gmail: ' + err.message); }
   }
+
+  return out;
+}
+
+async function notifyCustomerStatusChange(order) {
+  var to = order && order.customer && order.customer.email;
+  if (!to) return { sent: false, reason: 'no_email', errors: [] };
+  var statusLabel = ORDER_STATUS_LABELS[order.status] || order.status;
+  var subject = 'Actualización de tu pedido ' + order.id + ' · ' + statusLabel;
+  var statusMsg = 'El estado de tu pedido ha cambiado a: ' + statusLabel + '.';
+  if (order.status === 'ordered' || order.status === 'shipped') {
+    statusMsg = 'Tu pedido ya está tramitado y en camino. El plazo estimado de llegada es de 2 a 3 semanas desde el pedido al proveedor.';
+  } else if (order.status === 'ready') {
+    statusMsg = '¡Buenas noticias! Tu pedido ya ha llegado y está listo para recoger en Córdoba capital. Escríbenos por WhatsApp para concretar la entrega.';
+  } else if (order.status === 'paid') {
+    statusMsg = 'Hemos confirmado el pago de tu pedido. En breve lo tramitaremos con el proveedor (plazo estimado 2-3 semanas).';
+  }
+  var lines = [
+    'Hola ' + (order.customer.name || '') + ',',
+    '',
+    statusMsg,
+    'Pedido: ' + order.id,
+    'Estado actual: ' + statusLabel,
+    order.adminNotes ? ('Nota: ' + order.adminNotes) : '',
+    '',
+    'Gracias por confiar en ' + STORE.name + '.'
+  ].filter(Boolean);
+  var html = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#111">' +
+    '<h2 style="margin:0 0 8px">' + escapeHtml(STORE.name) + ' · Pedido ' + escapeHtml(order.id) + '</h2>' +
+    '<p style="font-size:15px;line-height:1.55">' + escapeHtml(statusMsg) + '</p>' +
+    '<p style="padding:12px 14px;background:#f4f2ec;border-radius:8px;font-size:14px"><strong>Estado actual:</strong> ' + escapeHtml(statusLabel) +
+    (order.adminNotes ? '<br><strong>Nota de la tienda:</strong> ' + escapeHtml(order.adminNotes) : '') + '</p>' +
+    '<p style="font-size:13px;color:#666">Recogida gratuita en Córdoba capital. Si tienes cualquier duda respóndenos por WhatsApp.</p>' +
+  '</div>';
+  return sendEmailMessage({ to: to, subject: subject, text: lines.join('\n'), html: html });
+}
+
+async function notifyOrder(order) {
+  var result = { email: false, whatsapp: false, webhook: false, errors: [] };
+  var subject = 'Nuevo pedido ' + order.id + ' · ' + order.totalItems + ' art. · ' + order.customer.name;
+  var text = orderToText(order);
+  var html = orderToHtml(order);
+  var to = process.env.ORDER_TO || STORE.email;
+
+  var mailRes = await sendEmailMessage({ to: to, subject: subject, text: text, html: html });
+  result.email = mailRes.sent;
+  if (mailRes.errors.length) result.errors = result.errors.concat(mailRes.errors);
 
   if (process.env.ORDER_WEBHOOK_URL) {
     try {
@@ -939,8 +1117,24 @@ async function handle(req, res) {
       store: STORE,
       syncIntervalHours: SYNC_INTERVAL_HOURS,
       updatedAt: catalog.meta.generatedAt,
-      total: catalog.meta.total
+      total: catalog.meta.total,
+      hasPromoCodes: parsePromoRules().length > 0,
+      analyticsGaId: process.env.GA_MEASUREMENT_ID || '',
+      deliveryDefault: 'pickup_cordoba'
     }, req);
+  }
+
+  if (pathname === '/api/promo/validate' && req.method === 'POST') {
+    try {
+      var promoRaw = await readBody(req, 8 * 1024);
+      var promoBody = JSON.parse(promoRaw || '{}');
+      var promoRes = evaluatePromo(promoBody.code || '', parseInt(promoBody.baseCents, 10) || 0, parseInt(promoBody.totalItems, 10) || 0);
+      if (!promoRes.ok) return sendJson(res, 400, { error: promoRes.error }, req);
+      if (!promoRes.code) return sendJson(res, 400, { error: 'Introduce un código de cupón.' }, req);
+      return sendJson(res, 200, { ok: true, promo: promoRes }, req);
+    } catch (err) {
+      return sendJson(res, 400, { error: 'No se pudo validar el cupón' }, req);
+    }
   }
 
   if (pathname === '/api/catalog' && req.method === 'GET') {
@@ -1055,7 +1249,7 @@ async function handle(req, res) {
       if (o.status !== 'cancelled') stats.revenueCents += (Number(o.totalPriceCents) || 0);
       if (o.status === 'pending' || o.status === 'bizum_pending') stats.pendingCount += 1;
       else if (o.status === 'paid' || o.status === 'ordered') stats.inProgressCount += 1;
-      else if (o.status === 'shipped' || o.status === 'delivered') stats.shippedCount += 1;
+      else if (o.status === 'shipped' || o.status === 'ready' || o.status === 'delivered') stats.shippedCount += 1;
       (o.items || []).forEach(function (it) {
         if (it.team) teamCounts[it.team] = (teamCounts[it.team] || 0) + (Number(it.qty) || 1);
       });
@@ -1084,7 +1278,6 @@ async function handle(req, res) {
       var body = JSON.parse(patchRaw || '{}');
       var nowUpdate = new Date().toISOString();
       var prevStatus = existing.status;
-      var prevTracking = existing.trackingCode;
 
       if (body.status !== undefined) {
         if (ORDER_STATUSES.indexOf(body.status) === -1) return sendJson(res, 400, { error: 'Estado no válido' }, req);
@@ -1093,20 +1286,35 @@ async function handle(req, res) {
       if (body.trackingCode !== undefined) existing.trackingCode = sanitizeShort(body.trackingCode, 80);
       if (body.trackingCarrier !== undefined) existing.trackingCarrier = sanitizeShort(body.trackingCarrier, 50);
       if (body.adminNotes !== undefined) existing.adminNotes = sanitizeShort(body.adminNotes, 400);
+      if ((existing.status === 'ordered' || existing.status === 'shipped') && !existing.supplierOrderedAt) {
+        existing.supplierOrderedAt = nowUpdate;
+      }
       existing.updatedAt = nowUpdate;
 
-      if (existing.status !== prevStatus || (existing.trackingCode && existing.trackingCode !== prevTracking)) {
-        var histNote = sanitizeShort(body.historyNote || '', 160) ||
-          (existing.trackingCode && existing.trackingCode !== prevTracking
-            ? (ORDER_STATUS_LABELS[existing.status] + ' · Tracking: ' + existing.trackingCode)
-            : (ORDER_STATUS_LABELS[existing.status] || existing.status));
+      if (existing.status !== prevStatus) {
+        var histNote = sanitizeShort(body.historyNote || '', 160) || (ORDER_STATUS_LABELS[existing.status] || existing.status);
         existing.statusHistory.push({ status: existing.status, at: nowUpdate, note: histNote });
       }
       await saveOrder(existing, true);
-      return sendJson(res, 200, { ok: true, order: existing }, req);
+
+      var emailResult = { sent: false };
+      if (existing.status !== prevStatus && body.notifyEmail !== false && existing.customer && existing.customer.email) {
+        emailResult = await notifyCustomerStatusChange(existing);
+      }
+
+      return sendJson(res, 200, { ok: true, order: existing, emailSent: !!emailResult.sent }, req);
     } catch (err) {
       return sendJson(res, 400, { error: err.message || 'No se pudo actualizar el pedido' }, req);
     }
+  }
+
+  if (pathname.indexOf('/api/admin/orders/') === 0 && req.method === 'DELETE') {
+    var authDel = isAdminAuthorized(req, parsed);
+    if (!authDel.ok) return sendJson(res, authDel.status, { error: authDel.error }, req);
+    var delId = decodeURIComponent(pathname.slice('/api/admin/orders/'.length)).trim().toUpperCase();
+    var deleted = await deleteOrderById(delId);
+    if (!deleted) return sendJson(res, 404, { error: 'Pedido no encontrado' }, req);
+    return sendJson(res, 200, { ok: true, deletedId: delId }, req);
   }
 
   if (pathname === '/api/orders' && req.method === 'POST') {
@@ -1132,14 +1340,25 @@ async function handle(req, res) {
       console.log('Pedido', order.id, '·', order.paymentMethod, '·', order.customer.name, '·', order.totalItems, 'art. · email:', delivery.email, '· wa:', delivery.whatsapp);
       return sendJson(res, 200, {
         ok: true,
-        order: { id: order.id, createdAt: order.createdAt, status: order.status, totalPriceCents: order.totalPriceCents, paymentMethod: order.paymentMethod },
+        order: {
+          id: order.id,
+          createdAt: order.createdAt,
+          status: order.status,
+          paymentMethod: order.paymentMethod,
+          deliveryMethod: order.deliveryMethod,
+          subtotalCents: order.subtotalCents,
+          volumeDiscountCents: order.volumeDiscountCents,
+          promoCode: order.promoCode,
+          promoDiscountCents: order.promoDiscountCents,
+          totalPriceCents: order.totalPriceCents
+        },
         delivery: delivery,
         whatsappUrl: whatsappUrl,
         mailtoUrl: mailtoUrl,
         text: text
       }, req);
     } catch (err) {
-      var status = /no válid|obligatorio|vacío|encontrado|Talla|Cantidad|dorsal|Demasiados/.test(err.message) ? 400 : 500;
+      var status = /no válid|obligatorio|vacío|encontrado|Talla|Cantidad|dorsal|Demasiados|cupón|requiere/i.test(err.message) ? 400 : 500;
       return sendJson(res, status, { error: err.message }, req);
     }
   }

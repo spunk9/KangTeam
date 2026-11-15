@@ -4,16 +4,53 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KANG Team · Catálogo de camisetas, chándals y equipaciones</title>
-  <meta name="description" content="Catálogo online de camisetas, chándals y chaquetas de fútbol. Personaliza tu camiseta con nombre, dorsal y parches. Pedidos por WhatsApp o email.">
+  <meta name="description" content="Catálogo online de camisetas, chándals y chaquetas de fútbol con personalización de nombre, dorsal y parches. Descuentos por grupo y recogida gratuita en Córdoba capital.">
+  <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#0a0c0f">
-  <meta property="og:title" content="KANG Team · Viste tu pasión">
-  <meta property="og:description" content="Más de 10.900 prendas de tus equipos. Personaliza nombre, dorsal y parches.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KANG Team">
+  <meta property="og:title" content="KANG Team · Camisetas, chándals y equipaciones">
+  <meta property="og:description" content="Más de 10.900 prendas de tus equipos. Personaliza nombre, dorsal y parches. Descuentos desde 5 prendas y recogida en Córdoba.">
   <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:site_name" content="KANG Team">
+  <meta property="og:image" content="/og-cover.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="KANG Team · Viste tu pasión">
+  <meta name="twitter:description" content="Camisetas, chándals y equipaciones personalizables con descuentos por grupo y recogida gratis en Córdoba.">
+  <meta name="twitter:image" content="/og-cover.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261115-07">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-08">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SportsGoodsStore",
+    "name": "KANG Team",
+    "description": "Catálogo online de camisetas, chándals y equipaciones de fútbol con personalización de nombre, dorsal y parches. Recogida gratuita en Córdoba capital.",
+    "image": "/og-cover.png",
+    "priceRange": "25€ - 89€",
+    "currenciesAccepted": "EUR",
+    "paymentAccepted": "Bizum, WhatsApp",
+    "areaServed": {
+      "@type": "City",
+      "name": "Córdoba"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Córdoba",
+      "addressCountry": "ES"
+    }
+  }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -60,18 +97,21 @@
   <div class="announcement" id="announcement">
     <div class="announcement-track">
       <div class="announcement-group">
+        <span>Recogida gratis en Córdoba capital · Plazo estimado 2–3 semanas</span><i>·</i>
+        <span>Descuento por grupo desde 5 prendas (-1€ / -2€ / -3€ por ud.)</span><i>·</i>
+        <span>Pago por Bizum directo sin comisiones</span><i>·</i>
         <span>Personaliza tu camiseta con nombre, dorsal y parches</span><i>·</i>
-        <span>Catálogo actualizado automáticamente</span><i>·</i>
-        <span>Pago por Bizum directo o WhatsApp</span><i>·</i>
-        <span>Más de 10.900 prendas de tus equipos</span><i>·</i>
       </div>
       <div class="announcement-group" aria-hidden="true">
+        <span>Recogida gratis en Córdoba capital · Plazo estimado 2–3 semanas</span><i>·</i>
+        <span>Descuento por grupo desde 5 prendas (-1€ / -2€ / -3€ por ud.)</span><i>·</i>
+        <span>Pago por Bizum directo sin comisiones</span><i>·</i>
         <span>Personaliza tu camiseta con nombre, dorsal y parches</span><i>·</i>
-        <span>Catálogo actualizado automáticamente</span><i>·</i>
-        <span>Pago por Bizum directo o WhatsApp</span><i>·</i>
-        <span>Más de 10.900 prendas de tus equipos</span><i>·</i>
       </div>
     </div>
+  </div>
+  <div class="offline-banner" id="offline-banner" role="status" hidden>
+    <span>Sin conexión · Mostrando el catálogo guardado en este dispositivo</span>
   </div>
 
   <header class="site-header" id="site-header">
@@ -463,7 +503,7 @@
 
     <!-- TARIFAS -->
     <section class="view" id="view-prices" aria-label="Precios" hidden>
-      <div class="page-head"><div class="container"><p class="eyebrow">Precios claros</p><h1>Tarifas<br><em>de prendas y extras.</em></h1><p class="page-lead">Consulta los precios por tipo de producto. El envío se confirma según el destino.</p></div></div>
+      <div class="page-head"><div class="container"><p class="eyebrow">Precios claros</p><h1>Tarifas<br><em>de prendas y extras.</em></h1><p class="page-lead">Precios transparentes con descuentos automáticos desde 5 prendas y recogida gratuita en Córdoba capital.</p></div></div>
       <div class="container prices-grid" id="prices-content"></div>
     </section>
 
@@ -472,8 +512,8 @@
       <div class="page-head">
         <div class="container">
           <p class="eyebrow">Sin complicaciones</p>
-          <h1>Del catálogo<br><em>a tu puerta.</em></h1>
-          <p class="page-lead">Este es un catálogo de pedido asistido: eliges tus prendas, las personalizas y nos envías el pedido. Te confirmamos disponibilidad y gastos de envío por WhatsApp o email.</p>
+          <h1>Del catálogo<br><em>a tus manos.</em></h1>
+          <p class="page-lead">Eliges tus prendas, las personalizas y confirmas tu pedido por Bizum o WhatsApp. Entrega mediante recogida en mano gratuita en Córdoba capital.</p>
         </div>
       </div>
 
@@ -482,17 +522,17 @@
           <article class="how-card">
             <span class="how-num">01</span>
             <h2>Elige y filtra</h2>
-            <p>Navega por equipo, temporada, liga o tipo de prenda. Cada ficha incluye las fotos reales del catálogo del proveedor.</p>
+            <p>Navega por equipo, temporada, liga o tipo de prenda. Cada ficha incluye las fotos reales del catálogo.</p>
           </article>
           <article class="how-card">
             <span class="how-num">02</span>
-            <h2>Personaliza</h2>
-            <p>En las camisetas puedes poner el nombre (hasta 14 caracteres), el dorsal (0-99) y los parches. En chándals, chaquetas y polos solo se elige la talla.</p>
+            <h2>Personaliza y ahorra</h2>
+            <p>En las camisetas puedes poner nombre, dorsal y parches. Si juntas 5 o más prendas se aplica automáticamente un descuento de hasta 3,00 € por prenda.</p>
           </article>
           <article class="how-card">
             <span class="how-num">03</span>
-            <h2>Confirma el pedido</h2>
-            <p>Al enviar el carrito, el pedido se guarda y se nos notifica. Recibirás la confirmación por WhatsApp o email con la disponibilidad y el envío.</p>
+            <h2>Recoge en Córdoba</h2>
+            <p>Confirmas el pago por Bizum sin comisiones, pedimos a proveedor (plazo estimado 2–3 semanas) y te avisamos al estar listo para recoger en Córdoba.</p>
           </article>
         </div>
 
@@ -500,23 +540,23 @@
           <h2>Preguntas frecuentes</h2>
           <details>
             <summary>¿Cómo sé qué talla elegir?<svg><use href="#i-chevron"/></svg></summary>
-            <p>Las tallas disponibles aparecen en cada prenda según el catálogo (S-4XL, S-XXL, tallas infantiles 16-28…). Si dudas entre dos tallas, escríbenos y te ayudamos.</p>
+            <p>Las tallas disponibles aparecen en cada prenda según el catálogo (S-4XL, S-XXL, tallas infantiles 16-28…). También tienes una calculadora por altura y peso dentro de cada ficha.</p>
           </details>
           <details>
             <summary>¿Las camisetas llevan nombre y dorsal?<svg><use href="#i-chevron"/></svg></summary>
-            <p>Sí. La personalización de nombre y número añade 2,00 € por prenda y cada parche suma 1,00 €. En chándals y chaquetas no aplica.</p>
+            <p>Sí. La personalización de nombre y número añade 2,00 € por prenda y cada parche suma 1,00 €. En chándals y chaquetas no aplica.</p>
           </details>
           <details>
-            <summary>¿Qué son los parches?<svg><use href="#i-chevron"/></svg></summary>
-            <p>Son los escudos de competición que se añaden a las mangas o al pecho (Liga, Champions, Mundial, Copa…). Puedes seleccionar el tipo al personalizar la camiseta.</p>
+            <summary>¿Hay descuentos por comprar varias prendas?<svg><use href="#i-chevron"/></svg></summary>
+            <p>Sí. Se aplican automáticamente en el carrito y checkout: de 5 a 9 prendas (-1,00 €/ud.), de 10 a 14 prendas (-2,00 €/ud.) y desde 15 prendas (-3,00 €/ud.).</p>
           </details>
           <details>
             <summary>¿Cómo se paga?<svg><use href="#i-chevron"/></svg></summary>
-            <p>Al confirmar tu pedido puedes elegir <strong>Bizum directo</strong> (te mostramos al momento el número, el importe y la referencia del pedido para el concepto) o pedir confirmación previa de stock y envío por WhatsApp o email antes de pagar.</p>
+            <p>Al confirmar tu pedido puedes elegir <strong>Bizum directo</strong> sin comisiones (te mostramos al momento el número, el importe y tu referencia KT-...) o pedir confirmación previa por WhatsApp antes de pagar.</p>
           </details>
           <details>
-            <summary>¿Cuánto tarda el envío?<svg><use href="#i-chevron"/></svg></summary>
-            <p>El plazo depende del artículo y del destino. Te damos una estimación con la confirmación del pedido. Los artículos personalizados pueden tardar algo más.</p>
+            <summary>¿Cómo se entrega el pedido y cuánto tarda?<svg><use href="#i-chevron"/></svg></summary>
+            <p>La entrega principal es <strong>recogida gratuita en Córdoba capital</strong>. Desde que realizamos el pedido al proveedor el plazo estimado es de <strong>2 a 3 semanas</strong>. Para pedidos grandes fuera de Córdoba, consúltanos antes por WhatsApp.</p>
           </details>
         </div>
 
@@ -539,7 +579,7 @@
         <div class="container">
           <p class="eyebrow">Estado en tiempo real</p>
           <h1>Seguimiento<br><em>de tu pedido.</em></h1>
-          <p class="page-lead">Introduce tu código de pedido (KT-...) y los últimos 4 dígitos de tu teléfono para consultar el estado y el número de envío.</p>
+          <p class="page-lead">Introduce tu código de pedido (KT-...) y los últimos 4 dígitos de tu teléfono para ver en qué fase está y su plazo estimado de llegada.</p>
         </div>
       </div>
       <div class="container track-body" id="track-content"></div>
@@ -592,11 +632,12 @@
           <a href="" id="footer-whatsapp">WhatsApp</a>
           <a href="" id="footer-email">Email</a>
           <a href="#/admin">Gestión tienda</a>
+          <button class="footer-install-link" id="pwa-footer-install" type="button" hidden>Instalar app móvil</button>
         </div>
       </nav>
     </div>
     <div class="container footer-bottom">
-      <p>© <span id="year"></span> KANG Team. Catálogo de pedido asistido. No se realiza ningún cobro automático en web.</p>
+      <p>© <span id="year"></span> KANG Team. Catálogo de pedido asistido · Recogida en Córdoba capital.</p>
       <p class="sync-note"><span class="pulse-dot"></span> <span id="sync-note">Sincronizando catálogo…</span></p>
     </div>
   </footer>
@@ -621,7 +662,8 @@
         <button class="btn btn-outline" type="button" id="mobile-favs-btn"><svg><use href="#i-heart"/></svg> Favoritos</button>
         <button class="btn btn-outline" type="button" id="mobile-orders-btn"><svg><use href="#i-clock"/></svg> Mis pedidos</button>
       </div>
-      <p>Personaliza tu camiseta con nombre, dorsal y parches.</p>
+      <button class="btn btn-outline btn-block" type="button" id="pwa-install-btn" hidden>Instalar app en el móvil</button>
+      <p>Personaliza tu camiseta · Recogida gratis en Córdoba.</p>
       <a class="btn btn-primary" href="#/catalogo">Explorar catálogo <svg><use href="#i-arrow"/></svg></a>
     </div>
   </div>
@@ -690,8 +732,12 @@
         <span>Artículos</span>
         <strong id="cart-total-items">0</strong>
       </div>
-      <div class="cart-total"><span>Total del pedido</span><strong id="cart-total-price">0,00 €</strong></div>
-      <p class="cart-note"><svg><use href="#i-shield"/></svg> Envío por confirmar. Sin pago online.</p>
+      <div class="cart-total is-discount" id="cart-discount-row" hidden>
+        <span id="cart-discount-label">Descuento grupo</span>
+        <strong id="cart-discount-amount">-0,00 €</strong>
+      </div>
+      <div class="cart-total"><span>Total estimado</span><strong id="cart-total-price">0,00 €</strong></div>
+      <p class="cart-note"><svg><use href="#i-shield"/></svg> Recogida gratis en Córdoba · Plazo 2–3 semanas.</p>
       <button class="btn btn-primary btn-block" id="checkout-open" type="button">Solicitar pedido <svg><use href="#i-arrow"/></svg></button>
       <div class="cart-foot-links">
         <button class="btn-link" id="cart-empty-btn" type="button">Vaciar carrito</button>
@@ -756,13 +802,30 @@
     </div>
   </aside>
 
+  <!-- ══════════════════════ PWA iOS GUÍA ══════════════════════ -->
+  <div class="modal-backdrop" id="pwa-ios-backdrop" hidden></div>
+  <section class="modal pwa-ios-modal" id="pwa-ios-modal" role="dialog" aria-modal="true" aria-labelledby="pwa-ios-title" aria-hidden="true" hidden>
+    <button class="icon-btn modal-close" id="pwa-ios-close" type="button" aria-label="Cerrar"><svg><use href="#i-close"/></svg></button>
+    <div class="pwa-ios-content">
+      <p class="eyebrow">App KANG Team</p>
+      <h2 id="pwa-ios-title">Instalar en iPhone / iPad</h2>
+      <p class="pwa-ios-lead">Guarda el catálogo en tu pantalla de inicio para abrirlo a pantalla completa como una app:</p>
+      <ol class="pwa-ios-steps">
+        <li>Pulsa el botón <strong>Compartir</strong> en la barra inferior de Safari.</li>
+        <li>Desliza hacia abajo y selecciona <strong>«Añadir a pantalla de inicio»</strong>.</li>
+        <li>Pulsa <strong>Añadir</strong> arriba a la derecha y listo.</li>
+      </ol>
+      <button class="btn btn-primary btn-block" id="pwa-ios-done" type="button">Entendido</button>
+    </div>
+  </section>
+
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
   <noscript>
     <div class="noscript">Este catálogo necesita JavaScript para mostrar las prendas y el carrito. Actívalo en tu navegador.</div>
   </noscript>
 
-  <script src="/js/pricing.js?v=20261115-04" defer></script>
-  <script src="/js/app.js?v=20261115-08" defer></script>
+  <script src="/js/pricing.js?v=20261115-05" defer></script>
+  <script src="/js/app.js?v=20261115-09" defer></script>
 </body>
 </html>
