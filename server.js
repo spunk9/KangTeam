@@ -456,9 +456,32 @@ function orderToHtml(order) {
   '</div>';
 }
 
+function resolveBlobAuthOptions() {
+  if (process.env.BLOB_STORE_ID) {
+    return { storeId: process.env.BLOB_STORE_ID };
+  }
+  var token = process.env.BLOB_READ_WRITE_TOKEN || '';
+  var keys = Object.keys(process.env);
+  if (!token) {
+    for (var i = 0; i < keys.length; i++) {
+      if (/_READ_WRITE_TOKEN$/.test(keys[i]) && process.env[keys[i]]) {
+        token = process.env[keys[i]];
+        break;
+      }
+    }
+  }
+  if (token) return { token: token };
+  for (var j = 0; j < keys.length; j++) {
+    if (/_BLOB_STORE_ID$/.test(keys[j]) && process.env[keys[j]]) {
+      return { storeId: process.env[keys[j]] };
+    }
+  }
+  return null;
+}
+
 function getStorageMode() {
   if (!IS_VERCEL) return 'disk';
-  if (process.env.BLOB_READ_WRITE_TOKEN) return 'blob';
+  if (resolveBlobAuthOptions()) return 'blob';
   return 'memory';
 }
 
@@ -480,14 +503,15 @@ function normalizeOrderRecord(order) {
 async function saveOrder(order, isUpdate) {
   var serialized = JSON.stringify(order);
   if (IS_VERCEL) {
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
+    var blobAuth = resolveBlobAuthOptions();
+    if (blobAuth) {
       var blob = await import('@vercel/blob');
-      await blob.put('orders/' + order.id + '.json', serialized, {
+      await blob.put('orders/' + order.id + '.json', serialized, Object.assign({
         access: 'private',
         addRandomSuffix: false,
         allowOverwrite: true,
         contentType: 'application/json; charset=utf-8'
-      });
+      }, blobAuth));
       return;
     }
     blobStore.set('orders/' + order.id + '.json', serialized);
@@ -518,10 +542,11 @@ async function getOrderById(id) {
   if (!/^KT-\d{6}-[A-F0-9]{4,8}$/.test(cleanId)) return null;
 
   if (IS_VERCEL) {
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
+    var blobAuth = resolveBlobAuthOptions();
+    if (blobAuth) {
       try {
         var blob = await import('@vercel/blob');
-        var res = await blob.get('orders/' + cleanId + '.json', { access: 'private', useCache: false });
+        var res = await blob.get('orders/' + cleanId + '.json', Object.assign({ access: 'private', useCache: false }, blobAuth));
         if (!res || !res.stream) return null;
         var text = await new Response(res.stream).text();
         return normalizeOrderRecord(JSON.parse(text));
@@ -549,12 +574,13 @@ async function getOrderById(id) {
 async function listAllOrders() {
   var list = [];
   if (IS_VERCEL) {
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
+    var blobAuth = resolveBlobAuthOptions();
+    if (blobAuth) {
       var blob = await import('@vercel/blob');
       var cursor;
       var blobs = [];
       do {
-        var page = await blob.list({ prefix: 'orders/', cursor: cursor, limit: 100 });
+        var page = await blob.list(Object.assign({ prefix: 'orders/', cursor: cursor, limit: 100 }, blobAuth));
         blobs = blobs.concat(page.blobs || []);
         cursor = page.hasMore ? page.cursor : undefined;
       } while (cursor);
@@ -563,7 +589,7 @@ async function listAllOrders() {
         var entry = blobs[i];
         if (!/\.json$/i.test(entry.pathname || '')) continue;
         try {
-          var got = await blob.get(entry.pathname, { access: 'private', useCache: false });
+          var got = await blob.get(entry.pathname, Object.assign({ access: 'private', useCache: false }, blobAuth));
           if (got && got.stream) {
             var parsed = normalizeOrderRecord(JSON.parse(await new Response(got.stream).text()));
             if (parsed) list.push(parsed);

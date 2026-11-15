@@ -5452,7 +5452,7 @@
     }
 
     var meta = state.adminMeta || {};
-    var storageText = meta.storageMode === 'vercel-blob' ? 'Vercel Blob (persistente)' : (meta.storageMode === 'local-disk' ? 'Disco local (data/orders)' : 'Memoria temporal (sin BLOB_READ_WRITE_TOKEN)');
+    var storageText = meta.storageMode === 'blob' ? 'Vercel Blob (persistente)' : (meta.storageMode === 'disk' ? 'Disco local (data/orders)' : 'Memoria temporal (sin Vercel Blob conectado)');
     var stats = state.adminStats || { totalOrders: 0, pendingCount: 0, inProgressCount: 0, shippedCount: 0, revenueCents: 0, topTeams: [] };
 
     var filtered = state.adminOrders.filter(function (o) {
@@ -5501,7 +5501,7 @@
 
     box.innerHTML =
       '<div class="admin-topbar">' +
-        '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'vercel-blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
+        '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
         '<div class="admin-topbar-actions">' +
           (!meta.isVercel ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
           '<button type="button" class="btn btn-outline" id="admin-refresh-btn">Actualizar</button>' +
