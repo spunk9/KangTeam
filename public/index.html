@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261115-02">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-03">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -45,6 +45,16 @@
     <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-7-4.35-9.2-8.7C1 8.2 3.2 4.5 6.9 4.5c2.1 0 3.9 1.1 5.1 2.9 1.2-1.8 3-2.9 5.1-2.9 3.7 0 5.9 3.7 4.1 7.3-2.2 4.35-9.2 8.7-9.2 8.7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
     <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8.2 10.9 7.6-4.3M8.2 13.1l7.6 4.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v4.8l3.2 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="brand-crest" viewBox="0 0 64 68">
+      <path d="M32 4 56 12.5v19C56 48 45.6 58.5 32 64 18.4 58.5 8 48 8 31.5v-19L32 4Z" fill="#11161f" stroke="#d9ff3f" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M32 8.8 51.4 15.6v15.8c0 13.6-8.6 22.4-19.4 27.2-10.8-4.8-19.4-13.6-19.4-27.2V15.6L32 8.8Z" fill="#19202c" stroke="rgba(255,255,255,0.16)" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M32 8.8v49.8C21.2 53.8 12.6 45 12.6 31.4V15.6L32 8.8Z" fill="rgba(255,255,255,0.045)"/>
+      <path d="M25 16.4 32 13l7 3.4-7 2.4-7-2.4Z" fill="#d9ff3f"/>
+      <path d="M19 23.4 26 21.4V47h-7V23.4Z" fill="#f4f2ec"/>
+      <path d="M27.6 33.4 38.2 21.4h8.6L34.2 35l-6.6-1.6Z" fill="#d9ff3f"/>
+      <path d="M29.8 34 35.6 31.4 47 47h-8.6L29.8 34Z" fill="#d9ff3f"/>
+      <path d="m32 50.6 2.2 2.4-2.2 2.4-2.2-2.4 2.2-2.4Z" fill="#d9ff3f" opacity="0.9"/>
+    </symbol>
   </svg>
 
   <div class="announcement" id="announcement">
@@ -68,7 +78,7 @@
     <div class="container header-inner">
       <a class="brand" href="#/">
         <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 40 44"><path d="M20 1 38 8v14c0 10-7.5 17.5-18 21C9.5 39.5 2 32 2 22V8L20 1Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 12v20M20 22l8-8M20 22l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <svg shape-rendering="geometricPrecision"><use href="#brand-crest"/></svg>
         </span>
         <span class="brand-copy">
           <span class="brand-word">KANG<span>TEAM</span></span>
@@ -313,6 +323,11 @@
               <select id="filter-type"><option value="">Todos</option></select>
               <svg><use href="#i-chevron"/></svg>
             </label>
+            <label class="select-wrap">
+              <span>Versión</span>
+              <select id="filter-version"><option value="">Todas</option></select>
+              <svg><use href="#i-chevron"/></svg>
+            </label>
             <button class="btn-clear" id="filters-clear" type="button">Limpiar</button>
           </div>
 
@@ -457,7 +472,7 @@
       <div class="footer-brand">
         <a class="brand" href="#/">
           <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 40 44"><path d="M20 1 38 8v14c0 10-7.5 17.5-18 21C9.5 39.5 2 32 2 22V8L20 1Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 12v20M20 22l8-8M20 22l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+            <svg shape-rendering="geometricPrecision"><use href="#brand-crest"/></svg>
           </span>
           <span class="brand-copy"><span class="brand-word">KANG<span>TEAM</span></span><span class="brand-tag">Catálogo online</span></span>
         </a>
@@ -622,15 +637,20 @@
   </div>
 
   <button class="help-fab" id="help-open" type="button" aria-label="Ayuda y dudas frecuentes" aria-expanded="false" aria-controls="help-widget">
-    <span class="help-fab-dot" aria-hidden="true"></span>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8A2.5 2.5 0 0 1 17.5 17H9l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5v-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.6 9.3a2.4 2.4 0 0 1 4.6.8c0 1.3-1.8 1.7-1.8 2.9m.1 2.5h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span class="help-fab-badge" aria-hidden="true">
+      <svg shape-rendering="geometricPrecision"><use href="#brand-crest"/></svg>
+      <span class="help-fab-dot"></span>
+    </span>
     <span>¿Dudas?</span>
   </button>
 
   <aside class="help-widget" id="help-widget" role="dialog" aria-label="Asistente rápido de dudas" aria-hidden="true" hidden>
     <div class="help-widget-head">
       <div class="help-widget-id">
-        <span class="help-avatar" aria-hidden="true">KT</span>
+        <span class="help-avatar" aria-hidden="true">
+          <svg class="help-avatar-crest" shape-rendering="geometricPrecision"><use href="#brand-crest"/></svg>
+          <span class="help-online-dot"></span>
+        </span>
         <div>
           <strong>Asistente KANG Team</strong>
           <span>Respuestas al instante</span>
@@ -650,7 +670,7 @@
     <div class="noscript">Este catálogo necesita JavaScript para mostrar las prendas y el carrito. Actívalo en tu navegador.</div>
   </noscript>
 
-  <script src="/js/pricing.js?v=20261113-15" defer></script>
-  <script src="/js/app.js?v=20261115-02" defer></script>
+  <script src="/js/pricing.js?v=20261115-03" defer></script>
+  <script src="/js/app.js?v=20261115-04" defer></script>
 </body>
 </html>

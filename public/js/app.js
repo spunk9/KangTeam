@@ -30,10 +30,11 @@
     kids: 'Niños',
     women: 'Mujer',
     long: 'Manga larga',
-    player: 'Player version',
+    player: 'Versión Jugador',
     gk: 'Portero',
     special: 'Edición especial'
   };
+  var VERSION_LABELS = { fan: 'Versión Fan', player: 'Versión Jugador' };
 
   var SEASON_ORDER = ['27/28', '26/27', '25/26', '24/25', '23/24', '22/23', '21/22', '20/21', '2016-2019', '2010-2015', 'Retro', 'Sin temporada'];
   var SEASON_LABELS = { '2016-2019': '2016–2019', '2010-2015': '2010–2015', 'Sin temporada': 'Sin temporada' };
@@ -55,7 +56,7 @@
     leagues: new Map(),
     seasons: new Map(),
     types: new Map(),
-    filters: { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' },
+    filters: { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' },
     view: 'teams',
     sort: 'new',
     gridPage: 1,
@@ -864,16 +865,23 @@
     if (route.path === '/catalogo') {
       viewId = 'view-catalog';
       navKey = route.params.get('coleccion') === 'primavera-invierno' ? 'seasonal' : 'catalog';
+      var rawExtra = route.params.get('extra') || '';
+      var rawVersion = route.params.get('version') || '';
+      if (!rawVersion && rawExtra === 'player') {
+        rawVersion = 'player';
+        rawExtra = '';
+      }
       state.filters = {
         q: route.params.get('q') || '',
         team: route.params.get('equipo') || '',
         league: route.params.get('liga') || '',
         season: route.params.get('temporada') || '',
         type: route.params.get('tipo') || '',
+        version: rawVersion,
         collection: route.params.get('coleccion') || '',
         department: route.params.get('uso') || '',
         subcategory: route.params.get('subcategoria') || '',
-        flag: route.params.get('extra') || '',
+        flag: rawExtra,
         price: route.params.get('precio') || '',
         favs: route.params.get('favoritos') || ''
       };
@@ -881,7 +889,7 @@
       if (sortParam && ['new', 'price-asc', 'price-desc', 'team', 'season', 'name'].indexOf(sortParam) !== -1) {
         state.sort = sortParam;
       }
-      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo') || !!state.filters.favs || !!state.filters.price) ? 'grid' : 'teams';
+      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo') || !!state.filters.favs || !!state.filters.price || !!state.filters.version) ? 'grid' : 'teams';
       state.groupPage = 1;
       state.gridPage = 1;
       if (state.items.length) {
@@ -943,6 +951,7 @@
     if (state.filters.league) params.set('liga', state.filters.league);
     if (state.filters.season) params.set('temporada', state.filters.season);
     if (state.filters.type) params.set('tipo', state.filters.type);
+    if (state.filters.version) params.set('version', state.filters.version);
     if (state.filters.collection) params.set('coleccion', state.filters.collection);
     if (state.filters.department) params.set('uso', state.filters.department);
     if (state.filters.subcategory) params.set('subcategoria', state.filters.subcategory);
@@ -1101,7 +1110,7 @@
     var winterItems = state.items.filter(function (i) { return i.collection === 'primavera-invierno'; });
 
     var cards = [
-      { kicker: 'Pro Match', title: 'Player Version', desc: 'Corte profesional entallado y tejido técnico.', href: '#/catalogo?extra=player&vista=grid', items: playerItems, glow: 'rgba(217,255,63,.2)' },
+      { kicker: 'Pro Match', title: 'Versión Jugador', desc: 'Corte profesional entallado y tejido técnico.', href: '#/catalogo?version=player&vista=grid', items: playerItems, glow: 'rgba(217,255,63,.2)' },
       { kicker: 'Clásicas', title: 'Camisetas Retro', desc: 'Ediciones históricas que marcaron época.', href: '#/catalogo?extra=retro&vista=grid', items: retroItems, glow: 'rgba(255,176,46,.2)' },
       { kicker: 'Cantera', title: 'Conjuntos Niño', desc: 'Tallas infantiles 10–30 con camiseta y pantalón.', href: '#/catalogo?extra=kids&vista=grid', items: kidsItems, glow: 'rgba(125,211,252,.2)' },
       { kicker: 'Entreno', title: 'Chándals y Abrigo', desc: 'Sudaderas, cortavientos y chándals de club.', href: '#/catalogo?coleccion=primavera-invierno&vista=grid', items: winterItems, glow: 'rgba(134,239,172,.2)' }
@@ -1145,6 +1154,8 @@
       ? '+2 € nombre/dorsal · +1 € parche'
       : (hasSpecialSize ? '3XL/4XL +3 €' : 'Tallas ' + (item.sizeRange || 'S-2XL'));
 
+    var isLongJersey = (item.type === 'jersey' || item.type === 'polo' || item.type === 'other') &&
+      ((item.flags && item.flags.indexOf('long') !== -1) || /\b(long[-\s]?sleeves?d?|manga\s+larga)\b/i.test(item.title || ''));
     var favActive = isFavorite(item.id);
     var photoCount = parseInt(item.photos, 10) || 1;
     return '<article class="card" data-product="' + esc(item.id) + '" data-photos="' + photoCount + '">' +
@@ -1161,7 +1172,7 @@
         '<div class="card-kicker"><span>' + esc(item.team) + '</span><span>' + esc(item.season) + '</span></div>' +
         '<h3 class="card-title" title="' + esc(item.title) + '">' + esc(title) + '</h3>' +
         (priceText ? '<div class="card-price-row"><strong class="card-price">' + esc(priceText) + '</strong><span class="card-price-note">' + esc(priceMeta) + '</span></div>' : '') +
-        '<div class="card-foot"><span class="type-label">' + esc(item.subcategory || typeLabel(item.type)) + '</span>' +
+        '<div class="card-foot"><span class="type-label">' + esc((item.subcategory || typeLabel(item.type)) + (isLongJersey && !item.subcategory ? ' · Manga larga' : '')) + '</span>' +
           (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Nombre + dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
         '</div>' +
       '</div>' +
@@ -1259,12 +1270,34 @@
     return rank === -1 ? SEASON_ORDER.length : rank;
   }
 
+  function isPlayerVersionItem(item) {
+    if (!item) return false;
+    if (Array.isArray(item.flags) && item.flags.indexOf('player') !== -1) return true;
+    return /\bplayer\s+(?:version|issue)\b/i.test(item.title || '');
+  }
+
+  function isJerseyVersionItem(item) {
+    if (!item) return false;
+    if (item.type === 'jersey') return true;
+    if (item.type === 'polo' && /\bjersey\b/i.test(item.title || '')) return true;
+    if (item.type === 'other' && /\b(jersey|jerse|long\s+sleeves?)\b/i.test(item.title || '')) return true;
+    return false;
+  }
+
+  function matchesVersion(item, version) {
+    if (!version) return true;
+    if (version === 'player') return isPlayerVersionItem(item);
+    if (version === 'fan') return isJerseyVersionItem(item) && !isPlayerVersionItem(item);
+    return true;
+  }
+
   function getFilteredItems() {
     var q = normalize(state.filters.q);
     var team = state.filters.team;
     var league = state.filters.league;
     var season = state.filters.season;
     var type = state.filters.type;
+    var version = state.filters.version;
     var collection = state.filters.collection;
     var department = state.filters.department;
     var subcategory = state.filters.subcategory;
@@ -1278,6 +1311,7 @@
       if (league && item.league !== league) return false;
       if (season && item.seasonGroup !== season) return false;
       if (type && item.type !== type) return false;
+      if (version && !matchesVersion(item, version)) return false;
       if (collection && item.collection !== collection) return false;
       if (department && item.department !== department) return false;
       if (subcategory && item.subcategory !== subcategory) return false;
@@ -1329,6 +1363,7 @@
     if (filters.league) params.set('liga', filters.league);
     if (filters.season) params.set('temporada', filters.season);
     if (filters.type) params.set('tipo', filters.type);
+    if (filters.version) params.set('version', filters.version);
     if (filters.collection) params.set('coleccion', filters.collection);
     if (filters.department) params.set('uso', filters.department);
     if (filters.subcategory) params.set('subcategoria', filters.subcategory);
@@ -1375,11 +1410,19 @@
     var favCount = state.favorites.length;
     var chips = [];
     chips.push('<button type="button" class="quick-chip is-fav' + (state.filters.favs === '1' ? ' is-active' : '') + '" data-quick-fav aria-pressed="' + (state.filters.favs === '1') + '"><svg><use href="#i-heart"/></svg>Favoritos' + (favCount ? ' (' + favCount + ')' : '') + '</button>');
+    chips.push('<span class="quick-chip-sep" aria-hidden="true"></span>');
+    [
+      ['fan', 'Versión Fan'],
+      ['player', 'Versión Jugador']
+    ].forEach(function (entry) {
+      var active = state.filters.version === entry[0];
+      chips.push('<button type="button" class="quick-chip' + (active ? ' is-active' : '') + '" data-quick-version="' + entry[0] + '" aria-pressed="' + active + '">' + entry[1] + '</button>');
+    });
+    chips.push('<span class="quick-chip-sep" aria-hidden="true"></span>');
     [
       ['kids', 'Niños'],
       ['women', 'Mujer'],
-      ['retro', 'Retro'],
-      ['player', 'Player']
+      ['retro', 'Retro']
     ].forEach(function (entry) {
       var active = state.filters.flag === entry[0];
       chips.push('<button type="button" class="quick-chip' + (active ? ' is-active' : '') + '" data-quick-flag="' + entry[0] + '" aria-pressed="' + active + '">' + entry[1] + '</button>');
@@ -1407,7 +1450,7 @@
     applyTeamThemeVars($('#view-catalog'), state.filters.team || state.filters.league);
 
     var items = getFilteredItems();
-    var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || state.sort === 'price-asc' || state.sort === 'price-desc';
+    var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || !!state.filters.version || state.sort === 'price-asc' || state.sort === 'price-desc';
 
     renderQuickFilters();
     renderActiveFilters();
@@ -1514,7 +1557,7 @@
   }
 
   function activeFilterCount() {
-    return ['q', 'team', 'league', 'season', 'type', 'collection', 'department', 'subcategory', 'flag', 'price', 'favs'].filter(function (key) {
+    return ['q', 'team', 'league', 'season', 'type', 'version', 'collection', 'department', 'subcategory', 'flag', 'price', 'favs'].filter(function (key) {
       return !!state.filters[key];
     }).length;
   }
@@ -1544,6 +1587,7 @@
     if (state.filters.league) chips.push(chip('league', 'Liga: ' + state.filters.league));
     if (state.filters.season) chips.push(chip('season', 'Temporada: ' + seasonLabel(state.filters.season)));
     if (state.filters.type) chips.push(chip('type', 'Tipo: ' + typeLabel(state.filters.type)));
+    if (state.filters.version) chips.push(chip('version', 'Versión: ' + (VERSION_LABELS[state.filters.version] || state.filters.version)));
     if (state.filters.collection) chips.push(chip('collection', 'Colección: ' + (COLLECTION_LABELS[state.filters.collection] || state.filters.collection)));
     if (state.filters.department) chips.push(chip('department', 'Uso: ' + (DEPARTMENT_LABELS[state.filters.department] || state.filters.department)));
     if (state.filters.subcategory) chips.push(chip('subcategory', state.filters.subcategory));
@@ -1576,7 +1620,7 @@
       if (team && team.league !== state.filters.league) state.filters.team = '';
     }
     if ('team' in patch && state.filters.team) state.view = 'grid';
-    if (('flag' in patch && state.filters.flag) || ('price' in patch && state.filters.price) || ('favs' in patch && state.filters.favs)) {
+    if (('flag' in patch && state.filters.flag) || ('price' in patch && state.filters.price) || ('favs' in patch && state.filters.favs) || ('version' in patch && state.filters.version)) {
       state.view = 'grid';
     }
 
@@ -1589,7 +1633,7 @@
   }
 
   function clearAllFilters() {
-    state.filters = { q: '', team: '', league: '', season: '', type: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' };
+    state.filters = { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' };
     state.gridPage = 1;
     state.groupPage = 1;
     syncFilterInputs();
@@ -1608,6 +1652,7 @@
       if (excludedFilter !== 'league' && state.filters.league && item.league !== state.filters.league) return false;
       if (excludedFilter !== 'season' && state.filters.season && item.seasonGroup !== state.filters.season) return false;
       if (excludedFilter !== 'type' && state.filters.type && item.type !== state.filters.type) return false;
+      if (excludedFilter !== 'version' && state.filters.version && !matchesVersion(item, state.filters.version)) return false;
       if (excludedFilter !== 'collection' && state.filters.collection && item.collection !== state.filters.collection) return false;
       if (excludedFilter !== 'department' && state.filters.department && item.department !== state.filters.department) return false;
       if (excludedFilter !== 'subcategory' && state.filters.subcategory && item.subcategory !== state.filters.subcategory) return false;
@@ -1733,18 +1778,36 @@
     }).join('');
   }
 
+  function versionOptionsHtml(items) {
+    var list = items || itemsForFacet('version');
+    var fanCount = 0;
+    var playerCount = 0;
+    list.forEach(function (item) {
+      if (matchesVersion(item, 'player')) playerCount += 1;
+      else if (matchesVersion(item, 'fan')) fanCount += 1;
+    });
+    return '<option value="">Todas las versiones</option>' +
+      '<option value="fan">Versión Fan (' + fmt(fanCount) + ')</option>' +
+      '<option value="player">Versión Jugador (' + fmt(playerCount) + ')</option>';
+  }
+
   function populateFilterOptions() {
     var body = $('#filters-drawer-body');
     if (body) {
       body.innerHTML =
         '<label class="searchbox"><svg><use href="#i-search"/></svg>' +
           '<input type="search" id="drawer-search" placeholder="Busca una prenda o equipo…" autocomplete="off"></label>' +
+        '<p class="filter-section-title">Versión de camiseta</p>' +
+        '<div class="filter-chips" id="drawer-versions">' +
+          '<button type="button" data-drawer-version="">Todas</button>' +
+          '<button type="button" data-drawer-version="fan">Versión Fan</button>' +
+          '<button type="button" data-drawer-version="player">Versión Jugador</button>' +
+        '</div>' +
         '<p class="filter-section-title">Filtros rápidos</p>' +
         '<div class="filter-chips" id="drawer-quick-flags">' +
           '<button type="button" data-drawer-flag="kids">Niños</button>' +
           '<button type="button" data-drawer-flag="women">Mujer</button>' +
           '<button type="button" data-drawer-flag="retro">Retro</button>' +
-          '<button type="button" data-drawer-flag="player">Player</button>' +
         '</div>' +
         '<p class="filter-section-title">Precio base</p>' +
         '<div class="filter-chips" id="drawer-prices">' +
@@ -1776,6 +1839,7 @@
       ['drawer-team', teamOptionsHtml('Todos los equipos', itemsForFacet('team'))],
       ['filter-season', seasonOptionsHtml(itemsForFacet('season'))],
       ['filter-type', typeOptionsHtml(itemsForFacet('type'))],
+      ['filter-version', versionOptionsHtml(itemsForFacet('version'))],
       ['filter-collection', dimensionOptionsHtml('Todas', 'collection', COLLECTION_LABELS, itemsForFacet('collection'))],
       ['filter-department', dimensionOptionsHtml('Todos', 'department', DEPARTMENT_LABELS, itemsForFacet('department'))],
       ['filter-subcategory', dimensionOptionsHtml('Todas', 'subcategory', {}, itemsForFacet('subcategory'))],
@@ -1806,6 +1870,7 @@
     setSelect('filter-team', state.filters.team);
     setSelect('filter-season', state.filters.season);
     setSelect('filter-type', state.filters.type);
+    setSelect('filter-version', state.filters.version);
     setSelect('filter-collection', state.filters.collection);
     setSelect('filter-department', state.filters.department);
     setSelect('filter-subcategory', state.filters.subcategory);
@@ -1835,6 +1900,9 @@
       if (select) select.value = state.filters[key] || '';
     });
 
+    $$('#drawer-versions button').forEach(function (button) {
+      button.classList.toggle('is-active', (button.getAttribute('data-drawer-version') || '') === (state.filters.version || ''));
+    });
     $$('#drawer-quick-flags button').forEach(function (button) {
       button.classList.toggle('is-active', (button.getAttribute('data-drawer-flag') || '') === (state.filters.flag || ''));
     });
@@ -2062,6 +2130,12 @@
           applyFilters({ favs: state.filters.favs === '1' ? '' : '1' });
           return;
         }
+        var versionBtn = event.target.closest('[data-quick-version]');
+        if (versionBtn) {
+          var version = versionBtn.getAttribute('data-quick-version');
+          applyFilters({ version: state.filters.version === version ? '' : version });
+          return;
+        }
         var flagBtn = event.target.closest('[data-quick-flag]');
         if (flagBtn) {
           var flag = flagBtn.getAttribute('data-quick-flag');
@@ -2079,7 +2153,7 @@
     var filters = $('#catalog-filters');
     if (filters) {
       filters.addEventListener('change', function (event) {
-        var map = { 'filter-league': 'league', 'filter-team': 'team', 'filter-season': 'season', 'filter-type': 'type', 'filter-collection': 'collection', 'filter-department': 'department', 'filter-subcategory': 'subcategory' };
+        var map = { 'filter-league': 'league', 'filter-team': 'team', 'filter-season': 'season', 'filter-type': 'type', 'filter-version': 'version', 'filter-collection': 'collection', 'filter-department': 'department', 'filter-subcategory': 'subcategory' };
         var key = map[event.target.id];
         if (!key) return;
         var patch = {};
@@ -2136,6 +2210,12 @@
         else if (event.target.id === 'drawer-subcategory') applyFilters({ subcategory: event.target.value });
       });
       drawerBody.addEventListener('click', function (event) {
+        var version = event.target.closest('[data-drawer-version]');
+        if (version) {
+          var vVal = version.getAttribute('data-drawer-version');
+          applyFilters({ version: vVal && state.filters.version === vVal ? '' : vVal });
+          return;
+        }
         var flag = event.target.closest('[data-drawer-flag]');
         if (flag) {
           var val = flag.getAttribute('data-drawer-flag');
@@ -2440,8 +2520,10 @@
     var selectedPatches = state.patches === 'No' ? [] : state.patches.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
     var hasSpecialSizes = /(?:3XL|4XL)/.test(String(item.sizeRange || ''));
 
+    var baseLabel = item.subcategory || typeLabel(item.type);
+    if (calc.isLongSleeve && !item.subcategory) baseLabel += ' · Manga larga (+3,00 € incl.)';
     var rows = [];
-    rows.push('<div class="price-breakdown-row"><span>Precio base (' + esc(item.subcategory || typeLabel(item.type)) + ')</span><strong>' + esc(KangPricing.money(calc.basePriceCents)) + '</strong></div>');
+    rows.push('<div class="price-breakdown-row"><span>Precio base (' + esc(baseLabel) + ')</span><strong>' + esc(KangPricing.money(calc.basePriceCents)) + '</strong></div>');
 
     if (item.custom) {
       rows.push('<div class="price-breakdown-row' + (calc.nameNumberCents ? ' is-active' : ' is-muted') + '">' +
@@ -3909,6 +3991,7 @@
     if (topicId === 'prices') {
       return '<div class="help-bubble">' +
         '<strong>Personalización y extras claros:</strong><br>' +
+        '• Camisetas de manga larga: <strong>+3,00 €</strong> sobre manga corta<br>' +
         '• Nombre + dorsal en camiseta: <strong>+2,00 €</strong><br>' +
         '• Cada parche de competición: <strong>+1,00 €</strong><br>' +
         '• Tallas especiales 3XL / 4XL: <strong>+3,00 €</strong><br>' +

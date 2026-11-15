@@ -5,13 +5,31 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   var groups = [
-    { title: 'Camisetas', items: [['Camiseta Oficial (Versión Fan)',2500],['Camiseta Jugador (Versión Player)',2900],['Camiseta Retro / Clásica',2900],['Camiseta Baloncesto (NBA)',3900]] },
-    { title: 'Infantil', items: [['Conjunto Niño (Camiseta + Pantalón corto)',2500],['Traje Entrenamiento Niño (Corto)',3000],['Chándal Completo Niño (Chaqueta + Pantalón largo)',4200]] },
+    { title: 'Camisetas', items: [['Camiseta Oficial (Versión Fan · Manga corta)',2500],['Camiseta Oficial Manga Larga (Versión Fan)',2800],['Camiseta Jugador / Retro (Manga corta)',2900],['Camiseta Jugador / Retro (Manga larga)',3200],['Camiseta Baloncesto (NBA)',3900]] },
+    { title: 'Infantil', items: [['Conjunto Niño (Camiseta manga corta + Pantalón)',2500],['Camiseta Niño Manga Larga',2800],['Traje Entrenamiento Niño (Corto)',3000],['Chándal Completo Niño (Chaqueta + Pantalón largo)',4200]] },
     { title: 'Entrenamiento & Verano', items: [['Conjunto Adulto (Camiseta + Pantalón corto)',2700],['Traje Entrenamiento (Chaleco / Manga corta + Short)',3500],['Traje Entrenamiento (Polo + Pantalón largo)',4000]] },
     { title: 'Chándals & Cortavientos', items: [['Chaqueta Cortavientos',4500],['Chándal Entrenamiento (Media cremallera + Pantalón)',4900],['Chándal Entrenamiento (Cremallera completa / Capucha)',5500],['Conjunto Cortavientos Completo',5500]] },
     { title: 'Abrigos & Invierno', items: [['Chaqueta Acolchada Corta',6000],['Abrigo Largo / Conjunto Acolchado Corto',7500],['Conjunto Acolchado Largo Completo',8900]] },
-    { title: 'Personalización & Extras', items: [['Personalización (nombre y número)',200],['Parche (por unidad)',100],['Suplemento Talla Especial (3XL / 4XL)',300]] }
+    { title: 'Personalización & Extras', items: [['Suplemento Manga Larga (en camisetas)',300],['Personalización (nombre y número)',200],['Parche (por unidad)',100],['Suplemento Talla Especial (3XL / 4XL)',300]] }
   ];
+  function isLongSleeveFlag(product) {
+    product = product || {};
+    var t = String(product.title || '').toLowerCase();
+    var flags = product.flags || [];
+    var hasLong = Array.isArray(flags) ? flags.indexOf('long') !== -1 : !!flags.long;
+    return hasLong || /\b(long[-\s]?sleeves?d?|manga\s+larga)\b/i.test(t);
+  }
+  function isJerseyLike(product) {
+    product = product || {};
+    var type = String(product.type || '').toLowerCase();
+    var t = String(product.title || '').toLowerCase();
+    if (type === 'shorts' || type === 'hoodie' || type === 'jacket' || type === 'training') return false;
+    if ((/\bnba\b|basketball/.test(t) || /nba/i.test(product.league || '')) && !/\bshorts?\b/.test(t)) return false;
+    if (/padded|puffer|acolchad|\bdown\s+jacket\b|\bvest\s+down\b|\bcotton\s+gilet\b|\bparka\b|\bwindbreaker\b|\bcortavientos\b|\bsoftshell\b/.test(t)) return false;
+    if (/\b(hoodie|sweatshirt|tracksuit|track\s*suit|training\s+suit|suit\s+set)\b/.test(t)) return false;
+    if (/\bshorts\b/.test(t) && /\b(t-shirt|tee|shirt|jersey|set|suit|kit)\b/.test(t)) return false;
+    return type === 'jersey' || type === 'polo' || type === 'casual' || type === 'other' || !type;
+  }
   function baseCents(product) {
     product = product || {};
     var t = String(product.title || '').toLowerCase();
@@ -22,6 +40,7 @@
 
     var isRetro = hasFlag('retro') || /\bretro\b|\bvintage\b/.test(t);
     var isPlayer = hasFlag('player') || /player\s+version|player\s+issue/.test(t);
+    var isLongSleeve = isLongSleeveFlag(product);
     var kids = hasFlag('kids') ||
       product.audience === 'kids' ||
       /^\d{1,2}-\d{1,2}$/.test(String(product.sizeRange || '')) ||
@@ -78,6 +97,7 @@
         return 4200;
       }
       if (type === 'training' || (/\b(training|entrenamiento)\b/.test(t) && /\b(kit|suit|wear|clothes|set)\b/.test(t))) return 3000;
+      if (isLongSleeve && type !== 'shorts' && !/\bshorts?\b/.test(t)) return 2800;
       return 2500;
     }
 
@@ -93,11 +113,12 @@
     if (/\b(set|suit|kit)\b/.test(t) && /\b(shirt|jersey|t-shirt|tee)\b/.test(t) && /\bshorts\b/.test(t)) return 2700;
     if (/\bshorts\b/.test(t) && /\b(t-shirt|tee|shirt|jersey)\b/.test(t)) return 2700;
 
-    // 8. Camisetas (Fan 25€, Player/Retro 29€), polos individuales y pantalones cortos
+    // 8. Camisetas (Fan 25€, Player/Retro 29€; +3€ manga larga), polos individuales y pantalones cortos
     if (type === 'shorts') return 2500;
+    var sleeveExtra = isLongSleeve ? 300 : 0;
     if (type === 'jersey' || type === 'polo' || type === 'casual' || type === 'other') {
-      if (isRetro || isPlayer) return 2900;
-      return 2500;
+      if (isRetro || isPlayer) return 2900 + sleeveExtra;
+      return 2500 + sleeveExtra;
     }
 
     return 2500;
@@ -105,12 +126,21 @@
   function calculate(product, options) {
     options = options || {};
     var base = baseCents(product), custom = (options.name || options.number) ? 200 : 0;
+    var isLongSleeveJersey = !String((product && product.subcategory) || '').trim() && isLongSleeveFlag(product) && isJerseyLike(product);
     var selectedPatches = String(options.patches || '').split(',').map(function (patch) { return patch.trim(); }).filter(function (patch) { return patch && patch !== 'No'; });
     var patchCount = parseInt(options.patchCount, 10);
     if (!isFinite(patchCount) || patchCount < 0) patchCount = selectedPatches.length;
     var patches = patchCount * 100;
     var size = String(options.size || '').toUpperCase(), special = /^(3XL|4XL)$/.test(size) ? 300 : 0;
-    return { basePriceCents: base, nameNumberCents: custom, patchesCents: patches, sizeSurchargeCents: special, unitPriceCents: base + custom + patches + special };
+    return {
+      basePriceCents: base,
+      isLongSleeve: isLongSleeveJersey,
+      longSleeveCents: isLongSleeveJersey ? 300 : 0,
+      nameNumberCents: custom,
+      patchesCents: patches,
+      sizeSurchargeCents: special,
+      unitPriceCents: base + custom + patches + special
+    };
   }
   function money(cents) { return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format((Number(cents) || 0) / 100); }
   return { groups: groups, calculate: calculate, money: money };
