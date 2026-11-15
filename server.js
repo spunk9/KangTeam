@@ -29,6 +29,8 @@ var PORT = parseInt(process.env.PORT || '3000', 10);
 var STORE = {
   name: process.env.STORE_NAME || 'KANG Team',
   whatsapp: (process.env.STORE_WHATSAPP || '').replace(/[^\d]/g, ''),
+  bizum: (process.env.STORE_BIZUM || '').replace(/[^\d]/g, ''),
+  bizumName: (process.env.STORE_BIZUM_NAME || '').trim(),
   email: process.env.STORE_EMAIL || '',
   instagram: process.env.STORE_INSTAGRAM || '',
   yupoo: 'https://minkang.x.yupoo.com/categories/712891'
@@ -301,9 +303,18 @@ function validateOrder(payload) {
     };
   });
 
+  var paymentMethod = 'confirm';
+  if (payload.paymentMethod !== undefined && payload.paymentMethod !== null && payload.paymentMethod !== '') {
+    if (payload.paymentMethod !== 'bizum' && payload.paymentMethod !== 'confirm') {
+      throw new Error('Método de pago no válido');
+    }
+    paymentMethod = payload.paymentMethod;
+  }
+
   return {
     id: 'KT-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + crypto.randomBytes(2).toString('hex').toUpperCase(),
     createdAt: new Date().toISOString(),
+    paymentMethod: paymentMethod,
     customer: { name: name, phone: phone, email: email, city: city, notes: notes },
     items: cleanItems,
     totalItems: cleanItems.reduce(function (sum, item) { return sum + item.qty; }, 0),
@@ -358,6 +369,7 @@ function orderToText(order) {
   lines.push('');
   lines.push('Total artículos: ' + order.totalItems);
   lines.push('TOTAL DEL PEDIDO: ' + pricing.money(order.totalPriceCents));
+  lines.push('Método de pago: ' + (order.paymentMethod === 'bizum' ? 'Bizum directo' : 'Confirmar primero (WhatsApp / Email)'));
   lines.push('Gastos de envío: por confirmar');
   return lines.join('\n');
 }
@@ -400,7 +412,11 @@ function orderToHtml(order) {
       (order.customer.city ? 'Ciudad: ' + escapeHtml(order.customer.city) + '<br>' : '') +
       (order.customer.notes ? 'Notas: ' + escapeHtml(order.customer.notes) : '') +
     '</p>' +
-    '<p style="color:#888;font-size:12px;margin-top:24px">Pedido generado desde el catálogo online. No se ha realizado ningún cobro.</p>' +
+    '<p style="color:#888;font-size:12px;margin-top:24px">' +
+      (order.paymentMethod === 'bizum'
+        ? 'Método elegido: Bizum directo (concepto ' + escapeHtml(order.id) + '). Pendiente de confirmar envío y justificante.'
+        : 'Pedido generado desde el catálogo online. No se ha realizado ningún cobro.') +
+    '</p>' +
   '</div>';
 }
 
@@ -771,10 +787,10 @@ async function handle(req, res) {
         ? 'mailto:' + STORE.email + '?subject=' + encodeURIComponent('Pedido ' + order.id) + '&body=' + encodeURIComponent(text)
         : '';
 
-      console.log('Pedido', order.id, '·', order.customer.name, '·', order.totalItems, 'art. · email:', delivery.email, '· wa:', delivery.whatsapp);
+      console.log('Pedido', order.id, '·', order.paymentMethod, '·', order.customer.name, '·', order.totalItems, 'art. · email:', delivery.email, '· wa:', delivery.whatsapp);
       return sendJson(res, 200, {
         ok: true,
-        order: { id: order.id, createdAt: order.createdAt, totalPriceCents: order.totalPriceCents },
+        order: { id: order.id, createdAt: order.createdAt, totalPriceCents: order.totalPriceCents, paymentMethod: order.paymentMethod },
         delivery: delivery,
         whatsappUrl: whatsappUrl,
         mailtoUrl: mailtoUrl,
@@ -816,6 +832,7 @@ server.listen(PORT, '0.0.0.0', function () {
   console.log('  http://localhost:' + PORT);
   console.log('  Prendas: ' + catalog.items.length + ' · Actualizado: ' + (catalog.meta.generatedAt || 'pendiente'));
   console.log('  WhatsApp tienda: ' + (STORE.whatsapp || 'sin configurar'));
+  console.log('  Bizum tienda: ' + (STORE.bizum || 'sin configurar'));
   console.log('  Email tienda: ' + (STORE.email || 'sin configurar'));
   console.log('');
 

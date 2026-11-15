@@ -2595,3 +2595,639 @@ svg { display: block; }
   font-weight:700;
   padding:0;
 }
+
+/* ── Pago por Bizum en checkout y confirmación ─────────────── */
+.checkout-payment-block {
+  margin-top:18px;
+}
+.payment-methods {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.payment-option {
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:12px 13px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--surface);
+  cursor:pointer;
+  transition:border-color .18s, background .18s, transform .18s;
+}
+.payment-option:hover {
+  border-color:var(--line-strong);
+}
+.payment-option input {
+  width:15px;
+  height:15px;
+  margin-top:2px;
+  accent-color:var(--volt);
+  flex:none;
+}
+.payment-option.is-active {
+  border-color:var(--volt);
+  background:rgba(217,255,63,.075);
+}
+.payment-option-copy {
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.payment-option-title {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  font-size:12.5px;
+  font-weight:700;
+  color:var(--text);
+}
+.payment-option-copy small {
+  font-size:10.5px;
+  line-height:1.4;
+  color:var(--muted-2);
+}
+.bizum-badge {
+  display:inline-flex;
+  align-items:center;
+  padding:2px 7px;
+  border-radius:5px;
+  background:rgba(5, 195, 221, .16);
+  border:1px solid rgba(5, 195, 221, .45);
+  color:#6be8f7;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.payment-bizum-preview {
+  margin:10px 0 0;
+  padding:10px 12px;
+  border:1px solid rgba(5, 195, 221, .28);
+  border-radius:9px;
+  background:rgba(5, 195, 221, .06);
+  font-size:11px;
+  line-height:1.5;
+  color:var(--muted);
+}
+.payment-bizum-preview strong {
+  color:#8ff1fc;
+}
+.bizum-box {
+  margin:0 0 20px;
+  padding:16px 18px;
+  border:1px solid rgba(5, 195, 221, .35);
+  border-radius:14px;
+  background:radial-gradient(circle at 100% 0, rgba(5, 195, 221, .1), transparent 55%), var(--surface);
+  text-align:left;
+}
+.bizum-box-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+.bizum-box-head span:last-child {
+  font-size:10.5px;
+  color:var(--muted-2);
+}
+.bizum-rows {
+  display:grid;
+  gap:8px;
+}
+.bizum-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:9px 11px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--bg-soft);
+}
+.bizum-row-label {
+  display:block;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+}
+.bizum-row-val {
+  display:block;
+  margin-top:2px;
+  font-size:13.5px;
+  font-weight:700;
+  color:var(--text);
+  font-variant-numeric:tabular-nums;
+  word-break:break-word;
+}
+.bizum-row-val.is-volt {
+  color:var(--volt);
+}
+.bizum-copy-btn {
+  flex:none;
+  height:30px;
+  padding:0 11px;
+  border:1px solid var(--line-strong);
+  border-radius:7px;
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  font-size:10.5px;
+  font-weight:700;
+  transition:border-color .18s, color .18s, background .18s;
+}
+.bizum-copy-btn:hover {
+  border-color:var(--volt);
+  color:var(--volt);
+  background:rgba(217,255,63,.08);
+}
+.bizum-missing-note {
+  padding:10px 12px;
+  border:1px dashed rgba(217,255,63,.3);
+  border-radius:9px;
+  background:rgba(217,255,63,.05);
+  font-size:11.5px;
+  line-height:1.5;
+  color:var(--muted);
+}
+.bizum-box-foot {
+  margin:11px 0 0;
+  font-size:10.5px;
+  line-height:1.5;
+  color:var(--muted);
+}
+@media (max-width:560px) {
+  .payment-methods {
+    grid-template-columns:1fr;
+  }
+}
+
+/* ── Colecciones Matchday (portada) ────────────────────────── */
+.section-collections { padding-top: 20px; }
+.matchday-grid {
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:16px;
+}
+.matchday-card {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  min-height:290px;
+  padding:22px;
+  border-radius:var(--radius-lg);
+  border:1px solid var(--line);
+  background:var(--surface);
+  overflow:hidden;
+  isolation:isolate;
+  transition:transform .35s var(--ease), border-color .3s, box-shadow .35s;
+}
+.matchday-card:hover {
+  transform:translateY(-4px);
+  border-color:rgba(217,255,63,.42);
+  box-shadow:0 20px 48px rgba(0,0,0,.42);
+}
+.matchday-card img {
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  opacity:.62;
+  transition:transform .65s var(--ease), opacity .35s;
+}
+.matchday-card:hover img {
+  transform:scale(1.07);
+  opacity:.82;
+}
+.matchday-card::after {
+  content:'';
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(circle at 85% 15%, var(--md-glow, rgba(217,255,63,.16)), transparent 50%),
+    linear-gradient(180deg, rgba(10,12,15,.12) 15%, rgba(10,12,15,.94) 100%);
+  z-index:1;
+}
+.matchday-card-body {
+  position:relative;
+  z-index:2;
+}
+.matchday-kicker {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 9px;
+  border-radius:6px;
+  background:rgba(217,255,63,.14);
+  border:1px solid rgba(217,255,63,.35);
+  color:var(--volt);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+.matchday-card h3 {
+  margin:0 0 6px;
+  font-family:var(--font-display);
+  font-size:clamp(1.5rem, 2.3vw, 2.05rem);
+  font-weight:400;
+  line-height:.95;
+  text-transform:uppercase;
+}
+.matchday-card p {
+  margin:0 0 12px;
+  font-size:12px;
+  line-height:1.45;
+  color:var(--muted);
+}
+.matchday-cta {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  font-weight:700;
+  color:var(--volt);
+}
+.matchday-cta svg { width:14px; height:14px; transition:transform .25s var(--ease); }
+.matchday-card:hover .matchday-cta svg { transform:translateX(3px); }
+@media (max-width:1020px) {
+  .matchday-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width:560px) {
+  .matchday-grid { grid-template-columns:1fr; gap:12px; }
+  .matchday-card { min-height:210px; padding:18px; }
+}
+
+/* ── Esqueletos shimmer en catálogo y tarjetas ────────────── */
+.card-media .img-skeleton {
+  z-index:0;
+  transition:opacity .28s ease;
+  pointer-events:none;
+}
+.card-media img.is-loaded ~ .img-skeleton {
+  opacity:0;
+}
+.season-card .img-skeleton {
+  z-index:0;
+  background:linear-gradient(100deg, #13161c 20%, #1e232c 40%, #13161c 60%);
+  background-size:200% 100%;
+  transition:opacity .3s ease;
+  pointer-events:none;
+}
+.season-card img.is-loaded ~ .img-skeleton { opacity:0; }
+.skeleton-grid {
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:16px;
+}
+.skeleton-card {
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--surface);
+  overflow:hidden;
+}
+.skeleton-thumb {
+  aspect-ratio:4 / 5;
+  background:linear-gradient(100deg, #13161c 20%, #1f2530 40%, #13161c 60%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s infinite linear;
+}
+.skeleton-lines {
+  padding:14px 15px 16px;
+  display:grid;
+  gap:9px;
+}
+.skeleton-line {
+  height:11px;
+  border-radius:6px;
+  background:linear-gradient(100deg, #171b22 20%, #242a35 40%, #171b22 60%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s infinite linear;
+}
+.skeleton-line.w-40 { width:40%; height:9px; }
+.skeleton-line.w-85 { width:85%; }
+.skeleton-line.w-60 { width:60%; }
+@media (max-width:1180px) { .skeleton-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+@media (max-width:760px) { .skeleton-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; } }
+
+/* ── Segunda foto suave al hacer hover en tarjetas ─────────── */
+.card-media .card-alt-img {
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  opacity:0;
+  z-index:0;
+  transition:opacity .35s ease, transform .6s var(--ease);
+  pointer-events:none;
+}
+@media (hover:hover) {
+  .card.has-alt:hover .card-media .card-alt-img.is-loaded {
+    opacity:1;
+    transform:scale(1.045);
+  }
+}
+.card-photo-pill {
+  position:absolute;
+  left:10px;
+  bottom:10px;
+  z-index:2;
+  padding:3px 7px;
+  border-radius:6px;
+  background:rgba(10,12,15,.72);
+  border:1px solid rgba(255,255,255,.14);
+  color:var(--muted);
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.06em;
+  pointer-events:none;
+  backdrop-filter:blur(6px);
+  opacity:.9;
+}
+
+/* ── Tematizado sutil por equipo y liga ──────────────────── */
+#view-catalog.has-team-theme .page-head {
+  background:
+    radial-gradient(ellipse at 72% 20%, var(--team-glow, rgba(217, 255, 63, 0.14)), transparent 58%),
+    linear-gradient(180deg, #0b0d10 0%, var(--bg) 100%);
+}
+#view-catalog.has-team-theme .page-head::after {
+  border-color:var(--team-border, rgba(217, 255, 63, 0.24));
+}
+#product-modal.has-team-theme .product-gallery {
+  background:radial-gradient(circle at 50% 35%, var(--team-glow, rgba(217,255,63,.12)), transparent 65%), var(--bg-soft);
+}
+#product-modal.has-team-theme .product-price-box {
+  border-color:var(--team-border, rgba(217,255,63,.28));
+}
+
+/* ── Vista previa camiseta con colores del equipo + parches ── */
+.product-jersey-shirt {
+  background:linear-gradient(155deg, var(--jersey-bg, #f6f4ee) 0%, var(--jersey-bg2, #d7d3c8) 100%);
+  color:var(--jersey-ink, #14171c);
+}
+.product-jersey-shirt::before {
+  background:repeating-linear-gradient(90deg, var(--jersey-accent, var(--volt)) 0 5px, transparent 5px 10px);
+  opacity:.85;
+}
+.product-jersey-number {
+  color:var(--jersey-ink, #14171c);
+}
+.jersey-patch-badges {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:4px;
+  min-height:18px;
+}
+.jersey-patch-emblem {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  padding:2px 6px;
+  border-radius:5px;
+  border:1px solid var(--patch-color, rgba(217,255,63,.45));
+  background:rgba(10,12,15,.85);
+  color:var(--patch-color, var(--volt));
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.jersey-patch-emblem svg {
+  width:9px;
+  height:9px;
+  flex:none;
+}
+
+/* ── Calculadora interactiva en Guía de Tallas ────────────── */
+.size-calc-box {
+  padding:11px 12px;
+  margin-bottom:11px;
+  border:1px solid rgba(217,255,63,.26);
+  border-radius:10px;
+  background:radial-gradient(circle at 100% 0, rgba(217,255,63,.08), transparent 60%), var(--bg-soft);
+}
+.size-calc-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:9px;
+  flex-wrap:wrap;
+}
+.size-calc-top strong {
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.09em;
+  color:var(--text);
+}
+.size-calc-inputs {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom:9px;
+}
+.size-calc-field {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.size-calc-field label {
+  display:flex;
+  justify-content:space-between;
+  font-size:10px;
+  color:var(--muted);
+  font-weight:600;
+}
+.size-calc-field label b { color:var(--volt); }
+.size-calc-field input[type="range"] {
+  width:100%;
+  accent-color:var(--volt);
+  cursor:pointer;
+}
+.size-calc-result {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding-top:8px;
+  border-top:1px solid var(--line);
+  font-size:11.5px;
+  color:var(--muted);
+}
+.size-calc-result strong {
+  color:var(--volt);
+  font-size:13px;
+}
+.size-calc-apply {
+  flex:none;
+  height:28px;
+  padding:0 11px;
+  border:0;
+  border-radius:7px;
+  background:var(--volt);
+  color:var(--ink);
+  font-size:10.5px;
+  font-weight:800;
+  cursor:pointer;
+}
+.size-calc-apply:hover { filter:brightness(1.06); }
+.size-guide-table tbody tr.is-recommended td {
+  box-shadow:inset 0 1px 0 rgba(217,255,63,.32), inset 0 -1px 0 rgba(217,255,63,.32);
+}
+
+/* ── Asistente rápido de dudas (Opción A) ─────────────────── */
+.help-fab {
+  position:fixed;
+  right:20px;
+  bottom:20px;
+  z-index:110;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  height:46px;
+  padding:0 16px;
+  border:1px solid rgba(217,255,63,.45);
+  border-radius:999px;
+  background:rgba(16, 19, 24, 0.92);
+  color:var(--text);
+  font-size:12.5px;
+  font-weight:700;
+  box-shadow:0 14px 36px rgba(0,0,0,.45);
+  backdrop-filter:blur(12px);
+  transition:transform .22s var(--ease), border-color .2s, background .2s;
+}
+.help-fab:hover {
+  transform:translateY(-2px);
+  border-color:var(--volt);
+  background:#151a22;
+}
+.help-fab svg { width:18px; height:18px; color:var(--volt); }
+.help-fab-dot {
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--volt);
+  box-shadow:0 0 10px rgba(217,255,63,.7);
+}
+.help-widget {
+  position:fixed;
+  right:20px;
+  bottom:76px;
+  z-index:115;
+  width:min(380px, calc(100vw - 24px));
+  max-height:min(540px, calc(100vh - 110px));
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--line-strong);
+  border-radius:16px;
+  background:#101318;
+  box-shadow:0 26px 70px rgba(0,0,0,.62);
+  overflow:hidden;
+}
+.help-widget-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:13px 14px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(135deg, rgba(217,255,63,.08), transparent 60%), var(--surface);
+}
+.help-widget-id {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.help-avatar {
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  background:var(--volt);
+  color:var(--ink);
+  font-family:var(--font-display);
+  font-size:15px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.help-widget-id strong { display:block; font-size:13px; line-height:1.2; }
+.help-widget-id span { display:block; font-size:10.5px; color:var(--muted-2); }
+.help-widget-body {
+  flex:1;
+  overflow-y:auto;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.help-bubble {
+  padding:11px 13px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  font-size:12px;
+  line-height:1.55;
+  color:var(--muted);
+}
+.help-bubble strong { color:var(--text); }
+.help-bubble.is-user {
+  align-self:flex-end;
+  background:rgba(217,255,63,.12);
+  border-color:rgba(217,255,63,.35);
+  color:var(--volt);
+  font-weight:700;
+}
+.help-topic-grid {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.help-topic-btn {
+  padding:7px 10px;
+  border:1px solid var(--line-strong);
+  border-radius:9px;
+  background:rgba(255,255,255,.03);
+  color:var(--text);
+  font-size:11px;
+  font-weight:600;
+  text-align:left;
+  transition:border-color .18s, background .18s, color .18s;
+}
+.help-topic-btn:hover, .help-topic-btn.is-active {
+  border-color:var(--volt);
+  background:rgba(217,255,63,.1);
+  color:var(--volt);
+}
+.help-mini-link {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  margin-top:7px;
+  font-size:11px;
+  font-weight:700;
+  color:var(--volt);
+}
+.help-widget-foot {
+  padding:11px 14px;
+  border-top:1px solid var(--line);
+  background:var(--surface);
+}
+.help-widget-foot .btn { height:40px; font-size:12px; }
+@media (max-width:600px) {
+  .help-fab { right:14px; bottom:14px; height:42px; padding:0 13px; font-size:12px; }
+  .help-widget { right:12px; bottom:66px; }
+}
+
+

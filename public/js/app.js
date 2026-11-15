@@ -73,6 +73,9 @@
     customNumber: '',
     sizeGuideOpen: false,
     sizeGuideTab: 'adult',
+    calcHeight: 175,
+    calcWeight: 73,
+    calcKidsHeight: 130,
     cart: [],
     favorites: [],
     favSet: new Set(),
@@ -82,7 +85,9 @@
     lastOrder: null,
     overlayCount: 0,
     returnFocus: null,
-    previewTimer: null
+    previewTimer: null,
+    albumCache: new Map(),
+    helpTopic: ''
   };
 
   // ── Utilidades ───────────────────────────────────────────
@@ -130,6 +135,148 @@
   function colorFor(name) {
     var palette = ['#d9ff3f', '#ffb02e', '#7dd3fc', '#f0abfc', '#fca5a5', '#86efac', '#fde68a', '#c4b5fd', '#fdba74', '#a7f3d0'];
     return palette[hashInt(name) % palette.length];
+  }
+
+  var TEAM_THEMES = {
+    'real madrid': { bg: '#f6f5f0', bg2: '#dedbd2', ink: '#161b26', accent: '#d4af37' },
+    'fc barcelona': { bg: '#0c235c', bg2: '#6d122d', ink: '#ffd23f', accent: '#edbb00' },
+    'barcelona': { bg: '#0c235c', bg2: '#6d122d', ink: '#ffd23f', accent: '#edbb00' },
+    'atletico de madrid': { bg: '#b81d24', bg2: '#7a1218', ink: '#ffffff', accent: '#1e3a8a' },
+    'atletico madrid': { bg: '#b81d24', bg2: '#7a1218', ink: '#ffffff', accent: '#1e3a8a' },
+    'sevilla': { bg: '#f4f4f2', bg2: '#dedede', ink: '#c4161c', accent: '#c4161c' },
+    'real betis': { bg: '#0f7a3e', bg2: '#0a582c', ink: '#ffffff', accent: '#ffffff' },
+    'athletic club': { bg: '#c8102e', bg2: '#890b20', ink: '#ffffff', accent: '#111111' },
+    'real sociedad': { bg: '#1155a6', bg2: '#0c3b73', ink: '#ffffff', accent: '#e5e7eb' },
+    'valencia': { bg: '#f5f4ef', bg2: '#dcdad2', ink: '#14171c', accent: '#f97316' },
+    'villarreal': { bg: '#fde047', bg2: '#eab308', ink: '#0f2350', accent: '#0f2350' },
+    'manchester city': { bg: '#6cabdd', bg2: '#4d8ec2', ink: '#0b1e36', accent: '#ffffff' },
+    'manchester united': { bg: '#c8102e', bg2: '#8c0a1f', ink: '#ffffff', accent: '#fbbf24' },
+    'arsenal': { bg: '#cf142b', bg2: '#940d1d', ink: '#ffffff', accent: '#f3f4f6' },
+    'liverpool': { bg: '#b91c1c', bg2: '#7f1d1d', ink: '#f8fafc', accent: '#facc15' },
+    'chelsea': { bg: '#0b4595', bg2: '#072f66', ink: '#ffffff', accent: '#93c5fd' },
+    'tottenham': { bg: '#f6f6f3', bg2: '#dcdce0', ink: '#132257', accent: '#132257' },
+    'psg': { bg: '#0f204b', bg2: '#091430', ink: '#ffffff', accent: '#dc2626' },
+    'paris saint germain': { bg: '#0f204b', bg2: '#091430', ink: '#ffffff', accent: '#dc2626' },
+    'bayern munich': { bg: '#c8102e', bg2: '#8e0b20', ink: '#ffffff', accent: '#f8fafc' },
+    'bayern': { bg: '#c8102e', bg2: '#8e0b20', ink: '#ffffff', accent: '#f8fafc' },
+    'borussia dortmund': { bg: '#fde100', bg2: '#eab308', ink: '#111111', accent: '#111111' },
+    'juventus': { bg: '#f5f5f2', bg2: '#22252c', ink: '#111111', accent: '#d9ff3f' },
+    'ac milan': { bg: '#b91c1c', bg2: '#171717', ink: '#ffffff', accent: '#ef4444' },
+    'inter de milan': { bg: '#0a4898', bg2: '#0e172a', ink: '#ffffff', accent: '#38bdf8' },
+    'inter milan': { bg: '#0a4898', bg2: '#0e172a', ink: '#ffffff', accent: '#38bdf8' },
+    'napoli': { bg: '#1685d8', bg2: '#0d63a8', ink: '#ffffff', accent: '#ffffff' },
+    'as roma': { bg: '#8a1538', bg2: '#5f0d26', ink: '#facc15', accent: '#facc15' },
+    'espana': { bg: '#c8102e', bg2: '#930c22', ink: '#facc15', accent: '#facc15' },
+    'spain': { bg: '#c8102e', bg2: '#930c22', ink: '#facc15', accent: '#facc15' },
+    'argentina': { bg: '#75b8e8', bg2: '#f4f7fb', ink: '#0f294a', accent: '#fbbf24' },
+    'brasil': { bg: '#facc15', bg2: '#eab308', ink: '#15803d', accent: '#16a34a' },
+    'brazil': { bg: '#facc15', bg2: '#eab308', ink: '#15803d', accent: '#16a34a' },
+    'francia': { bg: '#15397f', bg2: '#0d2556', ink: '#ffffff', accent: '#ef4444' },
+    'france': { bg: '#15397f', bg2: '#0d2556', ink: '#ffffff', accent: '#ef4444' },
+    'portugal': { bg: '#a61c24', bg2: '#165b33', ink: '#fde047', accent: '#fde047' },
+    'alemania': { bg: '#f7f7f3', bg2: '#dadad2', ink: '#14171c', accent: '#ef4444' },
+    'germany': { bg: '#f7f7f3', bg2: '#dadad2', ink: '#14171c', accent: '#ef4444' },
+    'inglaterra': { bg: '#f8fafc', bg2: '#dbe4f0', ink: '#0f2c67', accent: '#dc2626' },
+    'england': { bg: '#f8fafc', bg2: '#dbe4f0', ink: '#0f2c67', accent: '#dc2626' },
+    'italia': { bg: '#1357a6', bg2: '#0c3b73', ink: '#ffffff', accent: '#93c5fd' },
+    'italy': { bg: '#1357a6', bg2: '#0c3b73', ink: '#ffffff', accent: '#93c5fd' },
+    'marruecos': { bg: '#b91c1c', bg2: '#166534', ink: '#fef08a', accent: '#22c55e' },
+    'morocco': { bg: '#b91c1c', bg2: '#166534', ink: '#fef08a', accent: '#22c55e' }
+  };
+
+  function getTeamTheme(name) {
+    var key = normalize(name || '');
+    if (TEAM_THEMES[key]) return TEAM_THEMES[key];
+    var keys = Object.keys(TEAM_THEMES);
+    for (var i = 0; i < keys.length; i++) {
+      if (key && key.indexOf(keys[i]) !== -1) return TEAM_THEMES[keys[i]];
+    }
+    var fallbackAccent = colorFor(name || 'KANG');
+    return { bg: '#f6f4ee', bg2: '#d7d3c8', ink: '#14171c', accent: fallbackAccent };
+  }
+
+  function hexToRgba(hex, alpha) {
+    var clean = String(hex || '').replace('#', '');
+    if (clean.length === 3) clean = clean.split('').map(function (c) { return c + c; }).join('');
+    if (!/^[0-9a-f]{6}$/i.test(clean)) return 'rgba(217, 255, 63, ' + alpha + ')';
+    var r = parseInt(clean.slice(0, 2), 16);
+    var g = parseInt(clean.slice(2, 4), 16);
+    var b = parseInt(clean.slice(4, 6), 16);
+    return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+  }
+
+  function applyTeamThemeVars(el, teamName) {
+    if (!el) return;
+    if (!teamName) {
+      el.classList.remove('has-team-theme');
+      el.style.removeProperty('--team-glow');
+      el.style.removeProperty('--team-border');
+      return;
+    }
+    var theme = getTeamTheme(teamName);
+    var glowSource = (theme.accent === '#ffffff' || theme.accent === '#f8fafc' || theme.accent === '#f3f4f6' || theme.accent === '#e5e7eb') ? theme.bg : theme.accent;
+    el.classList.add('has-team-theme');
+    el.style.setProperty('--team-glow', hexToRgba(glowSource, 0.2));
+    el.style.setProperty('--team-border', hexToRgba(glowSource, 0.42));
+  }
+
+  function renderPatchBadgesHtml(patchesText) {
+    if (!patchesText || patchesText === 'No') return '';
+    var colors = { Liga: '#ff6b4a', Champions: '#7dd3fc', Mundial: '#facc15', Copa: '#86efac', Personalizado: '#d9ff3f' };
+    return patchesText.split(',').map(function (p) { return p.trim(); }).filter(Boolean).map(function (name) {
+      var color = colors[name] || '#d9ff3f';
+      return '<span class="jersey-patch-emblem" style="--patch-color:' + color + '">' +
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 13.5 3.8v4.1c0 3.2-2.2 5.6-5.5 6.8-3.3-1.2-5.5-3.6-5.5-6.8V3.8L8 1.5Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>' +
+        esc(name) + '</span>';
+    }).join('');
+  }
+
+  function recommendSize(item, isKids, heightCm, weightKg) {
+    if (isKids) {
+      var kh = Number(heightCm) || 130;
+      var kMatch = KIDS_SIZE_GUIDE[KIDS_SIZE_GUIDE.length - 1];
+      for (var i = 0; i < KIDS_SIZE_GUIDE.length; i++) {
+        var parts = KIDS_SIZE_GUIDE[i].height.split('–');
+        var maxH = parseInt(parts[1] || parts[0], 10);
+        if (kh <= maxH) { kMatch = KIDS_SIZE_GUIDE[i]; break; }
+      }
+      return { size: kMatch.size, reason: 'Altura ' + kh + ' cm · aprox. ' + kMatch.age };
+    }
+    var h = Number(heightCm) || 175;
+    var w = Number(weightKg) || 73;
+    var hIdx = 0;
+    if (h >= 195) hIdx = 7;
+    else if (h >= 191) hIdx = 5;
+    else if (h >= 187) hIdx = 4;
+    else if (h >= 182) hIdx = 3;
+    else if (h >= 177) hIdx = 2;
+    else if (h >= 172) hIdx = 1;
+
+    var wIdx = 0;
+    if (w >= 115) wIdx = 7;
+    else if (w >= 106) wIdx = 6;
+    else if (w >= 98) wIdx = 5;
+    else if (w >= 90) wIdx = 4;
+    else if (w >= 83) wIdx = 3;
+    else if (w >= 75) wIdx = 2;
+    else if (w >= 68) wIdx = 1;
+
+    var idx = Math.max(hIdx, wIdx);
+    var isPlayer = !!(item && Array.isArray(item.flags) && item.flags.indexOf('player') !== -1);
+    if (isPlayer && idx < ADULT_SIZE_GUIDE.length - 1) idx += 1;
+
+    var available = item ? expandSizes(item.sizeRange) : ADULT_SIZE_GUIDE.map(function (r) { return r.size; });
+    var chosen = ADULT_SIZE_GUIDE[idx].size;
+    if (available.length && available.indexOf(chosen) === -1) {
+      for (var j = idx; j < ADULT_SIZE_GUIDE.length; j++) {
+        if (available.indexOf(ADULT_SIZE_GUIDE[j].size) !== -1) { chosen = ADULT_SIZE_GUIDE[j].size; break; }
+      }
+      if (available.indexOf(chosen) === -1) chosen = available[available.length - 1];
+    }
+    return {
+      size: chosen,
+      reason: (isPlayer ? 'Corte Player ajustado (+1 talla sugerida)' : 'Ajuste estándar recomendado')
+    };
   }
 
   function initials(name) {
@@ -516,7 +663,7 @@
       if (!res.ok) throw new Error('config');
       state.config = await res.json();
     } catch (err) {
-      state.config = { store: { name: 'KANG Team', whatsapp: '', email: '', instagram: '', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
+      state.config = { store: { name: 'KANG Team', whatsapp: '', bizum: '', bizumName: '', email: '', instagram: '', yupoo: 'https://minkang.x.yupoo.com/categories/712891' } };
     }
     applyConfig();
   }
@@ -606,7 +753,7 @@
 
     var waNumber = (store.whatsapp || '').replace(/\D/g, '');
     var waHref = waNumber ? 'https://wa.me/' + waNumber : 'https://wa.me/';
-    ['cta-whatsapp', 'contact-whatsapp', 'footer-whatsapp'].forEach(function (id) {
+    ['cta-whatsapp', 'contact-whatsapp', 'footer-whatsapp', 'help-whatsapp'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.href = waHref;
     });
@@ -740,7 +887,10 @@
       if (state.items.length) {
         syncFilterInputs();
         renderCatalog();
+      } else if (state.loading) {
+        renderCatalogSkeletons();
       }
+      applyTeamThemeVars($('#view-catalog'), state.filters.team || state.filters.league);
       updateCatalogIntro();
       if (route.params.get('focus') === 'search') {
         setTimeout(function () { var input = $('#catalog-search'); if (input) input.focus(); }, 90);
@@ -823,6 +973,23 @@
 
   // ── Inicio ───────────────────────────────────────────────
 
+  function skeletonCardsHtml(count) {
+    var list = [];
+    for (var i = 0; i < (count || 8); i++) {
+      list.push('<div class="skeleton-card" aria-hidden="true"><div class="skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-line w-40"></div><div class="skeleton-line w-85"></div><div class="skeleton-line w-60"></div></div></div>');
+    }
+    return list.join('');
+  }
+
+  function renderCatalogSkeletons() {
+    var results = $('#catalog-results');
+    if (results) results.innerHTML = '<div class="skeleton-grid">' + skeletonCardsHtml(8) + '</div>';
+    var homeNew = $('#home-new');
+    if (homeNew && !homeNew.children.length) {
+      homeNew.innerHTML = skeletonCardsHtml(4);
+    }
+  }
+
   function renderHome() {
     if (!state.items.length) return;
 
@@ -834,6 +1001,7 @@
     renderHero();
     renderHomeSeasons();
     renderHomeNew();
+    renderHomeCollections();
     renderHomeTeams();
     startPreviewLoop();
   }
@@ -908,7 +1076,7 @@
     container.innerHTML = cards.map(function (card) {
       var href = card.league ? '#/catalogo?liga=Selecciones' : '#/catalogo?temporada=' + enc(card.key);
       return '<a class="season-card" href="' + href + '">' +
-        (card.img ? imgTag(coverUrl(card.img, 'medium'), card.sub) : '') +
+        (card.img ? imgTag(coverUrl(card.img, 'medium'), card.sub) + '<div class="img-skeleton" aria-hidden="true"></div>' : '') +
         '<div class="season-card-body"><small>' + esc(card.sub) + '</small><strong>' + esc(card.label) + '</strong><span>' + fmt(card.count) + ' prendas <svg><use href="#i-arrow"/></svg></span></div>' +
         '</a>';
     }).join('');
@@ -922,6 +1090,35 @@
     }).slice(0, 12);
     if (!items.length) items = state.items.slice(0, 12);
     container.innerHTML = items.map(productCard).join('');
+  }
+
+  function renderHomeCollections() {
+    var container = $('#home-collections');
+    if (!container || !state.items.length) return;
+    var playerItems = state.items.filter(function (i) { return Array.isArray(i.flags) && i.flags.indexOf('player') !== -1; });
+    var retroItems = state.items.filter(function (i) { return Array.isArray(i.flags) && i.flags.indexOf('retro') !== -1; });
+    var kidsItems = state.items.filter(function (i) { return Array.isArray(i.flags) && i.flags.indexOf('kids') !== -1; });
+    var winterItems = state.items.filter(function (i) { return i.collection === 'primavera-invierno'; });
+
+    var cards = [
+      { kicker: 'Pro Match', title: 'Player Version', desc: 'Corte profesional entallado y tejido técnico.', href: '#/catalogo?extra=player&vista=grid', items: playerItems, glow: 'rgba(217,255,63,.2)' },
+      { kicker: 'Clásicas', title: 'Camisetas Retro', desc: 'Ediciones históricas que marcaron época.', href: '#/catalogo?extra=retro&vista=grid', items: retroItems, glow: 'rgba(255,176,46,.2)' },
+      { kicker: 'Cantera', title: 'Conjuntos Niño', desc: 'Tallas infantiles 10–30 con camiseta y pantalón.', href: '#/catalogo?extra=kids&vista=grid', items: kidsItems, glow: 'rgba(125,211,252,.2)' },
+      { kicker: 'Entreno', title: 'Chándals y Abrigo', desc: 'Sudaderas, cortavientos y chándals de club.', href: '#/catalogo?coleccion=primavera-invierno&vista=grid', items: winterItems, glow: 'rgba(134,239,172,.2)' }
+    ];
+
+    container.innerHTML = cards.map(function (c) {
+      var sample = c.items[0] || state.items[0];
+      return '<a class="matchday-card" href="' + c.href + '" style="--md-glow:' + c.glow + '">' +
+        (sample ? imgTag(coverUrl(sample, 'medium'), c.title) : '') +
+        '<div class="matchday-card-body">' +
+          '<span class="matchday-kicker">' + esc(c.kicker) + ' · ' + fmt(c.items.length) + '</span>' +
+          '<h3>' + esc(c.title) + '</h3>' +
+          '<p>' + esc(c.desc) + '</p>' +
+          '<span class="matchday-cta">Explorar <svg><use href="#i-arrow"/></svg></span>' +
+        '</div>' +
+      '</a>';
+    }).join('');
   }
 
   function renderHomeTeams() {
@@ -949,11 +1146,14 @@
       : (hasSpecialSize ? '3XL/4XL +3 €' : 'Tallas ' + (item.sizeRange || 'S-2XL'));
 
     var favActive = isFavorite(item.id);
-    return '<article class="card" data-product="' + esc(item.id) + '">' +
+    var photoCount = parseInt(item.photos, 10) || 1;
+    return '<article class="card" data-product="' + esc(item.id) + '" data-photos="' + photoCount + '">' +
       '<div class="card-media">' +
         '<button class="card-open" type="button" aria-label="Ver ' + esc(title) + '"></button>' +
         imgTag(coverUrl(item, 'small'), title) +
+        '<div class="img-skeleton" aria-hidden="true"></div>' +
         '<div class="card-badges" aria-hidden="true">' + badges + '</div>' +
+        (photoCount > 1 ? '<span class="card-photo-pill" aria-hidden="true">' + photoCount + ' fotos</span>' : '') +
         '<button class="card-fav' + (favActive ? ' is-active' : '') + '" type="button" data-fav-toggle="' + esc(item.id) + '" aria-pressed="' + favActive + '" aria-label="' + (favActive ? 'Quitar de favoritos ' : 'Guardar en favoritos ') + esc(title) + '"><svg><use href="#i-heart"/></svg></button>' +
         '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(title) + '"><svg><use href="#i-plus"/></svg></button>' +
       '</div>' +
@@ -1197,9 +1397,14 @@
   }
 
   function renderCatalog() {
-    if (!state.items.length) return;
+    if (!state.items.length) {
+      if (state.loading) renderCatalogSkeletons();
+      return;
+    }
     var results = $('#catalog-results');
     if (!results) return;
+
+    applyTeamThemeVars($('#view-catalog'), state.filters.team || state.filters.league);
 
     var items = getFilteredItems();
     var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || state.sort === 'price-asc' || state.sort === 'price-desc';
@@ -2090,6 +2295,7 @@
 
     renderProduct();
     renderGallery();
+    applyTeamThemeVars(modal, item.team);
 
     if (!modal.classList.contains('is-open')) {
       state.returnFocus = document.activeElement;
@@ -2116,6 +2322,7 @@
     if (!modal || !modal.classList.contains('is-open')) return;
     releaseFocus(modal);
     modal.classList.remove('is-open');
+    applyTeamThemeVars(modal, '');
     setOverlayState(modal, false);
     var backdrop = $('#product-backdrop');
     if (backdrop) {
@@ -2132,34 +2339,50 @@
     state.returnFocus = null;
   }
 
-  async function loadAlbum(item) {
+  function normalizeAlbumImages(album, item) {
+    var images = (album && Array.isArray(album.images) ? album.images : []).map(function (path) {
+      var value = String(path || '').replace(/^https?:\/\/photo\.yupoo\.com/i, '');
+      if (!value) return '';
+      if (value.charAt(0) !== '/') value = '/' + value;
+      if (!/\.(jpg|jpeg|png|webp)$/i.test(value)) value += '/big.jpg';
+      return value;
+    }).filter(Boolean);
+
+    if (images.length) {
+      var cover = item && item.cover ? item.cover : '';
+      var ordered = images.slice();
+      var coverIndex = -1;
+      for (var i = 0; i < ordered.length; i++) {
+        if (cover && ordered[i].indexOf(cover + '/') === 0) { coverIndex = i; break; }
+      }
+      if (coverIndex > 0) {
+        var first = ordered.splice(coverIndex, 1)[0];
+        ordered.unshift(first);
+      }
+      return ordered.slice(0, 20);
+    }
+    return [];
+  }
+
+  async function fetchAlbumCached(item) {
     var id = item.albumId || item.id;
+    var cacheKey = (item.source || 'minkang') + '-' + id;
+    if (state.albumCache.has(cacheKey)) return state.albumCache.get(cacheKey);
+    var res = await fetch('/api/album/' + encodeURIComponent(id) + (item.source === 'gxg' ? '?source=gxg' : ''), { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return [];
+    var album = await res.json();
+    var ordered = normalizeAlbumImages(album, item);
+    state.albumCache.set(cacheKey, ordered);
+    return ordered;
+  }
+
+  async function loadAlbum(item) {
     var token = state.galleryToken;
     try {
-      var res = await fetch('/api/album/' + encodeURIComponent(id) + (item.source === 'gxg' ? '?source=gxg' : ''), { headers: { 'Accept': 'application/json' } });
-      if (!res.ok) return;
-      var album = await res.json();
+      var ordered = await fetchAlbumCached(item);
       if (token !== state.galleryToken || !state.product || String(state.product.id) !== String(item.id)) return;
-      var images = (album.images || []).map(function (path) {
-        var value = String(path || '').replace(/^https?:\/\/photo\.yupoo\.com/i, '');
-        if (!value) return '';
-        if (value.charAt(0) !== '/') value = '/' + value;
-        if (!/\.(jpg|jpeg|png|webp)$/i.test(value)) value += '/big.jpg';
-        return value;
-      }).filter(Boolean);
-
-      if (images.length) {
-        var cover = state.product.cover || '';
-        var ordered = images.slice();
-        var coverIndex = -1;
-        for (var i = 0; i < ordered.length; i++) {
-          if (cover && ordered[i].indexOf(cover + '/') === 0) { coverIndex = i; break; }
-        }
-        if (coverIndex > 0) {
-          var first = ordered.splice(coverIndex, 1)[0];
-          ordered.unshift(first);
-        }
-        state.gallery = ordered.slice(0, 20);
+      if (ordered.length) {
+        state.gallery = ordered;
         state.galleryIndex = 0;
         renderGallery();
       }
@@ -2263,11 +2486,14 @@
     var available = item ? expandSizes(item.sizeRange) : [];
     var tab = state.sizeGuideTab === 'kids' ? 'kids' : 'adult';
     var isKids = tab === 'kids';
+    var rec = recommendSize(item, isKids, isKids ? state.calcKidsHeight : state.calcHeight, state.calcWeight);
+    var recAvailable = !available.length || available.indexOf(rec.size) !== -1;
 
     var tableRows = isKids ? KIDS_SIZE_GUIDE.map(function (row) {
       var isAvailable = available.indexOf(row.size) !== -1;
       var isCurrent = state.selectedSize === row.size;
-      var cls = (isCurrent ? 'is-current' : '') + (isAvailable ? ' is-available' : ' is-unavailable');
+      var isRec = rec.size === row.size;
+      var cls = (isCurrent ? 'is-current ' : '') + (isRec ? 'is-recommended ' : '') + (isAvailable ? 'is-available' : 'is-unavailable');
       return '<tr class="' + cls.trim() + '"' + (isAvailable ? ' data-guide-size="' + esc(row.size) + '" title="Seleccionar talla ' + esc(row.size) + '"' : '') + '>' +
         '<td><strong>' + esc(row.size) + '</strong></td>' +
         '<td>' + esc(row.age) + '</td>' +
@@ -2277,7 +2503,8 @@
     }).join('') : ADULT_SIZE_GUIDE.map(function (row) {
       var isAvailable = available.indexOf(row.size) !== -1;
       var isCurrent = state.selectedSize === row.size;
-      var cls = (isCurrent ? 'is-current' : '') + (isAvailable ? ' is-available' : ' is-unavailable');
+      var isRec = rec.size === row.size;
+      var cls = (isCurrent ? 'is-current ' : '') + (isRec ? 'is-recommended ' : '') + (isAvailable ? 'is-available' : 'is-unavailable');
       return '<tr class="' + cls.trim() + '"' + (isAvailable ? ' data-guide-size="' + esc(row.size) + '" title="Seleccionar talla ' + esc(row.size) + '"' : '') + '>' +
         '<td><strong>' + esc(row.size) + '</strong>' + (row.extra ? ' <small>' + esc(row.extra) + '</small>' : '') + '</td>' +
         '<td>' + esc(row.chest) + ' cm</td>' +
@@ -2295,6 +2522,31 @@
       ? 'Medidas orientativas (±2 cm). Si el niño está entre dos tallas, elige la superior para mayor comodidad.'
       : 'Medidas orientativas (±2 cm). En Versión Jugador (Player), el corte es más entallado: si dudas entre dos tallas, sube una. Tallas 3XL y 4XL suman +3,00 €.';
 
+    var calcHtml = '<div class="size-calc-box">' +
+      '<div class="size-calc-top"><strong>Calculador rápido de talla</strong></div>' +
+      (isKids
+        ? '<div class="size-calc-inputs" style="grid-template-columns:1fr">' +
+            '<div class="size-calc-field">' +
+              '<label for="calc-kids-height"><span>Altura aprox.</span><b id="calc-kids-height-val">' + state.calcKidsHeight + ' cm</b></label>' +
+              '<input id="calc-kids-height" type="range" min="80" max="170" step="2" value="' + state.calcKidsHeight + '">' +
+            '</div>' +
+          '</div>'
+        : '<div class="size-calc-inputs">' +
+            '<div class="size-calc-field">' +
+              '<label for="calc-height"><span>Altura</span><b id="calc-height-val">' + state.calcHeight + ' cm</b></label>' +
+              '<input id="calc-height" type="range" min="155" max="205" step="1" value="' + state.calcHeight + '">' +
+            '</div>' +
+            '<div class="size-calc-field">' +
+              '<label for="calc-weight"><span>Peso</span><b id="calc-weight-val">' + state.calcWeight + ' kg</b></label>' +
+              '<input id="calc-weight" type="range" min="50" max="125" step="1" value="' + state.calcWeight + '">' +
+            '</div>' +
+          '</div>') +
+      '<div class="size-calc-result">' +
+        '<span>Talla recomendada: <strong id="calc-rec-size">' + esc(rec.size) + '</strong> <small>(' + esc(rec.reason) + ')</small></span>' +
+        (recAvailable ? '<button type="button" class="size-calc-apply" id="calc-apply-btn" data-apply-rec-size="' + esc(rec.size) + '">Usar ' + esc(rec.size) + '</button>' : '') +
+      '</div>' +
+    '</div>';
+
     return '<div class="size-guide-head">' +
         '<div class="size-guide-tabs" role="tablist" aria-label="Guía de tallas">' +
           '<button type="button" role="tab" aria-selected="' + (!isKids) + '" class="' + (!isKids ? 'is-active' : '') + '" data-guide-tab="adult">Adulto (S–5XL)</button>' +
@@ -2302,6 +2554,7 @@
         '</div>' +
         '<span class="size-guide-legend">Toca una talla disponible para elegirla</span>' +
       '</div>' +
+      calcHtml +
       '<div class="size-guide-table-wrap">' +
         '<table class="size-guide-table"><thead>' + headers + '</thead><tbody>' + tableRows + '</tbody></table>' +
       '</div>' +
@@ -2355,6 +2608,10 @@
         '<svg><use href="#i-check"/></svg>' + (patch === 'No' ? 'Sin parches' : esc(patch)) + '</button>';
     }).join('');
 
+    var teamTheme = getTeamTheme(item.team);
+    var jerseyStyle = '--jersey-bg:' + teamTheme.bg + ';--jersey-bg2:' + teamTheme.bg2 + ';--jersey-ink:' + teamTheme.ink + ';--jersey-accent:' + teamTheme.accent;
+    var patchBadgesHtml = renderPatchBadgesHtml(state.patches);
+
     var customPanel = item.custom ?
       '<div class="custom-panel">' +
         '<div class="custom-panel-head"><strong>Nombre y dorsal</strong>' +
@@ -2371,11 +2628,11 @@
             '<div class="patch-row" id="patch-row">' + patches + '</div>' +
           '</div>' +
           '<div class="product-jersey-preview" aria-hidden="true">' +
-            '<div class="product-jersey-shirt">' +
+            '<div class="product-jersey-shirt" style="' + jerseyStyle + '">' +
               '<span class="product-jersey-name' + (state.customName ? '' : ' is-placeholder') + '" id="product-preview-name">' + esc((state.customName || 'TU NOMBRE').toUpperCase()) + '</span>' +
               '<span class="product-jersey-number' + (state.customNumber ? '' : ' is-placeholder') + '" id="product-preview-number">' + esc(state.customNumber || '10') + '</span>' +
             '</div>' +
-            '<span class="product-jersey-patches" id="product-preview-patches">' + (selectedPatches.length ? 'Parches: ' + esc(selectedPatches.join(', ')) : 'Vista previa en vivo') + '</span>' +
+            '<div class="jersey-patch-badges" id="product-preview-patches">' + (patchBadgesHtml || '<span class="product-jersey-patches">Vista previa ' + esc(item.team) + '</span>') + '</div>' +
           '</div>' +
         '</div>' +
         '<p class="custom-note"><svg><use href="#i-shield"/></svg> Nombre y dorsal: +2,00 € por prenda. Cada parche añade 1,00 €. El nombre se imprime en mayúsculas y el dorsal debe ser del 0 al 99.</p>' +
@@ -2438,7 +2695,8 @@
       numEl.classList.toggle('is-placeholder', !number);
     }
     if (patchesEl) {
-      patchesEl.textContent = state.patches && state.patches !== 'No' ? 'Parches: ' + state.patches : 'Vista previa en vivo';
+      var badges = renderPatchBadgesHtml(state.patches);
+      patchesEl.innerHTML = badges || ('<span class="product-jersey-patches">Vista previa ' + esc(state.product ? state.product.team : 'en vivo') + '</span>');
     }
   }
 
@@ -2517,6 +2775,15 @@
           selectSize(guideSize.getAttribute('data-guide-size'));
           return;
         }
+        var applyRec = event.target.closest('[data-apply-rec-size]');
+        if (applyRec) {
+          var recSize = applyRec.getAttribute('data-apply-rec-size');
+          if (recSize) {
+            selectSize(recSize);
+            toast('Talla ' + recSize + ' aplicada');
+          }
+          return;
+        }
         var size = event.target.closest('[data-size]');
         if (size) {
           selectSize(size.getAttribute('data-size'));
@@ -2546,6 +2813,21 @@
           state.customNumber = cleaned;
           updateCustomPreview();
           updateProductPricing();
+        } else if (event.target.id === 'calc-height' || event.target.id === 'calc-weight' || event.target.id === 'calc-kids-height') {
+          if (event.target.id === 'calc-height') state.calcHeight = parseInt(event.target.value, 10) || 175;
+          if (event.target.id === 'calc-weight') state.calcWeight = parseInt(event.target.value, 10) || 73;
+          if (event.target.id === 'calc-kids-height') state.calcKidsHeight = parseInt(event.target.value, 10) || 130;
+          var isKidsTab = state.sizeGuideTab === 'kids';
+          var rec = recommendSize(state.product, isKidsTab, isKidsTab ? state.calcKidsHeight : state.calcHeight, state.calcWeight);
+          var hv = $('#calc-height-val'); if (hv) hv.textContent = state.calcHeight + ' cm';
+          var wv = $('#calc-weight-val'); if (wv) wv.textContent = state.calcWeight + ' kg';
+          var khv = $('#calc-kids-height-val'); if (khv) khv.textContent = state.calcKidsHeight + ' cm';
+          var rs = $('#calc-rec-size'); if (rs) rs.textContent = rec.size;
+          var applyBtn = $('#calc-apply-btn');
+          if (applyBtn) {
+            applyBtn.setAttribute('data-apply-rec-size', rec.size);
+            applyBtn.textContent = 'Usar ' + rec.size;
+          }
         }
       });
     }
@@ -3139,19 +3421,64 @@
     }).join('');
   }
 
+  function formatBizumPhone(digits) {
+    var clean = String(digits || '').replace(/\D/g, '');
+    if (!clean) return '';
+    if (clean.length === 11 && clean.indexOf('34') === 0) {
+      var local = clean.slice(2);
+      return '+34 ' + local.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+    }
+    if (clean.length === 9) {
+      return clean.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+    }
+    return clean;
+  }
+
+  function bizumDisplayNumber(digits) {
+    var clean = String(digits || '').replace(/\D/g, '');
+    if (!clean) return '';
+    if (clean.length === 11 && clean.indexOf('34') === 0) return clean.slice(2);
+    return clean;
+  }
+
+  function updateCheckoutPaymentUI(form) {
+    if (!form) return;
+    var method = form.elements.paymentMethod ? form.elements.paymentMethod.value : 'confirm';
+    var isBizum = method === 'bizum';
+    $$('.payment-option', form).forEach(function (card) {
+      var input = card.querySelector('input[name="paymentMethod"]');
+      card.classList.toggle('is-active', !!(input && input.checked));
+    });
+    var preview = $('#checkout-bizum-preview');
+    if (preview) preview.hidden = !isBizum;
+    var consentCopy = $('#checkout-consent-copy');
+    var storeName = state.config && state.config.store && state.config.store.name ? state.config.store.name : 'KANG Team';
+    if (consentCopy) {
+      consentCopy.textContent = isBizum
+        ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. El envío y la disponibilidad se confirman por WhatsApp o email.'
+        : 'Acepto que ' + storeName + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.';
+    }
+    var submitBtn = $('#checkout-submit');
+    if (submitBtn && !submitBtn.disabled) {
+      submitBtn.innerHTML = (isBizum ? 'Confirmar y ver datos Bizum' : 'Enviar pedido') + ' <svg><use href="#i-arrow"/></svg>';
+    }
+  }
+
   function renderCheckout() {
     var content = $('#checkout-content');
     if (!content) return;
     var total = cartTotalItems();
-    var storeName = state.config && state.config.store && state.config.store.name ? state.config.store.name : 'KANG Team';
+    var store = state.config && state.config.store ? state.config.store : {};
+    var storeName = store.name || 'KANG Team';
     var saved = state.customer || { name: '', phone: '', email: '', city: '', notes: '' };
     var hasSaved = !!(saved.name || saved.phone);
+    var defaultMethod = store.bizum ? 'bizum' : 'confirm';
 
     content.innerHTML = '<div class="checkout-grid">' +
       '<div class="checkout-form-wrap">' +
         '<p class="eyebrow">Último paso</p>' +
         '<h2 id="checkout-title">Confirma tu pedido</h2>' +
-        '<p class="checkout-sub">Déjanos tus datos y te escribimos para confirmar disponibilidad y envío. Sin pago online.</p>' +
+        '<p class="checkout-sub">Déjanos tus datos y elige si prefieres pagar ya por Bizum directo o confirmar antes por WhatsApp.</p>' +
         (hasSaved ? '<div class="checkout-autofill-note"><span>Datos rellenados de tu último pedido</span><button type="button" id="checkout-clear-customer">Usar otros datos</button></div>' : '') +
         '<form id="checkout-form" novalidate>' +
           '<div class="form-error" id="checkout-error" role="alert"></div>' +
@@ -3162,9 +3489,35 @@
             '<label class="field"><span>Ciudad</span><input name="city" type="text" autocomplete="address-level2" maxlength="80" value="' + esc(saved.city) + '"></label>' +
             '<label class="field field-full"><span>Notas (dirección, talla, dudas…)</span><textarea name="notes" maxlength="600">' + esc(saved.notes) + '</textarea></label>' +
           '</div>' +
+          '<div class="checkout-payment-block">' +
+            '<p class="field-label">Método de pago</p>' +
+            '<div class="payment-methods" role="radiogroup" aria-label="Método de pago">' +
+              '<label class="payment-option' + (defaultMethod === 'bizum' ? ' is-active' : '') + '">' +
+                '<input type="radio" name="paymentMethod" value="bizum"' + (defaultMethod === 'bizum' ? ' checked' : '') + '>' +
+                '<span class="payment-option-copy">' +
+                  '<span class="payment-option-title">Bizum <span class="bizum-badge">Directo</span></span>' +
+                  '<small>Verás el número, importe exacto y código para el concepto.</small>' +
+                '</span>' +
+              '</label>' +
+              '<label class="payment-option' + (defaultMethod === 'confirm' ? ' is-active' : '') + '">' +
+                '<input type="radio" name="paymentMethod" value="confirm"' + (defaultMethod === 'confirm' ? ' checked' : '') + '>' +
+                '<span class="payment-option-copy">' +
+                  '<span class="payment-option-title">Confirmar antes</span>' +
+                  '<small>Revisamos stock y envío por WhatsApp o email primero.</small>' +
+                '</span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="payment-bizum-preview" id="checkout-bizum-preview"' + (defaultMethod === 'bizum' ? '' : ' hidden') + '>' +
+              'Al enviar el pedido obtendrás tu referencia <strong>KT-...</strong> y los datos para hacer el Bizum sin comisiones (el envío se confirma aparte).' +
+            '</div>' +
+          '</div>' +
           '<label class="form-consent"><input type="checkbox" id="checkout-consent">' +
-            '<span>Acepto que ' + esc(storeName) + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.</span></label>' +
-          '<button class="btn btn-primary btn-block" id="checkout-submit" type="submit">Enviar pedido <svg><use href="#i-arrow"/></svg></button>' +
+            '<span id="checkout-consent-copy">' +
+              (defaultMethod === 'bizum'
+                ? 'Acepto generar el pedido y recibir las instrucciones de Bizum directo. El envío y la disponibilidad se confirman por WhatsApp o email.'
+                : 'Acepto que ' + esc(storeName) + ' me contacte por WhatsApp o email para confirmar el pedido. No se realiza ningún cobro online.') +
+            '</span></label>' +
+          '<button class="btn btn-primary btn-block" id="checkout-submit" type="submit">' + (defaultMethod === 'bizum' ? 'Confirmar y ver datos Bizum' : 'Enviar pedido') + ' <svg><use href="#i-arrow"/></svg></button>' +
         '</form>' +
       '</div>' +
       '<aside class="checkout-summary">' +
@@ -3261,7 +3614,9 @@
       button.textContent = 'Enviando pedido…';
     }
 
+    var paymentMethod = form.elements.paymentMethod ? form.elements.paymentMethod.value : 'confirm';
     var payload = {
+      paymentMethod: paymentMethod,
       customer: {
         name: form.elements.name.value.trim(),
         phone: form.elements.phone.value.trim(),
@@ -3302,6 +3657,7 @@
       state.orders.unshift({
         id: data && data.order && data.order.id ? data.order.id : String(Date.now()),
         createdAt: new Date().toISOString(),
+        paymentMethod: data && data.order && data.order.paymentMethod ? data.order.paymentMethod : paymentMethod,
         totalItems: payload.items.reduce(function (sum, l) { return sum + (parseInt(l.qty, 10) || 1); }, 0),
         totalPriceCents: data && data.order ? data.order.totalPriceCents : cartPriceCents(),
         items: snapshotItems
@@ -3328,11 +3684,53 @@
   function renderSuccess(data, customerName) {
     var content = $('#checkout-content');
     if (!content) return;
-    var id = data && data.order ? data.order.id : '';
+    var order = data && data.order ? data.order : {};
+    var id = order.id || '';
+    var isBizum = order.paymentMethod === 'bizum';
+    var store = state.config && state.config.store ? state.config.store : {};
+    var bizumDigits = store.bizum || '';
+    var bizumCopyPhone = bizumDisplayNumber(bizumDigits);
+    var bizumFormatted = formatBizumPhone(bizumDigits);
+    var amountText = order.totalPriceCents ? KangPricing.money(order.totalPriceCents) : '';
+    var amountCopy = order.totalPriceCents ? (order.totalPriceCents / 100).toFixed(2).replace('.', ',') : '';
     var text = data && data.text ? data.text : '';
     var wa = (data && data.whatsappUrl) || ('https://wa.me/?text=' + encodeURIComponent(text));
     var mail = (data && data.mailtoUrl) || ('mailto:?subject=' + encodeURIComponent('Pedido ' + id) + '&body=' + encodeURIComponent(text));
     var automatic = data && data.delivery && (data.delivery.email || data.delivery.whatsapp);
+
+    var bizumHtml = '';
+    if (isBizum) {
+      bizumHtml = '<div class="bizum-box">' +
+        '<div class="bizum-box-head">' +
+          '<span class="bizum-badge">Pago por Bizum</span>' +
+          '<span>Sin comisiones</span>' +
+        '</div>' +
+        '<div class="bizum-rows">' +
+          (bizumFormatted
+            ? '<div class="bizum-row">' +
+                '<div><span class="bizum-row-label">Teléfono Bizum</span><strong class="bizum-row-val">' + esc(bizumFormatted) + '</strong></div>' +
+                '<button class="bizum-copy-btn" type="button" data-copy-value="' + esc(bizumCopyPhone) + '" data-copy-label="Teléfono Bizum copiado">Copiar</button>' +
+              '</div>'
+            : '<div class="bizum-missing-note">El número de Bizum aún no está configurado en el servidor (<code>STORE_BIZUM</code>). Escríbenos por WhatsApp con tu código de pedido y te lo pasamos al momento.</div>') +
+          (store.bizumName
+            ? '<div class="bizum-row"><div><span class="bizum-row-label">Titular</span><strong class="bizum-row-val">' + esc(store.bizumName) + '</strong></div></div>'
+            : '') +
+          (amountText
+            ? '<div class="bizum-row">' +
+                '<div><span class="bizum-row-label">Importe prendas</span><strong class="bizum-row-val is-volt">' + esc(amountText) + '</strong></div>' +
+                '<button class="bizum-copy-btn" type="button" data-copy-value="' + esc(amountCopy) + '" data-copy-label="Importe copiado">Copiar</button>' +
+              '</div>'
+            : '') +
+          (id
+            ? '<div class="bizum-row">' +
+                '<div><span class="bizum-row-label">Concepto</span><strong class="bizum-row-val">' + esc(id) + '</strong></div>' +
+                '<button class="bizum-copy-btn" type="button" data-copy-value="' + esc(id) + '" data-copy-label="Concepto copiado">Copiar</button>' +
+              '</div>'
+            : '') +
+        '</div>' +
+        '<p class="bizum-box-foot">Envía el comprobante por WhatsApp tras hacer el Bizum. Si prefieres sumar primero el coste del envío, consúltanos antes de enviarlo.</p>' +
+      '</div>';
+    }
 
     content.innerHTML = '<div class="success-panel">' +
       '<div class="success-icon"><svg><use href="#i-check"/></svg></div>' +
@@ -3340,8 +3738,9 @@
       '<p>Gracias' + (customerName ? ', ' + esc(customerName) : '') + '. Hemos guardado tu pedido y te contactaremos para confirmar disponibilidad y envío.</p>' +
       (data && data.order ? '<p class="success-total">Total del pedido: <strong>' + esc(KangPricing.money(data.order.totalPriceCents)) + '</strong> · envío por confirmar</p>' : '') +
       '<span class="order-ref">PEDIDO ' + esc(id) + '</span>' +
+      bizumHtml +
       '<div class="success-actions">' +
-        '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Enviar por WhatsApp</a>' +
+        '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> ' + (isBizum ? 'Enviar pedido / justificante por WhatsApp' : 'Enviar por WhatsApp') + '</a>' +
         '<a class="btn btn-outline" href="' + esc(mail) + '"><svg><use href="#i-mail"/></svg> Enviar por email</a>' +
         '<button class="btn btn-ghost" type="button" data-copy-order>Copiar resumen del pedido</button>' +
         '<a class="btn btn-ghost" href="#/catalogo" data-close-checkout>Seguir explorando</a>' +
@@ -3390,6 +3789,11 @@
     var content = $('#checkout-content');
     if (content) {
       content.addEventListener('submit', submitOrder);
+      content.addEventListener('change', function (event) {
+        if (event.target && event.target.name === 'paymentMethod') {
+          updateCheckoutPaymentUI(event.target.form);
+        }
+      });
       content.addEventListener('click', function (event) {
         if (event.target.closest('#checkout-clear-customer')) {
           saveCustomer({ name: '', phone: '', email: '', city: '', notes: '' });
@@ -3464,6 +3868,171 @@
     if (opener) opener.focus();
   }
 
+  // ── Asistente rápido de dudas (Opción A) ──────────────────
+
+  var HELP_TOPICS = [
+    { id: 'size', label: '📏 ¿Qué talla elijo?' },
+    { id: 'bizum', label: '⚡ Pago por Bizum' },
+    { id: 'prices', label: '✏️ Precios y dorsales' },
+    { id: 'shipping', label: '📦 Envíos y plazos' },
+    { id: 'patches', label: '🏆 ¿Qué son los parches?' }
+  ];
+
+  function helpTopicHtml(topicId) {
+    var store = state.config && state.config.store ? state.config.store : {};
+    var bizumFormatted = formatBizumPhone(store.bizum || '');
+    if (topicId === 'size') {
+      var rec = recommendSize(null, false, state.calcHeight, state.calcWeight);
+      return '<div class="help-bubble">' +
+        '<strong>Calculadora rápida de talla (adulto):</strong>' +
+        '<div class="size-calc-inputs" style="margin-top:8px">' +
+          '<div class="size-calc-field">' +
+            '<label for="help-calc-h"><span>Altura</span><b id="help-calc-h-val">' + state.calcHeight + ' cm</b></label>' +
+            '<input id="help-calc-h" type="range" min="155" max="205" step="1" value="' + state.calcHeight + '">' +
+          '</div>' +
+          '<div class="size-calc-field">' +
+            '<label for="help-calc-w"><span>Peso</span><b id="help-calc-w-val">' + state.calcWeight + ' kg</b></label>' +
+            '<input id="help-calc-w" type="range" min="50" max="125" step="1" value="' + state.calcWeight + '">' +
+          '</div>' +
+        '</div>' +
+        '<p style="margin:6px 0 0">Talla recomendada: <strong id="help-calc-rec" style="color:var(--volt)">' + esc(rec.size) + '</strong>. En <strong>Versión Jugador (Player)</strong>, sube 1 talla si te gusta menos ajustada.</p>' +
+      '</div>';
+    }
+    if (topicId === 'bizum') {
+      return '<div class="help-bubble">' +
+        '<strong>Bizum directo sin comisiones:</strong><br>' +
+        'Al confirmar el carrito selecciona <strong>Bizum</strong>. Te mostraremos al instante el código de pedido <strong>KT-...</strong> para el concepto y el número' +
+        (bizumFormatted ? ' (<strong>' + esc(bizumFormatted) + '</strong>)' : '') +
+        '. También puedes elegir <em>Confirmar antes</em> si prefieres revisar stock y envío por WhatsApp.' +
+      '</div>';
+    }
+    if (topicId === 'prices') {
+      return '<div class="help-bubble">' +
+        '<strong>Personalización y extras claros:</strong><br>' +
+        '• Nombre + dorsal en camiseta: <strong>+2,00 €</strong><br>' +
+        '• Cada parche de competición: <strong>+1,00 €</strong><br>' +
+        '• Tallas especiales 3XL / 4XL: <strong>+3,00 €</strong><br>' +
+        '<a class="help-mini-link" href="#/precios" data-help-close-link>Ver tabla completa de tarifas →</a>' +
+      '</div>';
+    }
+    if (topicId === 'shipping') {
+      return '<div class="help-bubble">' +
+        '<strong>Envíos y plazos:</strong><br>' +
+        'El envío se confirma según destino tras recibir el pedido. Si juntas <strong>3 o más prendas</strong> en el carrito optimizas el envío combinado.' +
+      '</div>';
+    }
+    if (topicId === 'patches') {
+      return '<div class="help-bubble">' +
+        '<strong>Parches de competición:</strong><br>' +
+        'Son los escudos oficiales en mangas/pecho (Liga, Champions, Mundial o Copa). Puedes verlos en directo en la vista previa de cualquier camiseta personalizable.' +
+      '</div>';
+    }
+    return '';
+  }
+
+  function renderHelpWidget() {
+    var body = $('#help-body');
+    if (!body) return;
+    var active = state.helpTopic;
+    var activeLabel = '';
+    HELP_TOPICS.forEach(function (t) { if (t.id === active) activeLabel = t.label; });
+
+    body.innerHTML =
+      '<div class="help-bubble">¡Hola! Elige una duda frecuente para ver la respuesta al instante o escríbenos por WhatsApp.</div>' +
+      (active ? '<div class="help-bubble is-user">' + esc(activeLabel) + '</div>' + helpTopicHtml(active) : '') +
+      '<div class="help-topic-grid">' +
+        HELP_TOPICS.map(function (t) {
+          return '<button type="button" class="help-topic-btn' + (active === t.id ? ' is-active' : '') + '" data-help-topic="' + esc(t.id) + '">' + esc(t.label) + '</button>';
+        }).join('') +
+      '</div>';
+  }
+
+  function openHelpWidget() {
+    var widget = $('#help-widget');
+    var fab = $('#help-open');
+    if (!widget) return;
+    renderHelpWidget();
+    widget.hidden = false;
+    widget.setAttribute('aria-hidden', 'false');
+    if (fab) fab.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeHelpWidget() {
+    var widget = $('#help-widget');
+    var fab = $('#help-open');
+    if (!widget || widget.hidden) return;
+    widget.hidden = true;
+    widget.setAttribute('aria-hidden', 'true');
+    if (fab) fab.setAttribute('aria-expanded', 'false');
+  }
+
+  function bindHelpWidget() {
+    var fab = $('#help-open');
+    var closeBtn = $('#help-close');
+    var widget = $('#help-widget');
+    if (fab) {
+      fab.addEventListener('click', function () {
+        if (widget && !widget.hidden) closeHelpWidget();
+        else openHelpWidget();
+      });
+    }
+    if (closeBtn) closeBtn.addEventListener('click', closeHelpWidget);
+    if (widget) {
+      widget.addEventListener('click', function (event) {
+        var topicBtn = event.target.closest('[data-help-topic]');
+        if (topicBtn) {
+          state.helpTopic = topicBtn.getAttribute('data-help-topic') || '';
+          renderHelpWidget();
+          return;
+        }
+        if (event.target.closest('[data-help-close-link]')) {
+          closeHelpWidget();
+        }
+      });
+      widget.addEventListener('input', function (event) {
+        if (event.target.id === 'help-calc-h' || event.target.id === 'help-calc-w') {
+          if (event.target.id === 'help-calc-h') state.calcHeight = parseInt(event.target.value, 10) || 175;
+          if (event.target.id === 'help-calc-w') state.calcWeight = parseInt(event.target.value, 10) || 73;
+          var hv = $('#help-calc-h-val'); if (hv) hv.textContent = state.calcHeight + ' cm';
+          var wv = $('#help-calc-w-val'); if (wv) wv.textContent = state.calcWeight + ' kg';
+          var recEl = $('#help-calc-rec');
+          if (recEl) recEl.textContent = recommendSize(null, false, state.calcHeight, state.calcWeight).size;
+        }
+      });
+    }
+  }
+
+  // ── Segunda imagen suave al hacer hover en tarjetas ────────
+
+  function bindCardHoverPreview() {
+    if (window.matchMedia && !window.matchMedia('(hover: hover)').matches) return;
+    document.addEventListener('pointerenter', function (event) {
+      if (!event.target || !event.target.closest) return;
+      var card = event.target.closest('.card[data-product]');
+      if (!card || card.getAttribute('data-alt-done')) return;
+      if (parseInt(card.getAttribute('data-photos'), 10) <= 1) return;
+      var id = card.getAttribute('data-product');
+      var item = state.byId.get(id);
+      if (!item) return;
+      card.setAttribute('data-alt-done', '1');
+      fetchAlbumCached(item).then(function (ordered) {
+        if (!ordered || ordered.length < 2 || !card.isConnected) return;
+        var media = card.querySelector('.card-media');
+        if (!media || media.querySelector('.card-alt-img')) return;
+        var altImg = document.createElement('img');
+        altImg.className = 'card-alt-img';
+        altImg.alt = '';
+        altImg.decoding = 'async';
+        altImg.onload = function () {
+          altImg.classList.add('is-loaded');
+          card.classList.add('has-alt');
+        };
+        altImg.src = photoUrl(ordered[1], 'small', item.source);
+        media.insertBefore(altImg, media.querySelector('.img-skeleton'));
+      }).catch(function () {});
+    }, true);
+  }
+
   // ── Eventos globales ─────────────────────────────────────
 
   function handleEscape() {
@@ -3483,6 +4052,8 @@
     if (filters && filters.classList.contains('is-open')) return closeFilters();
     var menu = $('#mobile-menu');
     if (menu && menu.classList.contains('is-open')) return closeMenu();
+    var help = $('#help-widget');
+    if (help && !help.hidden) return closeHelpWidget();
   }
 
   function bindGlobalEvents() {
@@ -3525,6 +4096,19 @@
           toast('Resumen copiado al portapapeles');
         }).catch(function () {
           toast('No se pudo copiar el resumen', 'error');
+        });
+        return;
+      }
+
+      var copyValBtn = event.target.closest('[data-copy-value]');
+      if (copyValBtn) {
+        var val = copyValBtn.getAttribute('data-copy-value') || '';
+        var label = copyValBtn.getAttribute('data-copy-label') || 'Copiado al portapapeles';
+        if (!val) return;
+        copyText(val).then(function () {
+          toast(label);
+        }).catch(function () {
+          toast('No se pudo copiar', 'error');
         });
         return;
       }
@@ -3601,8 +4185,11 @@
     bindFavsEvents();
     bindOrdersEvents();
     bindCheckoutEvents();
+    bindHelpWidget();
+    bindCardHoverPreview();
 
     renderRoute(false);
+    renderCatalogSkeletons();
     updateCartUI();
     updateFavsUI();
     updateOrdersUI();

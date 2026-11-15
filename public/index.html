@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261114-18">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-02">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -159,6 +159,19 @@
             <a class="text-link" href="#/catalogo?temporada=26%2F27">Ver temporada <svg><use href="#i-arrow"/></svg></a>
           </div>
           <div class="rail" id="home-new"></div>
+        </div>
+      </section>
+
+      <section class="section section-collections">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Selección Matchday</p>
+              <h2>Explora por estilo</h2>
+            </div>
+            <a class="text-link" href="#/catalogo?vista=grid">Ver catálogo <svg><use href="#i-arrow"/></svg></a>
+          </div>
+          <div class="matchday-grid" id="home-collections"></div>
         </div>
       </section>
 
@@ -416,7 +429,7 @@
           </details>
           <details>
             <summary>¿Cómo se paga?<svg><use href="#i-chevron"/></svg></summary>
-            <p>No hay pago online. Primero confirmamos disponibilidad, precio y gastos de envío por WhatsApp o email. Después te indicamos los métodos de pago disponibles.</p>
+            <p>Al confirmar tu pedido puedes elegir <strong>Bizum directo</strong> (te mostramos al momento el número, el importe y la referencia del pedido para el concepto) o pedir confirmación previa de stock y envío por WhatsApp o email antes de pagar.</p>
           </details>
           <details>
             <summary>¿Cuánto tarda el envío?<svg><use href="#i-chevron"/></svg></summary>
@@ -608,6 +621,29 @@
     <img id="lightbox-img" alt="">
   </div>
 
+  <button class="help-fab" id="help-open" type="button" aria-label="Ayuda y dudas frecuentes" aria-expanded="false" aria-controls="help-widget">
+    <span class="help-fab-dot" aria-hidden="true"></span>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8A2.5 2.5 0 0 1 17.5 17H9l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5v-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.6 9.3a2.4 2.4 0 0 1 4.6.8c0 1.3-1.8 1.7-1.8 2.9m.1 2.5h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <span>¿Dudas?</span>
+  </button>
+
+  <aside class="help-widget" id="help-widget" role="dialog" aria-label="Asistente rápido de dudas" aria-hidden="true" hidden>
+    <div class="help-widget-head">
+      <div class="help-widget-id">
+        <span class="help-avatar" aria-hidden="true">KT</span>
+        <div>
+          <strong>Asistente KANG Team</strong>
+          <span>Respuestas al instante</span>
+        </div>
+      </div>
+      <button class="icon-btn" id="help-close" type="button" aria-label="Cerrar asistente"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="help-widget-body" id="help-body"></div>
+    <div class="help-widget-foot">
+      <a class="btn btn-whatsapp btn-block" id="help-whatsapp" href="#" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Hablar por WhatsApp</a>
+    </div>
+  </aside>
+
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
 
   <noscript>
@@ -615,6 +651,6 @@
   </noscript>
 
   <script src="/js/pricing.js?v=20261113-15" defer></script>
-  <script src="/js/app.js?v=20261114-18" defer></script>
+  <script src="/js/app.js?v=20261115-02" defer></script>
 </body>
 </html>
