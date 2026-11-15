@@ -13,7 +13,7 @@
     "sync:force": "node scripts/sync.js --force"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "22.x"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
