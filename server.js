@@ -927,7 +927,8 @@ function serveStatic(req, res, pathname) {
 
 async function handle(req, res) {
   var parsed = urlLib.parse(req.url, true);
-  var pathname = parsed.pathname || '/';
+  var apiOverride = parsed.query && typeof parsed.query.__api === 'string' ? parsed.query.__api : '';
+  var pathname = (apiOverride && apiOverride.indexOf('/api/') === 0) ? apiOverride : (parsed.pathname || '/');
 
   if (req.method === 'GET' && pathname.indexOf('/img/') === 0) {
     return serveImage(req, res, pathname);
@@ -1147,6 +1148,9 @@ async function handle(req, res) {
     return sendJson(res, 200, { ok: true, total: catalog.items.length, updatedAt: catalog.meta.generatedAt, storageMode: getStorageMode() }, req);
   }
 
+  if (pathname.indexOf('/api/') === 0) {
+    return sendJson(res, 404, { error: 'Ruta API no encontrada' }, req);
+  }
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, pathname);
   return sendText(res, 405, 'Método no permitido');
 }

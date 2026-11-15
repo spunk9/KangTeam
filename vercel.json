@@ -13,6 +13,18 @@
   },
   "rewrites": [
     {
+      "source": "/api/orders/track",
+      "destination": "/api/handler?__api=/api/orders/track"
+    },
+    {
+      "source": "/api/admin/orders",
+      "destination": "/api/handler?__api=/api/admin/orders"
+    },
+    {
+      "source": "/api/admin/orders/:id",
+      "destination": "/api/handler?__api=/api/admin/orders/:id"
+    },
+    {
       "source": "/img/:source/:folder/:hash/:filename",
       "destination": "/api/img?source=:source&folder=:folder&hash=:hash&filename=:filename"
     },

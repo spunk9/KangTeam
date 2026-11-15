@@ -4573,7 +4573,7 @@
       var data = null;
       try { data = await res.json(); } catch (err) {}
       if (!res.ok) {
-        throw new Error(data && data.error ? data.error : 'No se pudo enviar el pedido. Inténtalo de nuevo.');
+        throw new Error(extractApiError(data, 'No se pudo enviar el pedido. Inténtalo de nuevo.'));
       }
 
       saveCustomer(payload.customer);
@@ -5217,6 +5217,16 @@
     return ORDER_STATUS_META[status] || { label: status || 'Pendiente', cls: 'is-pending', step: 0 };
   }
 
+  function extractApiError(data, fallback) {
+    if (!data) return fallback;
+    if (typeof data.error === 'string' && data.error) return data.error;
+    if (data.error && typeof data.error === 'object') {
+      return data.error.message || data.error.code || fallback;
+    }
+    if (typeof data.message === 'string' && data.message) return data.message;
+    return fallback;
+  }
+
   async function lookupOrderTrack(id, phone4) {
     var cleanId = String(id || '').trim().toUpperCase();
     var cleanP4 = String(phone4 || '').replace(/\D/g, '').slice(-4);
@@ -5227,9 +5237,10 @@
     renderTrackView();
     try {
       var res = await fetch('/api/orders/track?id=' + enc(cleanId) + '&phone4=' + enc(cleanP4), { headers: { 'Accept': 'application/json' } });
-      var data = await res.json();
-      if (!res.ok) throw new Error((data && data.error) || 'No se pudo consultar el pedido');
-      state.trackResult = data.order || null;
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(extractApiError(data, 'Error ' + res.status + ' al consultar el pedido'));
+      state.trackResult = data && data.order ? data.order : null;
       state.trackError = '';
     } catch (err) {
       state.trackResult = null;
@@ -5350,21 +5361,22 @@
       var headers = { 'Accept': 'application/json' };
       if (state.adminToken) headers['x-admin-token'] = state.adminToken;
       var res = await fetch('/api/admin/orders', { headers: headers });
-      var data = await res.json();
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
       if (res.status === 401) {
         state.adminNeedsToken = true;
-        state.adminError = state.adminToken ? (data.error || 'Token incorrecto') : '';
+        state.adminError = state.adminToken ? extractApiError(data, 'Token incorrecto') : '';
         state.adminOrders = [];
         return;
       }
-      if (!res.ok) throw new Error((data && data.error) || 'No se pudieron cargar los pedidos');
+      if (!res.ok) throw new Error(extractApiError(data, 'Error ' + res.status + ' al cargar los pedidos'));
       state.adminNeedsToken = false;
-      state.adminOrders = Array.isArray(data.orders) ? data.orders : [];
-      state.adminStats = data.stats || null;
+      state.adminOrders = Array.isArray(data && data.orders) ? data.orders : [];
+      state.adminStats = (data && data.stats) || null;
       state.adminMeta = {
-        storageMode: data.storageMode,
-        isVercel: !!data.isVercel,
-        adminConfigured: !!data.adminConfigured
+        storageMode: data && data.storageMode,
+        isVercel: !!(data && data.isVercel),
+        adminConfigured: !!(data && data.adminConfigured)
       };
     } catch (err) {
       state.adminError = err.message || 'Error al cargar el panel';
@@ -5383,8 +5395,9 @@
         headers: headers,
         body: JSON.stringify(patch)
       });
-      var data = await res.json();
-      if (!res.ok) throw new Error((data && data.error) || 'No se pudo actualizar');
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(extractApiError(data, 'No se pudo actualizar (' + res.status + ')'));
       toast('Pedido ' + orderId + ' actualizado');
       await loadAdminOrders();
     } catch (err) {
@@ -5397,8 +5410,9 @@
       var headers = { 'Accept': 'application/json' };
       if (state.adminToken) headers['x-admin-token'] = state.adminToken;
       var res = await fetch('/api/sync', { method: 'POST', headers: headers });
-      var data = await res.json();
-      if (!res.ok) throw new Error((data && data.error) || 'No se pudo iniciar la sincronización');
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(extractApiError(data, 'No se pudo iniciar la sincronización'));
       toast('Sincronización de catálogo iniciada en segundo plano');
     } catch (err) {
       toast(err.message || 'Error al sincronizar', 'error');
