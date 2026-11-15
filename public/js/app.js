@@ -88,7 +88,27 @@
     returnFocus: null,
     previewTimer: null,
     albumCache: new Map(),
-    helpTopic: ''
+    helpTopic: '',
+    searchVocab: [],
+    searchTokenCache: new Map(),
+    versionCompareOpen: false,
+    bulkOpen: false,
+    bulkQtys: {},
+    removedCartCount: 0,
+    trackResult: null,
+    trackError: '',
+    trackLoading: false,
+    trackQueryId: '',
+    trackQueryPhone4: '',
+    adminToken: '',
+    adminOrders: [],
+    adminStats: null,
+    adminMeta: null,
+    adminLoading: false,
+    adminError: '',
+    adminStatusFilter: '',
+    adminSearch: '',
+    adminNeedsToken: false
   };
 
   // ── Utilidades ───────────────────────────────────────────
@@ -112,6 +132,173 @@
       .replace(/&/g, ' and ')
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
+  }
+
+  var SEARCH_ALIASES = {
+    barsa: ['barcelona', 'fc barcelona'],
+    barca: ['barcelona', 'fc barcelona'],
+    cule: ['barcelona'],
+    atleti: ['atletico de madrid', 'atletico'],
+    atletico: ['atletico de madrid'],
+    pateti: ['atletico de madrid'],
+    madrid: ['real madrid', 'atletico de madrid'],
+    merengue: ['real madrid'],
+    manu: ['manchester united'],
+    united: ['manchester united'],
+    city: ['manchester city'],
+    juve: ['juventus'],
+    psg: ['psg', 'paris saint germain'],
+    paris: ['paris saint germain', 'psg'],
+    bayern: ['bayern munich'],
+    bayer: ['bayer leverkusen', 'bayern munich'],
+    inter: ['inter de milan', 'inter milan', 'inter miami'],
+    milan: ['ac milan', 'inter de milan'],
+    spurs: ['tottenham'],
+    gunners: ['arsenal'],
+    blues: ['chelsea'],
+    reds: ['liverpool', 'manchester united'],
+    betis: ['real betis'],
+    bilbao: ['athletic club'],
+    athletic: ['athletic club'],
+    espanol: ['espanyol', 'espana'],
+    espana: ['spain', 'espana'],
+    portero: ['gk', 'goalkeeper', 'portero'],
+    arquero: ['gk', 'portero'],
+    nino: ['kids', 'ninos'],
+    ninos: ['kids', 'ninos'],
+    infantil: ['kids', 'ninos'],
+    mujer: ['women', 'mujer'],
+    chica: ['women', 'mujer'],
+    chicas: ['women', 'mujer'],
+    larga: ['manga larga', 'long'],
+    jugador: ['player'],
+    player: ['player'],
+    chandal: ['training', 'tracksuit', 'chandal'],
+    sudadera: ['hoodie', 'sweatshirt', 'sudadera'],
+    chaqueta: ['jacket', 'windbreaker', 'chaqueta'],
+    retro: ['retro'],
+    vintage: ['retro'],
+    clasica: ['retro'],
+    seleccion: ['selecciones'],
+    selecciones: ['selecciones']
+  };
+
+  function expandQueryText(raw) {
+    return normalize(raw)
+      .replace(/\bman\s+u\b/g, 'manchester united')
+      .replace(/\bman\s+united\b/g, 'manchester united')
+      .replace(/\bman\s+city\b/g, 'manchester city')
+      .replace(/\binter\s+milan\b/g, 'inter de milan')
+      .replace(/\batleti\b/g, 'atletico de madrid');
+  }
+
+  function levenshteinWithin(a, b, maxDist) {
+    var la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > maxDist) return false;
+    var prev = [], curr = [], i, j, cost;
+    for (j = 0; j <= lb; j++) prev[j] = j;
+    for (i = 1; i <= la; i++) {
+      curr[0] = i;
+      var rowMin = curr[0];
+      for (j = 1; j <= lb; j++) {
+        cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+        curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+        if (curr[j] < rowMin) rowMin = curr[j];
+      }
+      if (rowMin > maxDist) return false;
+      var tmp = prev; prev = curr; curr = tmp;
+    }
+    return prev[lb] <= maxDist;
+  }
+
+  function resolveSearchVariants(token) {
+    if (!token) return [];
+    if (state.searchTokenCache.has(token)) return state.searchTokenCache.get(token);
+    var variants = [token];
+    var aliasList = SEARCH_ALIASES[token];
+    if (aliasList) {
+      aliasList.forEach(function (alt) {
+        if (variants.indexOf(alt) === -1) variants.push(alt);
+      });
+    }
+    if (token.length >= 4 && state.searchVocab.length) {
+      var maxDist = token.length >= 7 ? 2 : 1;
+      for (var i = 0; i < state.searchVocab.length; i++) {
+        var word = state.searchVocab[i];
+        if (word === token || word.indexOf(token) !== -1) continue;
+        if (levenshteinWithin(token, word, maxDist)) {
+          variants.push(word);
+          if (variants.length >= 8) break;
+        }
+      }
+    }
+    state.searchTokenCache.set(token, variants);
+    return variants;
+  }
+
+  function textMatchesSearchTokens(haystack, tokens) {
+    for (var t = 0; t < tokens.length; t++) {
+      var variants = resolveSearchVariants(tokens[t]);
+      var ok = false;
+      for (var v = 0; v < variants.length; v++) {
+        if (haystack.indexOf(variants[v]) !== -1) { ok = true; break; }
+      }
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  function itemMatchesQuery(item, rawQuery) {
+    var clean = expandQueryText(rawQuery);
+    if (!clean) return true;
+    if (item._search.indexOf(clean) !== -1) return true;
+    var tokens = clean.split(' ').filter(Boolean);
+    return tokens.length ? textMatchesSearchTokens(item._search, tokens) : true;
+  }
+
+  function updateDocumentTitle(prefix) {
+    var store = state.config && state.config.store ? state.config.store : {};
+    var name = store.name || 'KANG Team';
+    document.title = prefix ? (prefix + ' · ' + name) : (name + ' · Catálogo de camisetas, chándals y equipaciones');
+  }
+
+  var TEAM_STAR_PRESETS = {
+    'real madrid': [['MBAPPÉ', '9'], ['VINICIUS JR', '7'], ['BELLINGHAM', '5'], ['VALVERDE', '8']],
+    'fc barcelona': [['LAMINE YAMAL', '19'], ['PEDRI', '8'], ['RAPHINHA', '11'], ['LEWANDOWSKI', '9']],
+    'barcelona': [['LAMINE YAMAL', '19'], ['PEDRI', '8'], ['RAPHINHA', '11'], ['LEWANDOWSKI', '9']],
+    'atletico de madrid': [['GRIEZMANN', '7'], ['JULIAN ALVAREZ', '19'], ['BARRIOS', '8'], ['KOKE', '6']],
+    'atletico madrid': [['GRIEZMANN', '7'], ['JULIAN ALVAREZ', '19'], ['BARRIOS', '8'], ['KOKE', '6']],
+    'manchester city': [['HAALAND', '9'], ['RODRI', '16'], ['FODEN', '47'], ['MARMOUSH', '7']],
+    'manchester united': [['BRUNO FERNANDES', '8'], ['GARNACHO', '17'], ['MAINOO', '37'], ['RASHFORD', '10']],
+    'arsenal': [['SAKA', '7'], ['ODEGAARD', '8'], ['RICE', '41'], ['HAVERTZ', '29']],
+    'liverpool': [['SALAH', '11'], ['VAN DIJK', '4'], ['MAC ALLISTER', '10'], ['LUIS DIAZ', '7']],
+    'chelsea': [['PALMER', '20'], ['ENZO', '8'], ['CAICEDO', '25'], ['JAMES', '24']],
+    'psg': [['DEMBELE', '10'], ['BARCOLA', '29'], ['VITINHA', '17'], ['HAKIMI', '2']],
+    'paris saint germain': [['DEMBELE', '10'], ['BARCOLA', '29'], ['VITINHA', '17'], ['HAKIMI', '2']],
+    'bayern munich': [['MUSIALA', '42'], ['KANE', '9'], ['KIMMICH', '6'], ['OLISE', '17']],
+    'ac milan': [['RAFA LEAO', '10'], ['PULISIC', '11'], ['THEO', '19'], ['REIJNDERS', '14']],
+    'inter de milan': [['LAUTARO', '10'], ['BARELLA', '23'], ['THURAM', '9'], ['DIMARCO', '32']],
+    'juventus': [['YILDIZ', '10'], ['VLAHOVIC', '9'], ['BREMER', '3'], ['LOCATELLI', '5']],
+    'real betis': [['ISCO', '22'], ['LO CELSO', '20'], ['ANTONY', '7'], ['BARTRA', '5']],
+    'athletic club': [['NICO WILLIAMS', '10'], ['IÑAKI WILLIAMS', '9'], ['SANCET', '8'], ['VIVIAN', '3']],
+    'espana': [['LAMINE YAMAL', '19'], ['NICO WILLIAMS', '11'], ['RODRI', '16'], ['PEDRI', '20']],
+    'spain': [['LAMINE YAMAL', '19'], ['NICO WILLIAMS', '11'], ['RODRI', '16'], ['PEDRI', '20']],
+    'argentina': [['MESSI', '10'], ['LAUTARO', '22'], ['JULIAN ALVAREZ', '9'], ['DI MARIA', '11']],
+    'portugal': [['RONALDO', '7'], ['BRUNO', '8'], ['RAFA LEAO', '17'], ['BERNARDO', '10']],
+    'francia': [['MBAPPÉ', '10'], ['GRIEZMANN', '7'], ['DEMBELE', '11'], ['CAMAVINGA', '6']],
+    'brasil': [['VINICIUS JR', '7'], ['RAPHINHA', '11'], ['RODRYGO', '10'], ['NEYMAR JR', '10']],
+    'inter miami': [['MESSI', '10'], ['SUAREZ', '9'], ['BUSQUETS', '5'], ['ALBA', '18']],
+    'al nassr': [['RONALDO', '7'], ['MANE', '10'], ['BROZOVIC', '77'], ['DURAN', '9']]
+  };
+
+  function getTeamPresets(teamName) {
+    var key = normalize(teamName || '');
+    if (TEAM_STAR_PRESETS[key]) return TEAM_STAR_PRESETS[key];
+    var keys = Object.keys(TEAM_STAR_PRESETS);
+    for (var i = 0; i < keys.length; i++) {
+      if (key && key.indexOf(keys[i]) !== -1) return TEAM_STAR_PRESETS[keys[i]];
+    }
+    return [['CAPITÁN', '10'], ['GOLEADOR', '9'], ['LEYENDA', '7'], ['CRACK', '11']];
   }
 
   function fmt(value) { return numberFormat.format(Number(value) || 0); }
@@ -475,7 +662,7 @@
     { size: '2XL', chest: '112–116', length: '78', height: '187–192', weight: '90–98 kg' },
     { size: '3XL', chest: '116–122', length: '80', height: '190–196', weight: '98–106 kg', extra: '+3,00 €' },
     { size: '4XL', chest: '122–128', length: '82', height: '192–200', weight: '106–115 kg', extra: '+3,00 €' },
-    { size: '5XL', chest: '128–134', length: '84', height: '195–205', weight: '+115 kg' }
+    { size: '5XL', chest: '128–134', length: '84', height: '195–205', weight: '+115 kg', extra: '+3,00 €' }
   ];
 
   var KIDS_SIZE_GUIDE = [
@@ -879,12 +1066,19 @@
       state.seasons.set(item.seasonGroup, (state.seasons.get(item.seasonGroup) || 0) + 1);
       state.types.set(item.type, (state.types.get(item.type) || 0) + 1);
     });
+    var vocabSet = Object.create(null);
+    state.teams.forEach(function (team) {
+      normalize(team.name + ' ' + team.league).split(' ').forEach(function (w) {
+        if (w.length >= 4) vocabSet[w] = true;
+      });
+    });
+    state.searchVocab = Object.keys(vocabSet);
+    state.searchTokenCache.clear();
   }
 
   function applyConfig() {
     var store = state.config && state.config.store ? state.config.store : {};
-    var name = store.name || 'KANG Team';
-    document.title = name + ' · Catálogo de camisetas, chándals y equipaciones';
+    if (state.route === 'home') updateDocumentTitle('');
 
     var waNumber = (store.whatsapp || '').replace(/\D/g, '');
     var waHref = waNumber ? 'https://wa.me/' + waNumber : 'https://wa.me/';
@@ -907,7 +1101,6 @@
       if (waNumber) html += '<a href="' + waHref + '" target="_blank" rel="noopener" aria-label="WhatsApp"><svg><use href="#i-whatsapp"/></svg></a>';
       if (email) html += '<a href="mailto:' + esc(email) + '" aria-label="Email"><svg><use href="#i-mail"/></svg></a>';
       if (store.instagram) html += '<a href="https://instagram.com/' + esc(store.instagram.replace(/^@/, '')) + '" target="_blank" rel="noopener" aria-label="Instagram"><svg><use href="#i-instagram"/></svg></a>';
-      html += '<a href="https://minkang.x.yupoo.com/categories/712891" target="_blank" rel="noopener" aria-label="Yupoo"><svg><use href="#i-arrow"/></svg></a>';
       social.innerHTML = html;
     }
 
@@ -982,10 +1175,33 @@
     else location.hash = path;
   }
 
+  function routeTitleForState() {
+    if (state.route === 'catalog') {
+      if (state.filters.team) return state.filters.team + ' · Catálogo';
+      if (state.filters.collection === 'primavera-invierno') return 'Primavera / invierno';
+      if (state.filters.version) return VERSION_LABELS[state.filters.version] || 'Catálogo';
+      return 'Catálogo completo';
+    }
+    if (state.route === 'teams') return 'Equipos y selecciones';
+    if (state.route === 'prices') return 'Tarifas y extras';
+    if (state.route === 'how') return 'Cómo funciona';
+    if (state.route === 'track') return 'Seguimiento de pedido';
+    if (state.route === 'admin') return 'Gestión de pedidos';
+    return '';
+  }
+
   function renderRoute(scroll) {
     var route = parseRoute();
     var isProductRoute = route.path.indexOf('/producto/') === 0;
-    var routeKeys = { '/': 'home', '/catalogo': 'catalog', '/equipos': 'teams', '/como-funciona': 'how', '/precios': 'prices' };
+    var routeKeys = {
+      '/': 'home',
+      '/catalogo': 'catalog',
+      '/equipos': 'teams',
+      '/como-funciona': 'how',
+      '/precios': 'prices',
+      '/seguimiento': 'track',
+      '/admin': 'admin'
+    };
     state.route = isProductRoute ? (state.route || 'catalog') : (routeKeys[route.path] || 'home');
 
     if (!isProductRoute) {
@@ -1048,6 +1264,25 @@
       viewId = 'view-prices';
       navKey = 'prices';
       renderPrices();
+    } else if (route.path === '/seguimiento') {
+      viewId = 'view-track';
+      navKey = 'track';
+      var qId = (route.params.get('id') || '').trim().toUpperCase();
+      var qPhone4 = (route.params.get('phone4') || '').replace(/\D/g, '').slice(-4);
+      if (qId) state.trackQueryId = qId;
+      if (qPhone4) state.trackQueryPhone4 = qPhone4;
+      renderTrackView();
+      if (qId && qPhone4.length === 4) {
+        lookupOrderTrack(qId, qPhone4);
+      }
+    } else if (route.path === '/admin') {
+      viewId = 'view-admin';
+      navKey = '';
+      if (!state.adminToken) {
+        try { state.adminToken = sessionStorage.getItem('kang_admin_token') || ''; } catch (e) {}
+      }
+      renderAdminView();
+      loadAdminOrders();
     } else if (isProductRoute) {
       viewId = state.route === 'catalog' ? 'view-catalog' : 'view-home';
       navKey = state.route === 'catalog' ? 'catalog' : 'home';
@@ -1055,6 +1290,10 @@
         syncFilterInputs();
         renderCatalog();
       }
+    }
+
+    if (!isProductRoute) {
+      updateDocumentTitle(routeTitleForState());
     }
 
     var view = document.getElementById(viewId);
@@ -1214,6 +1453,7 @@
           featureEl.innerHTML = '';
         }
       }
+      if (state.route === 'catalog') updateDocumentTitle(teamName + ' · Catálogo');
       return;
     }
 
@@ -1229,6 +1469,7 @@
     if (lead) lead.textContent = isSeasonal
       ? 'Ropa de entrenamiento y paseo para adultos y niños. Filtra por tipo de prenda, cierre y equipo.'
       : 'Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.';
+    if (state.route === 'catalog') updateDocumentTitle(routeTitleForState());
   }
 
   // ── Inicio ───────────────────────────────────────────────
@@ -1520,11 +1761,12 @@
     var container = $('#teams-results');
     if (!container) return;
 
-    var query = normalize($('#teams-search') ? $('#teams-search').value : '');
+    var query = expandQueryText($('#teams-search') ? $('#teams-search').value : '');
+    var qTokens = query ? query.split(' ').filter(Boolean) : [];
     var league = $('#teams-league') ? $('#teams-league').value : '';
     var teams = Array.from(state.teams.values()).filter(function (team) {
       if (league && team.league !== league) return false;
-      if (query && normalize(team.name + ' ' + team.league).indexOf(query) === -1) return false;
+      if (qTokens.length && !textMatchesSearchTokens(normalize(team.name + ' ' + team.league), qTokens)) return false;
       return true;
     });
 
@@ -1588,7 +1830,7 @@
   }
 
   function getFilteredItems() {
-    var q = normalize(state.filters.q);
+    var q = state.filters.q || '';
     var team = state.filters.team;
     var league = state.filters.league;
     var season = state.filters.season;
@@ -1613,7 +1855,7 @@
       if (subcategory && item.subcategory !== subcategory) return false;
       if (flag && (!Array.isArray(item.flags) || item.flags.indexOf(flag) === -1)) return false;
       if (price && !matchesPriceBand(item, price)) return false;
-      if (q && item._search.indexOf(q) === -1) return false;
+      if (q && !itemMatchesQuery(item, q)) return false;
       return true;
     });
 
@@ -1941,7 +2183,7 @@
   // ── Opciones de filtro ───────────────────────────────────
 
   function itemsForFacet(excludedFilter) {
-    var q = normalize(state.filters.q);
+    var q = state.filters.q || '';
     var onlyFavs = state.filters.favs === '1';
     return state.items.filter(function (item) {
       if (excludedFilter !== 'favs' && onlyFavs && !isFavorite(item.id)) return false;
@@ -1955,7 +2197,7 @@
       if (excludedFilter !== 'subcategory' && state.filters.subcategory && item.subcategory !== state.filters.subcategory) return false;
       if (excludedFilter !== 'flag' && state.filters.flag && (!Array.isArray(item.flags) || item.flags.indexOf(state.filters.flag) === -1)) return false;
       if (excludedFilter !== 'price' && state.filters.price && !matchesPriceBand(item, state.filters.price)) return false;
-      if (excludedFilter !== 'q' && q && item._search.indexOf(q) === -1) return false;
+      if (excludedFilter !== 'q' && q && !itemMatchesQuery(item, q)) return false;
       return true;
     });
   }
@@ -2229,14 +2471,17 @@
     var input = $('#catalog-search');
     if (!box || !input) return;
 
-    var q = normalize(rawQuery);
+    var q = expandQueryText(rawQuery);
     if (q.length < 2 || !state.items.length) {
       hideSearchSuggest();
       return;
     }
 
+    var tokens = q.split(' ').filter(Boolean);
     var teams = Array.from(state.teams.values())
-      .filter(function (team) { return team.name !== 'Otros' && normalize(team.name).indexOf(q) !== -1; })
+      .filter(function (team) {
+        return team.name !== 'Otros' && textMatchesSearchTokens(normalize(team.name), tokens);
+      })
       .sort(function (a, b) {
         var aStart = normalize(a.name).indexOf(q) === 0 ? 0 : 1;
         var bStart = normalize(b.name).indexOf(q) === 0 ? 0 : 1;
@@ -2245,19 +2490,14 @@
       .slice(0, 4);
 
     var leagues = Array.from(state.leagues.entries())
-      .filter(function (row) { return normalize(row[0]).indexOf(q) !== -1; })
+      .filter(function (row) { return textMatchesSearchTokens(normalize(row[0]), tokens); })
       .sort(function (a, b) { return b[1] - a[1]; })
       .slice(0, 2);
 
-    var tokens = q.split(' ').filter(Boolean);
     var products = [];
     for (var i = 0; i < state.items.length && products.length < 5; i++) {
       var item = state.items[i];
-      var match = true;
-      for (var t = 0; t < tokens.length; t++) {
-        if (item._search.indexOf(tokens[t]) === -1) { match = false; break; }
-      }
-      if (match) products.push(item);
+      if (textMatchesSearchTokens(item._search, tokens)) products.push(item);
     }
 
     if (!teams.length && !leagues.length && !products.length) {
@@ -2693,10 +2933,14 @@
     state.customName = '';
     state.customNumber = '';
     state.sizeGuideOpen = false;
+    state.versionCompareOpen = false;
+    state.bulkOpen = false;
+    state.bulkQtys = {};
     state.sizeGuideTab = isKidsItem(item) ? 'kids' : 'adult';
 
     var sizes = expandSizes(item.sizeRange);
     state.selectedSize = sizes.indexOf('M') !== -1 ? 'M' : (sizes[0] || 'S');
+    updateDocumentTitle(cleanTitle(item) + ' · ' + item.team);
 
     if (!options.skipHash) {
       if (location.hash.indexOf('#/producto/') !== 0) {
@@ -2748,6 +2992,7 @@
     if (!skipHashRestore && location.hash.indexOf('#/producto/') === 0) {
       try { history.replaceState(null, '', state.lastListHash || '#/'); } catch (err) {}
     }
+    updateDocumentTitle(routeTitleForState());
     if (state.returnFocus && state.returnFocus.isConnected) {
       try { state.returnFocus.focus(); } catch (err) {}
     }
@@ -2811,13 +3056,20 @@
     if (!main || !item) return;
 
     var path = state.gallery[state.galleryIndex] || '';
+    var hasMulti = state.gallery.length > 1;
+    var navHtml = hasMulti
+      ? '<button class="gallery-nav-btn is-prev" type="button" data-gallery-step="-1" aria-label="Foto anterior"><svg><use href="#i-arrow-left"/></svg></button>' +
+        '<button class="gallery-nav-btn is-next" type="button" data-gallery-step="1" aria-label="Foto siguiente"><svg><use href="#i-arrow"/></svg></button>' +
+        '<span class="gallery-counter">' + (state.galleryIndex + 1) + ' / ' + state.gallery.length + '</span>'
+      : '';
     main.innerHTML = imgTag(photoUrl(path, 'big', item.source), item.title, { eager: true }) +
       '<div class="img-skeleton" aria-hidden="true"></div>' +
+      navHtml +
       '<button class="product-zoom" id="product-zoom" type="button" aria-label="Ampliar imagen">' +
       '<svg><use href="#i-zoom"/></svg></button>';
 
     if (thumbs) {
-      thumbs.style.display = state.gallery.length > 1 ? '' : 'none';
+      thumbs.style.display = hasMulti ? '' : 'none';
       thumbs.innerHTML = state.gallery.map(function (photo, index) {
         return '<button type="button" class="' + (index === state.galleryIndex ? 'is-active' : '') + '" ' +
           'data-photo="' + index + '" aria-label="Ver foto ' + (index + 1) + '">' +
@@ -2853,7 +3105,7 @@
     var qty = Math.max(1, parseInt(state.qty, 10) || 1);
     var totalCents = calc.unitPriceCents * qty;
     var selectedPatches = state.patches === 'No' ? [] : state.patches.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
-    var hasSpecialSizes = /(?:3XL|4XL)/.test(String(item.sizeRange || ''));
+    var hasSpecialSizes = /(?:3XL|4XL|5XL)/.test(String(item.sizeRange || ''));
 
     var baseLabel = item.subcategory || typeLabel(item.type);
     if (calc.isLongSleeve && !item.subcategory) baseLabel += ' · Manga larga (+3,00 € incl.)';
@@ -2872,7 +3124,7 @@
     if (calc.sizeSurchargeCents > 0) {
       rows.push('<div class="price-breakdown-row is-active"><span>Suplemento talla especial (' + esc(state.selectedSize) + ')</span><strong>+' + esc(KangPricing.money(calc.sizeSurchargeCents)) + '</strong></div>');
     } else if (hasSpecialSizes) {
-      rows.push('<div class="price-breakdown-row is-muted"><span>Tallas especiales (3XL / 4XL)</span><strong>Opcional (+3,00 €)</strong></div>');
+      rows.push('<div class="price-breakdown-row is-muted"><span>Tallas especiales (3XL / 4XL / 5XL)</span><strong>Opcional (+3,00 €)</strong></div>');
     }
 
     if (qty > 1) {
@@ -2896,6 +3148,7 @@
       var qty = Math.max(1, parseInt(state.qty, 10) || 1);
       addBtn.innerHTML = 'Añadir al carrito · ' + esc(KangPricing.money(calc.unitPriceCents * qty)) + ' <svg><use href="#i-cart"/></svg>';
     }
+    if (state.bulkOpen) updateBulkPanel();
   }
 
   function renderSizeGuideHtml() {
@@ -2937,7 +3190,7 @@
 
     var note = isKids
       ? 'Medidas orientativas (±2 cm). Si el niño está entre dos tallas, elige la superior para mayor comodidad.'
-      : 'Medidas orientativas (±2 cm). En Versión Jugador (Player), el corte es más entallado: si dudas entre dos tallas, sube una. Tallas 3XL y 4XL suman +3,00 €.';
+      : 'Medidas orientativas (±2 cm). En Versión Jugador (Player), el corte es más entallado: si dudas entre dos tallas, sube una. Tallas 3XL, 4XL y 5XL suman +3,00 €.';
 
     var calcHtml = '<div class="size-calc-box">' +
       '<div class="size-calc-top"><strong>Calculador rápido de talla</strong></div>' +
@@ -3039,10 +3292,23 @@
       isLongSleeve: isLongJersey
     });
 
+    var presets = item.custom ? getTeamPresets(item.team) : [];
+    var presetsHtml = presets.length
+      ? '<div class="custom-presets">' +
+          '<span class="custom-presets-label">Estrellas:</span>' +
+          presets.map(function (pair) {
+            var active = state.customName.toUpperCase() === pair[0] && String(state.customNumber) === pair[1];
+            return '<button type="button" class="preset-btn' + (active ? ' is-active' : '') + '" data-preset-name="' + esc(pair[0]) + '" data-preset-number="' + esc(pair[1]) + '">' +
+              esc(pair[0]) + ' <b>#' + esc(pair[1]) + '</b></button>';
+          }).join('') +
+        '</div>'
+      : '';
+
     var customPanel = item.custom ?
       '<div class="custom-panel">' +
         '<div class="custom-panel-head"><strong>Nombre y dorsal</strong>' +
           '<span><svg><use href="#i-spark"/></svg> +2,00 €</span></div>' +
+        presetsHtml +
         '<div class="custom-panel-grid">' +
           '<div>' +
             '<div class="custom-fields">' +
@@ -3067,6 +3333,18 @@
       '<div class="not-customizable"><svg><use href="#i-shirt"/></svg>' +
         '<span>Esta prenda no admite nombre ni dorsal. Solo necesitas elegir la talla.</span></div>';
 
+    var showCompare = isJerseyVersionItem(item);
+    var isPlayerItem = isPlayerVersionItem(item);
+    var compareHtml = showCompare
+      ? '<div class="version-compare-wrap">' +
+          '<button type="button" class="version-compare-toggle" id="version-compare-toggle" aria-expanded="' + (state.versionCompareOpen ? 'true' : 'false') + '" aria-controls="version-compare-panel">' +
+            '<span>Versión actual: <strong>' + (isPlayerItem ? 'Jugador (Player)' : 'Fan (Estadio)') + '</strong></span>' +
+            '<small>Comparar Fan vs Jugador →</small>' +
+          '</button>' +
+          '<div class="version-compare-panel" id="version-compare-panel"' + (state.versionCompareOpen ? '' : ' hidden') + '>' + (state.versionCompareOpen ? renderVersionCompareHtml(item) : '') + '</div>' +
+        '</div>'
+      : '';
+
     var title = cleanTitle(item);
     var fitText = sizeFitHintText(state.selectedSize, item);
     var favActive = isFavorite(item.id);
@@ -3085,6 +3363,7 @@
       '<p class="product-team">' + esc(item.team) + ' · ' + esc(item.season) + ' · Tallas ' + esc(item.sizeRange) + '</p>' +
       '<p class="product-supplier-ref"><span>Ref. proveedor:</span> ' + esc(item.title) + '</p>' +
       '<div class="product-tags">' + tags + '</div>' +
+      compareHtml +
       '<div class="product-price-box" id="product-price-box">' + renderPriceBreakdownHtml() + '</div>' +
       '<div class="size-head-row">' +
         '<p class="field-label">Talla <span id="size-hint">' + esc(state.selectedSize) + '</span></p>' +
@@ -3102,9 +3381,140 @@
         '</div>' +
         '<button class="btn btn-primary" id="product-add" type="button">Añadir al carrito <svg><use href="#i-cart"/></svg></button>' +
       '</div>' +
+      '<div class="bulk-order-wrap">' +
+        '<button type="button" class="bulk-toggle-btn" id="bulk-order-toggle" aria-expanded="' + (state.bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-order-panel">' +
+          '<span>¿Pedido para grupo, equipo o peña? Varias tallas a la vez</span>' +
+          '<b>' + (state.bulkOpen ? 'Ocultar' : 'Abrir') + '</b>' +
+        '</button>' +
+        '<div class="bulk-panel" id="bulk-order-panel"' + (state.bulkOpen ? '' : ' hidden') + '>' + (state.bulkOpen ? renderBulkPanelHtml() : '') + '</div>' +
+      '</div>' +
       '<p class="product-disclaimer">Sin pago online. Confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>';
 
     updateProductPricing();
+  }
+
+  function renderVersionCompareHtml(item) {
+    var isPlayer = isPlayerVersionItem(item);
+    var altVersion = isPlayer ? 'fan' : 'player';
+    var altLabel = isPlayer ? 'Ver camisetas Fan de ' + item.team : 'Ver camisetas Jugador de ' + item.team;
+    return '<div class="version-compare-grid">' +
+        '<div class="version-compare-col' + (!isPlayer ? ' is-current' : '') + '">' +
+          '<div class="version-col-head"><strong>Versión Fan (Estadio)</strong>' + (!isPlayer ? '<span>Esta ficha</span>' : '') + '</div>' +
+          '<ul>' +
+            '<li><b>Corte:</b> Clásico, cómodo y algo más holgado.</li>' +
+            '<li><b>Escudo y logo:</b> Bordados o aplicados tradicionales, gran durabilidad al lavado.</li>' +
+            '<li><b>Tejido:</b> Transpirable estándar para uso diario.</li>' +
+            '<li><b>Tallaje:</b> Elige tu talla habitual. Desde 25,00 €.</li>' +
+          '</ul>' +
+        '</div>' +
+        '<div class="version-compare-col' + (isPlayer ? ' is-current' : '') + '">' +
+          '<div class="version-col-head"><strong>Versión Jugador (Player)</strong>' + (isPlayer ? '<span>Esta ficha</span>' : '') + '</div>' +
+          '<ul>' +
+            '<li><b>Corte:</b> Slim / Atlético más ceñido al cuerpo.</li>' +
+            '<li><b>Escudo y logo:</b> Termosellados ultraligeros de partido.</li>' +
+            '<li><b>Tejido:</b> Microperforado técnico de máxima ventilación.</li>' +
+            '<li><b>Tallaje:</b> Recomendado pedir <strong>1 talla más</strong>. Desde 30,00 €.</li>' +
+          '</ul>' +
+        '</div>' +
+      '</div>' +
+      (item.team && item.team !== 'Otros'
+        ? '<button type="button" class="version-alt-link" data-switch-version-team="' + esc(item.team) + '" data-switch-version="' + altVersion + '">' + esc(altLabel) + ' →</button>'
+        : '');
+  }
+
+  function updateVersionComparePanel() {
+    var toggle = $('#version-compare-toggle');
+    var panel = $('#version-compare-panel');
+    if (toggle) toggle.setAttribute('aria-expanded', state.versionCompareOpen ? 'true' : 'false');
+    if (!panel) return;
+    panel.hidden = !state.versionCompareOpen;
+    if (state.versionCompareOpen && state.product) panel.innerHTML = renderVersionCompareHtml(state.product);
+  }
+
+  function calculateBulkTotals(item) {
+    var sizes = expandSizes(item.sizeRange);
+    var name = item.custom ? String(state.customName || '').trim().toUpperCase().slice(0, 14) : '';
+    var number = item.custom ? String(state.customNumber || '').replace(/\D/g, '').slice(0, 2) : '';
+    var patches = item.custom ? state.patches : 'No';
+    var units = 0;
+    var totalCents = 0;
+    sizes.forEach(function (size) {
+      var q = Math.max(0, Math.min(30, parseInt(state.bulkQtys[size], 10) || 0));
+      if (!q) return;
+      var calc = KangPricing.calculate(item, { size: size, name: name, number: number, patches: patches });
+      units += q;
+      totalCents += calc.unitPriceCents * q;
+    });
+    return { units: units, totalCents: totalCents };
+  }
+
+  function renderBulkPanelHtml() {
+    var item = state.product;
+    if (!item || !window.KangPricing) return '';
+    var sizes = expandSizes(item.sizeRange);
+    var totals = calculateBulkTotals(item);
+    var grid = sizes.map(function (size) {
+      var q = Math.max(0, Math.min(30, parseInt(state.bulkQtys[size], 10) || 0));
+      var extra = /^(3XL|4XL|5XL)$/.test(size);
+      return '<div class="bulk-size-cell' + (q > 0 ? ' is-filled' : '') + '">' +
+        '<div class="bulk-size-label"><strong>' + esc(size) + '</strong>' + (extra ? '<small>+3€</small>' : '') + '</div>' +
+        '<div class="qty">' +
+          '<button type="button" data-bulk-size="' + esc(size) + '" data-bulk-delta="-1" aria-label="Quitar talla ' + esc(size) + '"><svg><use href="#i-minus"/></svg></button>' +
+          '<span>' + q + '</span>' +
+          '<button type="button" data-bulk-size="' + esc(size) + '" data-bulk-delta="1" aria-label="Añadir talla ' + esc(size) + '"><svg><use href="#i-plus"/></svg></button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="bulk-size-grid">' + grid + '</div>' +
+      (item.custom ? '<p class="bulk-note">La personalización y los parches activos se aplican a todas las unidades seleccionadas. Déjalos vacíos para camisetas lisas.</p>' : '') +
+      '<div class="bulk-summary">' +
+        '<div><span>' + totals.units + ' ' + (totals.units === 1 ? 'prenda seleccionada' : 'prendas seleccionadas') + '</span>' +
+        '<strong>' + esc(KangPricing.money(totals.totalCents)) + '</strong></div>' +
+        '<button type="button" class="btn btn-primary" id="bulk-add-btn"' + (totals.units ? '' : ' disabled') + '>Añadir selección</button>' +
+      '</div>';
+  }
+
+  function updateBulkPanel() {
+    var toggle = $('#bulk-order-toggle');
+    var panel = $('#bulk-order-panel');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', state.bulkOpen ? 'true' : 'false');
+      var b = toggle.querySelector('b');
+      if (b) b.textContent = state.bulkOpen ? 'Ocultar' : 'Abrir';
+    }
+    if (!panel) return;
+    panel.hidden = !state.bulkOpen;
+    if (state.bulkOpen) panel.innerHTML = renderBulkPanelHtml();
+  }
+
+  function addBulkToCart() {
+    var item = state.product;
+    if (!item) return;
+    var sizes = expandSizes(item.sizeRange);
+    var name = item.custom ? String(state.customName || '').trim().toUpperCase().slice(0, 14) : '';
+    var number = item.custom ? String(state.customNumber || '').replace(/\D/g, '').slice(0, 2) : '';
+    var patches = item.custom ? state.patches : 'No';
+    var addedUnits = 0;
+
+    sizes.forEach(function (size) {
+      var q = Math.max(0, Math.min(30, parseInt(state.bulkQtys[size], 10) || 0));
+      if (!q) return;
+      var key = [item.id, size, name, number, patches].join('|');
+      var existing = findCartLine(key);
+      if (existing) existing.qty = Math.min(30, existing.qty + q);
+      else state.cart.push({ key: key, id: item.id, size: size, qty: q, name: name, number: number, patches: patches });
+      addedUnits += q;
+    });
+
+    if (!addedUnits) {
+      toast('Selecciona al menos 1 talla', 'error');
+      return;
+    }
+    saveCart();
+    updateCartUI();
+    closeProduct();
+    toast(addedUnits + ' prendas añadidas al carrito');
+    setTimeout(openCart, 200);
   }
 
   function updateCustomPreview() {
@@ -3198,6 +3608,52 @@
           shareCurrentProduct();
           return;
         }
+        var presetBtn = event.target.closest('[data-preset-name]');
+        if (presetBtn) {
+          var pName = presetBtn.getAttribute('data-preset-name') || '';
+          var pNum = presetBtn.getAttribute('data-preset-number') || '';
+          state.customName = pName;
+          state.customNumber = pNum;
+          var nameInput = $('#custom-name');
+          var numInput = $('#custom-number');
+          if (nameInput) nameInput.value = pName;
+          if (numInput) numInput.value = pNum;
+          $$('#product-info .preset-btn').forEach(function (b) { b.classList.toggle('is-active', b === presetBtn); });
+          updateCustomPreview();
+          updateProductPricing();
+          return;
+        }
+        if (event.target.closest('#version-compare-toggle')) {
+          state.versionCompareOpen = !state.versionCompareOpen;
+          updateVersionComparePanel();
+          return;
+        }
+        var switchVer = event.target.closest('[data-switch-version-team]');
+        if (switchVer) {
+          var swTeam = switchVer.getAttribute('data-switch-version-team');
+          var swVer = switchVer.getAttribute('data-switch-version');
+          closeProduct(true);
+          location.hash = '#/catalogo?equipo=' + enc(swTeam) + '&version=' + enc(swVer) + '&vista=grid';
+          return;
+        }
+        if (event.target.closest('#bulk-order-toggle')) {
+          state.bulkOpen = !state.bulkOpen;
+          updateBulkPanel();
+          return;
+        }
+        var bulkBtn = event.target.closest('[data-bulk-size]');
+        if (bulkBtn) {
+          var bSize = bulkBtn.getAttribute('data-bulk-size');
+          var bDelta = parseInt(bulkBtn.getAttribute('data-bulk-delta'), 10) || 0;
+          var cur = parseInt(state.bulkQtys[bSize], 10) || 0;
+          state.bulkQtys[bSize] = Math.min(30, Math.max(0, cur + bDelta));
+          updateBulkPanel();
+          return;
+        }
+        if (event.target.closest('#bulk-add-btn')) {
+          addBulkToCart();
+          return;
+        }
         if (event.target.closest('#size-guide-toggle')) {
           state.sizeGuideOpen = !state.sizeGuideOpen;
           updateSizeGuidePanel();
@@ -3244,12 +3700,14 @@
       info.addEventListener('input', function (event) {
         if (event.target.id === 'custom-name') {
           state.customName = event.target.value.slice(0, 14);
+          $$('#product-info .preset-btn').forEach(function (b) { b.classList.remove('is-active'); });
           updateCustomPreview();
           updateProductPricing();
         } else if (event.target.id === 'custom-number') {
           var cleaned = event.target.value.replace(/\D/g, '').slice(0, 2);
           if (event.target.value !== cleaned) event.target.value = cleaned;
           state.customNumber = cleaned;
+          $$('#product-info .preset-btn').forEach(function (b) { b.classList.remove('is-active'); });
           updateCustomPreview();
           updateProductPricing();
         } else if (event.target.id === 'calc-height' || event.target.id === 'calc-weight' || event.target.id === 'calc-kids-height') {
@@ -3282,10 +3740,31 @@
     var main = $('#product-main-img');
     if (main) {
       main.addEventListener('click', function (event) {
+        var stepBtn = event.target.closest('[data-gallery-step]');
+        if (stepBtn) {
+          stepGallery(parseInt(stepBtn.getAttribute('data-gallery-step'), 10) || 0);
+          return;
+        }
         if (event.target.closest('#product-zoom') || event.target.tagName === 'IMG') {
           openLightbox(state.gallery[state.galleryIndex]);
         }
       });
+      var mainTouchX = 0, mainTouchY = 0;
+      main.addEventListener('touchstart', function (event) {
+        if (event.touches && event.touches.length === 1) {
+          mainTouchX = event.touches[0].clientX;
+          mainTouchY = event.touches[0].clientY;
+        }
+      }, { passive: true });
+      main.addEventListener('touchend', function (event) {
+        if (!mainTouchX || !event.changedTouches || !event.changedTouches.length || state.gallery.length <= 1) return;
+        var dx = event.changedTouches[0].clientX - mainTouchX;
+        var dy = event.changedTouches[0].clientY - mainTouchY;
+        mainTouchX = 0; mainTouchY = 0;
+        if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+          stepGallery(dx < 0 ? 1 : -1);
+        }
+      }, { passive: true });
     }
 
     var close = $('#product-close');
@@ -3732,6 +4211,7 @@
         '<div class="order-history-items">' + rows + extra + '</div>' +
         '<div class="order-history-actions">' +
           '<button type="button" class="btn btn-primary" data-repeat-order="' + esc(order.id) + '">Repetir pedido</button>' +
+          (/^KT-/.test(String(order.id || '')) ? '<button type="button" class="btn-link" data-track-order-id="' + esc(order.id) + '" data-track-order-phone4="' + esc(order.phone4 || '') + '">Seguir</button>' : '') +
           '<button type="button" class="btn-link" data-delete-order="' + esc(order.id) + '">Quitar</button>' +
         '</div>' +
       '</article>';
@@ -3813,6 +4293,14 @@
         var repeatBtn = event.target.closest('[data-repeat-order]');
         if (repeatBtn) {
           repeatOrder(repeatBtn.getAttribute('data-repeat-order'));
+          return;
+        }
+        var trackBtn = event.target.closest('[data-track-order-id]');
+        if (trackBtn) {
+          var tId = trackBtn.getAttribute('data-track-order-id') || '';
+          var tP4 = trackBtn.getAttribute('data-track-order-phone4') || '';
+          closeOrders();
+          location.hash = '#/seguimiento?id=' + enc(tId) + (tP4 ? '&phone4=' + enc(tP4) : '');
           return;
         }
         var delBtn = event.target.closest('[data-delete-order]');
@@ -4093,10 +4581,13 @@
         var item = state.byId.get(line.id);
         return Object.assign({}, line, { title: item ? cleanTitle(item) : '' });
       });
+      var orderPhone4 = payload.customer.phone.replace(/\D/g, '').slice(-4);
       state.orders.unshift({
         id: data && data.order && data.order.id ? data.order.id : String(Date.now()),
         createdAt: new Date().toISOString(),
         paymentMethod: data && data.order && data.order.paymentMethod ? data.order.paymentMethod : paymentMethod,
+        status: data && data.order && data.order.status ? data.order.status : (paymentMethod === 'bizum' ? 'bizum_pending' : 'pending'),
+        phone4: orderPhone4,
         totalItems: payload.items.reduce(function (sum, l) { return sum + (parseInt(l.qty, 10) || 1); }, 0),
         totalPriceCents: data && data.order ? data.order.totalPriceCents : cartPriceCents(),
         items: snapshotItems
@@ -4109,7 +4600,7 @@
       state.cart = [];
       saveCart();
       updateCartUI();
-      renderSuccess(data, payload.customer.name);
+      renderSuccess(data, payload.customer.name, orderPhone4);
       toast('Pedido enviado correctamente');
     } catch (err) {
       showCheckoutError(err.message || 'No se pudo enviar el pedido. Revisa tu conexión e inténtalo de nuevo.');
@@ -4120,11 +4611,12 @@
     }
   }
 
-  function renderSuccess(data, customerName) {
+  function renderSuccess(data, customerName, phone4) {
     var content = $('#checkout-content');
     if (!content) return;
     var order = data && data.order ? data.order : {};
     var id = order.id || '';
+    var trackHref = id ? '#/seguimiento?id=' + enc(id) + (phone4 ? '&phone4=' + enc(phone4) : '') : '#/seguimiento';
     var isBizum = order.paymentMethod === 'bizum';
     var store = state.config && state.config.store ? state.config.store : {};
     var bizumDigits = store.bizum || '';
@@ -4180,6 +4672,7 @@
       bizumHtml +
       '<div class="success-actions">' +
         '<a class="btn btn-whatsapp" href="' + esc(wa) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> ' + (isBizum ? 'Enviar pedido / justificante por WhatsApp' : 'Enviar por WhatsApp') + '</a>' +
+        '<a class="btn btn-outline" href="' + esc(trackHref) + '" data-close-checkout><svg><use href="#i-truck"/></svg> Seguir estado del pedido</a>' +
         '<a class="btn btn-outline" href="' + esc(mail) + '"><svg><use href="#i-mail"/></svg> Enviar por email</a>' +
         '<button class="btn btn-ghost" type="button" data-copy-order>Copiar resumen del pedido</button>' +
         '<a class="btn btn-ghost" href="#/catalogo" data-close-checkout>Seguir explorando</a>' +
@@ -4252,13 +4745,37 @@
     var box = $('#lightbox');
     var image = $('#lightbox-img');
     if (!box || !image) return;
+    ensureLightboxControls(box);
     image.src = photoUrl(path, 'big', state.product && state.product.source);
     image.alt = state.product ? state.product.title : 'Imagen ampliada';
+    updateLightboxNav();
     box.classList.add('is-open');
     setOverlayState(box, true);
     lockScroll();
     var close = $('#lightbox-close');
     if (close) close.focus();
+  }
+
+  function ensureLightboxControls(box) {
+    if ($('#lightbox-prev', box)) return;
+    box.insertAdjacentHTML('beforeend',
+      '<button class="lightbox-nav-btn is-prev" id="lightbox-prev" type="button" data-lightbox-step="-1" aria-label="Imagen anterior"><svg><use href="#i-arrow-left"/></svg></button>' +
+      '<button class="lightbox-nav-btn is-next" id="lightbox-next" type="button" data-lightbox-step="1" aria-label="Imagen siguiente"><svg><use href="#i-arrow"/></svg></button>' +
+      '<span class="lightbox-counter" id="lightbox-counter"></span>'
+    );
+  }
+
+  function updateLightboxNav() {
+    var total = state.gallery.length;
+    var prev = $('#lightbox-prev');
+    var next = $('#lightbox-next');
+    var counter = $('#lightbox-counter');
+    if (prev) prev.hidden = total <= 1;
+    if (next) next.hidden = total <= 1;
+    if (counter) {
+      counter.hidden = total <= 1;
+      counter.textContent = (state.galleryIndex + 1) + ' / ' + total;
+    }
   }
 
   function closeLightbox() {
@@ -4276,6 +4793,7 @@
     if (!state.gallery.length) return;
     state.galleryIndex = (state.galleryIndex + delta + state.gallery.length) % state.gallery.length;
     renderGallery();
+    updateLightboxNav();
     var image = $('#lightbox-img');
     var box = $('#lightbox');
     if (image && box && box.classList.contains('is-open')) {
@@ -4351,7 +4869,7 @@
         '• Camisetas de manga larga: <strong>+3,00 €</strong> sobre manga corta<br>' +
         '• Nombre + dorsal en camiseta: <strong>+2,00 €</strong><br>' +
         '• Cada parche de competición: <strong>+1,00 €</strong><br>' +
-        '• Tallas especiales 3XL / 4XL: <strong>+3,00 €</strong><br>' +
+        '• Tallas especiales 3XL / 4XL / 5XL: <strong>+3,00 €</strong><br>' +
         '<a class="help-mini-link" href="#/precios" data-help-close-link>Ver tabla completa de tarifas →</a>' +
       '</div>';
     }
@@ -4515,11 +5033,35 @@
     var lightbox = $('#lightbox');
     if (lightbox) {
       lightbox.addEventListener('click', function (event) {
+        var stepBtn = event.target.closest('[data-lightbox-step]');
+        if (stepBtn) {
+          stepGallery(parseInt(stepBtn.getAttribute('data-lightbox-step'), 10) || 0);
+          return;
+        }
         if (event.target === lightbox) closeLightbox();
       });
+      var lbTouchX = 0, lbTouchY = 0;
+      lightbox.addEventListener('touchstart', function (event) {
+        if (event.touches && event.touches.length === 1) {
+          lbTouchX = event.touches[0].clientX;
+          lbTouchY = event.touches[0].clientY;
+        }
+      }, { passive: true });
+      lightbox.addEventListener('touchend', function (event) {
+        if (!lbTouchX || !event.changedTouches || !event.changedTouches.length || state.gallery.length <= 1) return;
+        var dx = event.changedTouches[0].clientX - lbTouchX;
+        var dy = event.changedTouches[0].clientY - lbTouchY;
+        lbTouchX = 0; lbTouchY = 0;
+        if (Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+          stepGallery(dx < 0 ? 1 : -1);
+        }
+      }, { passive: true });
     }
     var lightboxClose = $('#lightbox-close');
     if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+
+    bindTrackEvents();
+    bindAdminEvents();
 
     document.addEventListener('click', function (event) {
       var favBtn = event.target.closest('[data-fav-toggle]');
@@ -4636,7 +5178,9 @@
 
     await Promise.all([loadConfig(), loadCatalog(), loadTeamLogos()]);
 
+    var prevCartLen = state.cart.length;
     state.cart = state.cart.filter(function (line) { return state.byId.has(line.id); });
+    state.removedCartCount = Math.max(0, prevCartLen - state.cart.length);
     saveCart();
     state.favorites = state.favorites.filter(function (id) { return state.byId.has(id); });
     state.favSet = new Set(state.favorites);
@@ -4645,6 +5189,395 @@
     updateFavsUI();
     updateOrdersUI();
     renderRoute(false);
+    if (state.removedCartCount > 0) {
+      toast(state.removedCartCount + (state.removedCartCount === 1 ? ' prenda de tu carrito ya no está disponible y se ha retirado' : ' prendas de tu carrito ya no están disponibles y se han retirado'));
+    }
+  }
+
+  // ── Seguimiento público y Panel de Administración ──────────
+
+  var ORDER_STATUS_META = {
+    pending: { label: 'Recibido · Pendiente', cls: 'is-pending', step: 0 },
+    bizum_pending: { label: 'Esperando Bizum', cls: 'is-bizum', step: 0 },
+    paid: { label: 'Pago confirmado', cls: 'is-paid', step: 1 },
+    ordered: { label: 'En preparación / Proveedor', cls: 'is-ordered', step: 2 },
+    shipped: { label: 'Enviado', cls: 'is-shipped', step: 3 },
+    delivered: { label: 'Entregado', cls: 'is-delivered', step: 4 },
+    cancelled: { label: 'Cancelado', cls: 'is-cancelled', step: -1 }
+  };
+  var ORDER_STEPS = [
+    { key: 'received', label: 'Recibido' },
+    { key: 'paid', label: 'Pago OK' },
+    { key: 'ordered', label: 'En preparación' },
+    { key: 'shipped', label: 'Enviado' },
+    { key: 'delivered', label: 'Entregado' }
+  ];
+
+  function orderStatusInfo(status) {
+    return ORDER_STATUS_META[status] || { label: status || 'Pendiente', cls: 'is-pending', step: 0 };
+  }
+
+  async function lookupOrderTrack(id, phone4) {
+    var cleanId = String(id || '').trim().toUpperCase();
+    var cleanP4 = String(phone4 || '').replace(/\D/g, '').slice(-4);
+    state.trackQueryId = cleanId;
+    state.trackQueryPhone4 = cleanP4;
+    state.trackError = '';
+    state.trackLoading = true;
+    renderTrackView();
+    try {
+      var res = await fetch('/api/orders/track?id=' + enc(cleanId) + '&phone4=' + enc(cleanP4), { headers: { 'Accept': 'application/json' } });
+      var data = await res.json();
+      if (!res.ok) throw new Error((data && data.error) || 'No se pudo consultar el pedido');
+      state.trackResult = data.order || null;
+      state.trackError = '';
+    } catch (err) {
+      state.trackResult = null;
+      state.trackError = err.message || 'No se pudo consultar el pedido';
+    } finally {
+      state.trackLoading = false;
+      renderTrackView();
+    }
+  }
+
+  function renderTrackView() {
+    var box = $('#track-content');
+    if (!box) return;
+    var recentBtns = (state.orders || []).filter(function (o) { return /^KT-/.test(String(o.id || '')); }).slice(0, 4);
+    var recentHtml = recentBtns.length
+      ? '<div class="track-recent"><span>Tus pedidos guardados:</span>' + recentBtns.map(function (o) {
+          return '<button type="button" class="track-recent-btn" data-fill-track-id="' + esc(o.id) + '" data-fill-track-p4="' + esc(o.phone4 || '') + '">' + esc(o.id) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
+    var resultHtml = '';
+    if (state.trackLoading) {
+      resultHtml = '<div class="track-card"><p class="track-loading">Buscando pedido…</p></div>';
+    } else if (state.trackError) {
+      resultHtml = '<div class="track-card is-error"><strong>No se pudo consultar</strong><p>' + esc(state.trackError) + '</p></div>';
+    } else if (state.trackResult) {
+      var o = state.trackResult;
+      var st = orderStatusInfo(o.status);
+      var timelineHtml = st.step === -1
+        ? '<div class="track-cancelled-note">Este pedido ha sido marcado como cancelado. Si tienes cualquier duda escríbenos por WhatsApp con tu código.</div>'
+        : '<ol class="track-timeline">' + ORDER_STEPS.map(function (step, idx) {
+            var done = idx < st.step;
+            var cur = idx === st.step;
+            return '<li class="' + (done ? 'is-done' : (cur ? 'is-current' : '')) + '"><span class="track-step-dot">' + (done ? '✓' : (idx + 1)) + '</span><b>' + esc(step.label) + '</b></li>';
+          }).join('') + '</ol>';
+
+      var trackingHtml = o.trackingCode
+        ? '<div class="track-tracking-box">' +
+            '<div><span>Código de seguimiento' + (o.trackingCarrier ? ' · ' + esc(o.trackingCarrier) : '') + '</span>' +
+            '<strong>' + esc(o.trackingCode) + '</strong></div>' +
+            '<div class="track-tracking-actions">' +
+              '<button type="button" class="btn btn-outline" data-copy-value="' + esc(o.trackingCode) + '" data-copy-label="Tracking copiado">Copiar</button>' +
+              '<a class="btn btn-primary" href="https://t.17track.net/es#nums=' + enc(o.trackingCode) + '" target="_blank" rel="noopener">Rastrear envío</a>' +
+            '</div>' +
+          '</div>'
+        : '';
+
+      var notesHtml = o.adminNotes ? '<div class="track-note-box"><span>Nota de la tienda</span><p>' + esc(o.adminNotes) + '</p></div>' : '';
+
+      var itemsHtml = (o.items || []).map(function (it) {
+        var extra = [it.size ? 'Talla ' + it.size : '', 'x' + (it.qty || 1), it.name || '', it.number ? '#' + it.number : '', (it.patches && it.patches !== 'No') ? it.patches : ''].filter(Boolean).join(' · ');
+        return '<li><div><strong>' + esc(it.title) + '</strong><small>' + esc(extra) + '</small></div><b>' + esc(KangPricing.money(it.lineTotalCents || 0)) + '</b></li>';
+      }).join('');
+
+      var historyHtml = Array.isArray(o.statusHistory) && o.statusHistory.length
+        ? '<div class="track-history"><h3>Historial</h3><ul>' + o.statusHistory.slice().reverse().map(function (h) {
+            return '<li><span>' + esc(formatDate(h.at)) + '</span><b>' + esc(h.note || orderStatusInfo(h.status).label) + '</b></li>';
+          }).join('') + '</ul></div>'
+        : '';
+
+      resultHtml = '<article class="track-card">' +
+        '<div class="track-card-head">' +
+          '<div><span class="track-id-label">Pedido ' + esc(o.id) + '</span><h2>' + esc(st.label) + '</h2><p>Creado el ' + esc(formatDate(o.createdAt)) + ' · ' + (o.paymentMethod === 'bizum' ? 'Pago por Bizum' : 'Confirmación WhatsApp / Email') + '</p></div>' +
+          '<div class="track-total-col"><span class="admin-status-badge ' + esc(st.cls) + '">' + esc(st.label) + '</span><strong>' + esc(KangPricing.money(o.totalPriceCents || 0)) + '</strong></div>' +
+        '</div>' +
+        timelineHtml +
+        trackingHtml +
+        notesHtml +
+        '<div class="track-items"><h3>Prendas (' + (o.totalItems || 0) + ')</h3><ul>' + itemsHtml + '</ul></div>' +
+        historyHtml +
+      '</article>';
+    }
+
+    box.innerHTML = '<form class="track-form" id="track-form">' +
+        '<label class="field"><span>Código de pedido</span>' +
+          '<input type="text" name="id" id="track-id-input" placeholder="KT-261115-ABCD" value="' + esc(state.trackQueryId) + '" required></label>' +
+        '<label class="field"><span>Últimos 4 dígitos del teléfono</span>' +
+          '<input type="text" name="phone4" id="track-phone4-input" maxlength="4" inputmode="numeric" placeholder="6789" value="' + esc(state.trackQueryPhone4) + '" required></label>' +
+        '<button type="submit" class="btn btn-primary">Consultar estado</button>' +
+      '</form>' +
+      recentHtml +
+      resultHtml;
+  }
+
+  function bindTrackEvents() {
+    var box = $('#track-content');
+    if (!box) return;
+    box.addEventListener('submit', function (event) {
+      if (event.target && event.target.id === 'track-form') {
+        event.preventDefault();
+        var id = ($('#track-id-input') && $('#track-id-input').value || '').trim().toUpperCase();
+        var p4 = ($('#track-phone4-input') && $('#track-phone4-input').value || '').replace(/\D/g, '').slice(-4);
+        if (!id || p4.length !== 4) {
+          toast('Introduce el código KT-... y 4 dígitos del teléfono', 'error');
+          return;
+        }
+        try { history.replaceState(null, '', '#/seguimiento?id=' + enc(id) + '&phone4=' + enc(p4)); } catch (e) {}
+        lookupOrderTrack(id, p4);
+      }
+    });
+    box.addEventListener('click', function (event) {
+      var btn = event.target.closest('[data-fill-track-id]');
+      if (!btn) return;
+      var id = btn.getAttribute('data-fill-track-id') || '';
+      var p4 = btn.getAttribute('data-fill-track-p4') || '';
+      state.trackQueryId = id;
+      if (p4) state.trackQueryPhone4 = p4;
+      renderTrackView();
+      if (id && p4.length === 4) lookupOrderTrack(id, p4);
+    });
+  }
+
+  async function loadAdminOrders() {
+    state.adminLoading = true;
+    state.adminError = '';
+    renderAdminView();
+    try {
+      var headers = { 'Accept': 'application/json' };
+      if (state.adminToken) headers['x-admin-token'] = state.adminToken;
+      var res = await fetch('/api/admin/orders', { headers: headers });
+      var data = await res.json();
+      if (res.status === 401) {
+        state.adminNeedsToken = true;
+        state.adminError = state.adminToken ? (data.error || 'Token incorrecto') : '';
+        state.adminOrders = [];
+        return;
+      }
+      if (!res.ok) throw new Error((data && data.error) || 'No se pudieron cargar los pedidos');
+      state.adminNeedsToken = false;
+      state.adminOrders = Array.isArray(data.orders) ? data.orders : [];
+      state.adminStats = data.stats || null;
+      state.adminMeta = {
+        storageMode: data.storageMode,
+        isVercel: !!data.isVercel,
+        adminConfigured: !!data.adminConfigured
+      };
+    } catch (err) {
+      state.adminError = err.message || 'Error al cargar el panel';
+    } finally {
+      state.adminLoading = false;
+      renderAdminView();
+    }
+  }
+
+  async function updateAdminOrder(orderId, patch) {
+    try {
+      var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+      if (state.adminToken) headers['x-admin-token'] = state.adminToken;
+      var res = await fetch('/api/admin/orders/' + enc(orderId), {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify(patch)
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error((data && data.error) || 'No se pudo actualizar');
+      toast('Pedido ' + orderId + ' actualizado');
+      await loadAdminOrders();
+    } catch (err) {
+      toast(err.message || 'No se pudo guardar', 'error');
+    }
+  }
+
+  async function adminTriggerSync() {
+    try {
+      var headers = { 'Accept': 'application/json' };
+      if (state.adminToken) headers['x-admin-token'] = state.adminToken;
+      var res = await fetch('/api/sync', { method: 'POST', headers: headers });
+      var data = await res.json();
+      if (!res.ok) throw new Error((data && data.error) || 'No se pudo iniciar la sincronización');
+      toast('Sincronización de catálogo iniciada en segundo plano');
+    } catch (err) {
+      toast(err.message || 'Error al sincronizar', 'error');
+    }
+  }
+
+  function buildCustomerWhatsappUrl(order) {
+    var phone = String((order.customer && order.customer.phone) || '').replace(/\D/g, '');
+    if (phone.length === 9 && /^[6789]/.test(phone)) phone = '34' + phone;
+    var st = orderStatusInfo(order.status).label;
+    var phone4 = String((order.customer && order.customer.phone) || '').replace(/\D/g, '').slice(-4);
+    var trackUrl = location.origin + '/#/seguimiento?id=' + encodeURIComponent(order.id) + (phone4 ? '&phone4=' + encodeURIComponent(phone4) : '');
+    var lines = [
+      'Hola ' + ((order.customer && order.customer.name) || '') + ', te escribimos de KANG Team sobre tu pedido ' + order.id + '.',
+      'Estado actual: ' + st + '.'
+    ];
+    if (order.trackingCode) {
+      lines.push('Código de seguimiento' + (order.trackingCarrier ? ' (' + order.trackingCarrier + ')' : '') + ': ' + order.trackingCode);
+      lines.push('Rastreo: https://t.17track.net/es#nums=' + encodeURIComponent(order.trackingCode));
+    }
+    if (order.adminNotes) lines.push('Nota: ' + order.adminNotes);
+    lines.push('Consulta tu pedido cuando quieras: ' + trackUrl);
+    return (phone ? 'https://wa.me/' + phone : 'https://wa.me/') + '?text=' + encodeURIComponent(lines.join('\n'));
+  }
+
+  function renderAdminView() {
+    var box = $('#admin-content');
+    if (!box) return;
+
+    if (state.adminNeedsToken) {
+      box.innerHTML = '<form class="admin-auth-card" id="admin-auth-form">' +
+          '<h2>Acceso administrador</h2>' +
+          '<p>Introduce el <code>ADMIN_TOKEN</code> configurado en el servidor para gestionar los pedidos y códigos de seguimiento.</p>' +
+          (state.adminError ? '<div class="form-error is-visible">' + esc(state.adminError) + '</div>' : '') +
+          '<label class="field"><span>Token de administrador</span>' +
+            '<input type="password" id="admin-token-input" placeholder="Tu ADMIN_TOKEN" autocomplete="current-password" required></label>' +
+          '<button type="submit" class="btn btn-primary btn-block">Entrar al panel</button>' +
+        '</form>';
+      return;
+    }
+
+    if (state.adminLoading && !state.adminOrders.length) {
+      box.innerHTML = '<div class="track-card"><p class="track-loading">Cargando pedidos…</p></div>';
+      return;
+    }
+
+    if (state.adminError && !state.adminOrders.length) {
+      box.innerHTML = '<div class="track-card is-error"><strong>No disponible</strong><p>' + esc(state.adminError) + '</p>' +
+        '<button type="button" class="btn btn-outline" id="admin-retry-btn">Reintentar</button></div>';
+      return;
+    }
+
+    var meta = state.adminMeta || {};
+    var storageText = meta.storageMode === 'vercel-blob' ? 'Vercel Blob (persistente)' : (meta.storageMode === 'local-disk' ? 'Disco local (data/orders)' : 'Memoria temporal (sin BLOB_READ_WRITE_TOKEN)');
+    var stats = state.adminStats || { totalOrders: 0, pendingCount: 0, inProgressCount: 0, shippedCount: 0, revenueCents: 0, topTeams: [] };
+
+    var filtered = state.adminOrders.filter(function (o) {
+      if (state.adminStatusFilter && o.status !== state.adminStatusFilter) return false;
+      if (state.adminSearch) {
+        var hay = normalize([o.id, o.customer && o.customer.name, o.customer && o.customer.phone, o.customer && o.customer.city, (o.items || []).map(function (i) { return i.team + ' ' + i.title; }).join(' ')].join(' '));
+        if (hay.indexOf(normalize(state.adminSearch)) === -1) return false;
+      }
+      return true;
+    });
+
+    var statusChips = [['', 'Todos']].concat(Object.keys(ORDER_STATUS_META).map(function (k) { return [k, ORDER_STATUS_META[k].label]; }));
+    var cardsHtml = filtered.length
+      ? filtered.map(function (o) {
+          var st = orderStatusInfo(o.status);
+          var waHref = buildCustomerWhatsappUrl(o);
+          var itemsList = (o.items || []).map(function (it) {
+            return '<li><span>' + esc(it.title) + '</span><b>Talla ' + esc(it.size) + ' ×' + (it.qty || 1) + (it.name ? ' · ' + esc(it.name) : '') + (it.number ? ' #' + esc(it.number) : '') + (it.patches && it.patches !== 'No' ? ' · ' + esc(it.patches) : '') + '</b></li>';
+          }).join('');
+          var statusOptions = Object.keys(ORDER_STATUS_META).map(function (k) {
+            return '<option value="' + esc(k) + '"' + (o.status === k ? ' selected' : '') + '>' + esc(ORDER_STATUS_META[k].label) + '</option>';
+          }).join('');
+          return '<article class="admin-order-card" data-admin-order="' + esc(o.id) + '">' +
+            '<div class="admin-order-head">' +
+              '<div>' +
+                '<div class="admin-order-title-row"><strong>' + esc(o.id) + '</strong><span class="admin-status-badge ' + esc(st.cls) + '">' + esc(st.label) + '</span><span class="admin-pay-tag">' + (o.paymentMethod === 'bizum' ? 'Bizum' : 'WhatsApp/Email') + '</span></div>' +
+                '<p class="admin-customer-line">' + esc(o.customer && o.customer.name) + ' · ' + esc(o.customer && o.customer.phone) + (o.customer && o.customer.city ? ' · ' + esc(o.customer.city) : '') + (o.customer && o.customer.email ? ' · ' + esc(o.customer.email) : '') + '</p>' +
+                (o.customer && o.customer.notes ? '<p class="admin-customer-notes">Nota cliente: ' + esc(o.customer.notes) + '</p>' : '') +
+              '</div>' +
+              '<div class="admin-order-total"><strong>' + esc(KangPricing.money(o.totalPriceCents || 0)) + '</strong><span>' + esc(formatDate(o.createdAt)) + ' · ' + (o.totalItems || 0) + ' art.</span></div>' +
+            '</div>' +
+            '<ul class="admin-order-items">' + itemsList + '</ul>' +
+            '<form class="admin-order-edit" data-admin-edit="' + esc(o.id) + '">' +
+              '<label class="field"><span>Estado</span><select name="status">' + statusOptions + '</select></label>' +
+              '<label class="field"><span>Transportista</span><input type="text" name="trackingCarrier" placeholder="Correos / DHL / 17TRACK" value="' + esc(o.trackingCarrier || '') + '"></label>' +
+              '<label class="field"><span>Código tracking</span><input type="text" name="trackingCode" placeholder="ES1234567890" value="' + esc(o.trackingCode || '') + '"></label>' +
+              '<label class="field admin-field-notes"><span>Nota interna / cliente</span><input type="text" name="adminNotes" placeholder="Visible en seguimiento..." value="' + esc(o.adminNotes || '') + '"></label>' +
+              '<div class="admin-order-btns">' +
+                '<button type="submit" class="btn btn-primary">Guardar</button>' +
+                '<a class="btn btn-whatsapp" href="' + esc(waHref) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Avisar cliente</a>' +
+              '</div>' +
+            '</form>' +
+          '</article>';
+        }).join('')
+      : '<div class="empty-state"><h3>Sin pedidos en esta vista</h3><p>Cuando lleguen pedidos o ajustes el filtro aparecerán aquí.</p></div>';
+
+    box.innerHTML =
+      '<div class="admin-topbar">' +
+        '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'vercel-blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
+        '<div class="admin-topbar-actions">' +
+          (!meta.isVercel ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
+          '<button type="button" class="btn btn-outline" id="admin-refresh-btn">Actualizar</button>' +
+          (state.adminToken ? '<button type="button" class="btn btn-ghost" id="admin-logout-btn">Cerrar sesión</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="admin-kpis">' +
+        '<div class="admin-kpi"><span>Pedidos totales</span><strong>' + fmt(stats.totalOrders) + '</strong></div>' +
+        '<div class="admin-kpi"><span>Pendientes / Bizum</span><strong>' + fmt(stats.pendingCount) + '</strong></div>' +
+        '<div class="admin-kpi"><span>Pagados / En curso</span><strong>' + fmt(stats.inProgressCount) + '</strong></div>' +
+        '<div class="admin-kpi"><span>Volumen estimado</span><strong class="is-volt">' + esc(KangPricing.money(stats.revenueCents || 0)) + '</strong></div>' +
+      '</div>' +
+      '<div class="admin-filters">' +
+        '<label class="searchbox"><svg><use href="#i-search"/></svg><input type="search" id="admin-search-input" placeholder="Buscar por código KT-, cliente, teléfono o equipo…" value="' + esc(state.adminSearch) + '"></label>' +
+        '<div class="admin-status-chips">' + statusChips.map(function (c) {
+          return '<button type="button" class="' + (state.adminStatusFilter === c[0] ? 'is-active' : '') + '" data-admin-status="' + esc(c[0]) + '">' + esc(c[1]) + '</button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="admin-orders-list">' + cardsHtml + '</div>';
+  }
+
+  function bindAdminEvents() {
+    var box = $('#admin-content');
+    if (!box) return;
+    box.addEventListener('submit', function (event) {
+      var authForm = event.target.closest('#admin-auth-form');
+      if (authForm) {
+        event.preventDefault();
+        var tok = ($('#admin-token-input') && $('#admin-token-input').value || '').trim();
+        state.adminToken = tok;
+        try { sessionStorage.setItem('kang_admin_token', tok); } catch (e) {}
+        loadAdminOrders();
+        return;
+      }
+      var editForm = event.target.closest('[data-admin-edit]');
+      if (editForm) {
+        event.preventDefault();
+        var orderId = editForm.getAttribute('data-admin-edit');
+        updateAdminOrder(orderId, {
+          status: editForm.elements.status.value,
+          trackingCarrier: editForm.elements.trackingCarrier.value.trim(),
+          trackingCode: editForm.elements.trackingCode.value.trim(),
+          adminNotes: editForm.elements.adminNotes.value.trim()
+        });
+      }
+    });
+    box.addEventListener('click', function (event) {
+      if (event.target.closest('#admin-refresh-btn') || event.target.closest('#admin-retry-btn')) {
+        loadAdminOrders();
+        return;
+      }
+      if (event.target.closest('#admin-sync-btn')) {
+        adminTriggerSync();
+        return;
+      }
+      if (event.target.closest('#admin-logout-btn')) {
+        state.adminToken = '';
+        state.adminNeedsToken = true;
+        try { sessionStorage.removeItem('kang_admin_token'); } catch (e) {}
+        renderAdminView();
+        return;
+      }
+      var chip = event.target.closest('[data-admin-status]');
+      if (chip) {
+        state.adminStatusFilter = chip.getAttribute('data-admin-status') || '';
+        renderAdminView();
+      }
+    });
+    box.addEventListener('input', function (event) {
+      if (event.target && event.target.id === 'admin-search-input') {
+        state.adminSearch = event.target.value || '';
+        renderAdminView();
+        var inp = $('#admin-search-input');
+        if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+      }
+    });
   }
 
   if (document.readyState === 'loading') {

@@ -10,7 +10,7 @@
     { title: 'Entrenamiento & Verano', items: [['Conjunto Adulto (Camiseta + Pantalón corto)',2700],['Traje Entrenamiento (Chaleco / Manga corta + Short)',3500],['Traje Entrenamiento (Polo + Pantalón largo)',4000]] },
     { title: 'Chándals & Cortavientos', items: [['Chaqueta Cortavientos',4500],['Chándal Entrenamiento (Media cremallera + Pantalón)',4900],['Chándal Entrenamiento (Cremallera completa / Capucha)',5500],['Conjunto Cortavientos Completo',5500]] },
     { title: 'Abrigos & Invierno', items: [['Chaqueta Acolchada Corta',6000],['Abrigo Largo / Conjunto Acolchado Corto',7500],['Conjunto Acolchado Largo Completo',8900]] },
-    { title: 'Personalización & Extras', items: [['Suplemento Manga Larga (en camisetas)',300],['Personalización (nombre y número)',200],['Parche (por unidad)',100],['Suplemento Talla Especial (3XL / 4XL)',300]] }
+    { title: 'Personalización & Extras', items: [['Suplemento Manga Larga (en camisetas)',300],['Personalización (nombre y número)',200],['Parche (por unidad)',100],['Suplemento Talla Especial (3XL / 4XL / 5XL)',300]] }
   ];
   function isLongSleeveFlag(product) {
     product = product || {};
@@ -131,7 +131,7 @@
     var patchCount = parseInt(options.patchCount, 10);
     if (!isFinite(patchCount) || patchCount < 0) patchCount = selectedPatches.length;
     var patches = patchCount * 100;
-    var size = String(options.size || '').toUpperCase(), special = /^(3XL|4XL)$/.test(size) ? 300 : 0;
+    var size = String(options.size || '').toUpperCase(), special = /^(3XL|4XL|5XL)$/.test(size) ? 300 : 0;
     return {
       basePriceCents: base,
       isLongSleeve: isLongSleeveJersey,

@@ -56,15 +56,36 @@ var MIME = {
 
 var catalog = { meta: { total: 0, generatedAt: null }, items: [] };
 var catalogById = {};
+var catalogCache = { raw: null, gzip: null, etag: '' };
 var imageInFlight = {};
 var albumMemory = {};
 var orderRate = {};
-// Mocked @vercel/blob replacement (in-memory, data lost on container sleep)
 var blobStore = new Map();
+var TMP_ORDERS_DIR = '/tmp/kang-orders';
+
+var ORDER_STATUSES = ['pending', 'bizum_pending', 'paid', 'ordered', 'shipped', 'delivered', 'cancelled'];
+var ORDER_STATUS_LABELS = {
+  pending: 'Pendiente de confirmar',
+  bizum_pending: 'Esperando Bizum',
+  paid: 'Pagado',
+  ordered: 'Pedido a proveedor',
+  shipped: 'Enviado',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado'
+};
 
 // ─────────────────────────────────────────────────────────────
 //  Catálogo
 // ─────────────────────────────────────────────────────────────
+
+function rebuildCatalogCache(rawText) {
+  var buf = Buffer.from(rawText, 'utf8');
+  catalogCache = {
+    raw: buf,
+    gzip: zlib.gzipSync(buf),
+    etag: '"' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"'
+  };
+}
 
 function loadCatalogFromDisk() {
   try {
@@ -74,6 +95,7 @@ function loadCatalogFromDisk() {
       catalog = parsed;
       catalogById = {};
       parsed.items.forEach(function (item) { catalogById[item.id] = item; });
+      rebuildCatalogCache(raw);
       return true;
     }
   } catch (err) {
@@ -311,9 +333,23 @@ function validateOrder(payload) {
     paymentMethod = payload.paymentMethod;
   }
 
+  var nowIso = new Date().toISOString();
+  var initialStatus = paymentMethod === 'bizum' ? 'bizum_pending' : 'pending';
   return {
-    id: 'KT-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + crypto.randomBytes(2).toString('hex').toUpperCase(),
-    createdAt: new Date().toISOString(),
+    id: 'KT-' + nowIso.slice(2, 10).replace(/-/g, '') + '-' + crypto.randomBytes(2).toString('hex').toUpperCase(),
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    status: initialStatus,
+    trackingCode: '',
+    trackingCarrier: '',
+    adminNotes: '',
+    statusHistory: [
+      {
+        status: initialStatus,
+        at: nowIso,
+        note: paymentMethod === 'bizum' ? 'Pedido creado · pendiente de pago Bizum' : 'Pedido creado · pendiente de confirmación'
+      }
+    ],
     paymentMethod: paymentMethod,
     customer: { name: name, phone: phone, email: email, city: city, notes: notes },
     items: cleanItems,
@@ -420,34 +456,200 @@ function orderToHtml(order) {
   '</div>';
 }
 
-async function saveOrder(order) {
+function getStorageMode() {
+  if (!IS_VERCEL) return 'disk';
+  if (process.env.BLOB_READ_WRITE_TOKEN) return 'blob';
+  return 'memory';
+}
+
+function normalizeOrderRecord(order) {
+  if (!order || typeof order !== 'object') return null;
+  if (!order.status || ORDER_STATUSES.indexOf(order.status) === -1) {
+    order.status = order.paymentMethod === 'bizum' ? 'bizum_pending' : 'pending';
+  }
+  order.updatedAt = order.updatedAt || order.createdAt || new Date().toISOString();
+  order.trackingCode = String(order.trackingCode || '');
+  order.trackingCarrier = String(order.trackingCarrier || '');
+  order.adminNotes = String(order.adminNotes || '');
+  if (!Array.isArray(order.statusHistory) || !order.statusHistory.length) {
+    order.statusHistory = [{ status: order.status, at: order.createdAt || order.updatedAt, note: ORDER_STATUS_LABELS[order.status] || '' }];
+  }
+  return order;
+}
+
+async function saveOrder(order, isUpdate) {
+  var serialized = JSON.stringify(order);
   if (IS_VERCEL) {
-    try {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
       var blob = await import('@vercel/blob');
-      await blob.put('orders/' + order.id + '.json', JSON.stringify(order), {
+      await blob.put('orders/' + order.id + '.json', serialized, {
         access: 'private',
         addRandomSuffix: false,
+        allowOverwrite: true,
         contentType: 'application/json; charset=utf-8'
       });
       return;
-    } catch (err) {
-      if (process.env.BLOB_READ_WRITE_TOKEN) throw err;
-      blobStore.set('orders/' + order.id + '.json', JSON.stringify(order));
-      return;
     }
+    blobStore.set('orders/' + order.id + '.json', serialized);
+    try {
+      fs.mkdirSync(TMP_ORDERS_DIR, { recursive: true });
+      util.writeJsonAtomic(path.join(TMP_ORDERS_DIR, order.id + '.json'), order);
+    } catch (e) {}
+    return;
   }
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
   util.writeJsonAtomic(path.join(ORDERS_DIR, order.id + '.json'), order);
-  fs.appendFileSync(path.join(ORDERS_DIR, 'orders.jsonl'), JSON.stringify({
+  if (!isUpdate) {
+    fs.appendFileSync(path.join(ORDERS_DIR, 'orders.jsonl'), JSON.stringify({
+      id: order.id,
+      createdAt: order.createdAt,
+      customer: order.customer,
+      totalItems: order.totalItems,
+      totalPriceCents: order.totalPriceCents,
+      items: order.items.map(function (i) {
+        return { title: i.title, size: i.size, name: i.name, number: i.number, patches: i.patches, qty: i.qty, unitPriceCents: i.unitPriceCents, lineTotalCents: i.lineTotalCents };
+      })
+    }) + '\n', 'utf8');
+  }
+}
+
+async function getOrderById(id) {
+  var cleanId = String(id || '').trim().toUpperCase();
+  if (!/^KT-\d{6}-[A-F0-9]{4,8}$/.test(cleanId)) return null;
+
+  if (IS_VERCEL) {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      try {
+        var blob = await import('@vercel/blob');
+        var res = await blob.get('orders/' + cleanId + '.json', { access: 'private', useCache: false });
+        if (!res || !res.stream) return null;
+        var text = await new Response(res.stream).text();
+        return normalizeOrderRecord(JSON.parse(text));
+      } catch (err) {
+        if (err && (err.name === 'BlobNotFoundError' || /not found/i.test(err.message || ''))) return null;
+        throw err;
+      }
+    }
+    var mem = blobStore.get('orders/' + cleanId + '.json');
+    if (mem) return normalizeOrderRecord(JSON.parse(mem));
+    try {
+      var tmpRaw = fs.readFileSync(path.join(TMP_ORDERS_DIR, cleanId + '.json'), 'utf8');
+      return normalizeOrderRecord(JSON.parse(tmpRaw));
+    } catch (e) { return null; }
+  }
+
+  try {
+    var raw = fs.readFileSync(path.join(ORDERS_DIR, cleanId + '.json'), 'utf8');
+    return normalizeOrderRecord(JSON.parse(raw));
+  } catch (e) {
+    return null;
+  }
+}
+
+async function listAllOrders() {
+  var list = [];
+  if (IS_VERCEL) {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      var blob = await import('@vercel/blob');
+      var cursor;
+      var blobs = [];
+      do {
+        var page = await blob.list({ prefix: 'orders/', cursor: cursor, limit: 100 });
+        blobs = blobs.concat(page.blobs || []);
+        cursor = page.hasMore ? page.cursor : undefined;
+      } while (cursor);
+
+      for (var i = 0; i < blobs.length; i++) {
+        var entry = blobs[i];
+        if (!/\.json$/i.test(entry.pathname || '')) continue;
+        try {
+          var got = await blob.get(entry.pathname, { access: 'private', useCache: false });
+          if (got && got.stream) {
+            var parsed = normalizeOrderRecord(JSON.parse(await new Response(got.stream).text()));
+            if (parsed) list.push(parsed);
+          }
+        } catch (e) {}
+      }
+    } else {
+      var seen = {};
+      blobStore.forEach(function (val) {
+        try {
+          var o = normalizeOrderRecord(JSON.parse(val));
+          if (o && !seen[o.id]) { seen[o.id] = true; list.push(o); }
+        } catch (e) {}
+      });
+      try {
+        if (fs.existsSync(TMP_ORDERS_DIR)) {
+          fs.readdirSync(TMP_ORDERS_DIR).forEach(function (file) {
+            if (!/^KT-.*\.json$/i.test(file)) return;
+            try {
+              var o = normalizeOrderRecord(JSON.parse(fs.readFileSync(path.join(TMP_ORDERS_DIR, file), 'utf8')));
+              if (o && !seen[o.id]) { seen[o.id] = true; list.push(o); }
+            } catch (e) {}
+          });
+        }
+      } catch (e) {}
+    }
+  } else if (fs.existsSync(ORDERS_DIR)) {
+    fs.readdirSync(ORDERS_DIR).forEach(function (file) {
+      if (!/^KT-.*\.json$/i.test(file)) return;
+      try {
+        var parsedDisk = normalizeOrderRecord(JSON.parse(fs.readFileSync(path.join(ORDERS_DIR, file), 'utf8')));
+        if (parsedDisk) list.push(parsedDisk);
+      } catch (e) {}
+    });
+  }
+
+  return list.sort(function (a, b) {
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+}
+
+function isAdminAuthorized(req, parsed) {
+  var remote = req.socket.remoteAddress || '';
+  var isLocal = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+  var token = String(req.headers['x-admin-token'] || (parsed && parsed.query && parsed.query.token) || '').trim();
+  if (ADMIN_TOKEN) {
+    if (token === ADMIN_TOKEN) return { ok: true, devMode: false };
+    return { ok: false, status: 401, error: 'Token de administrador incorrecto o ausente' };
+  }
+  if (IS_VERCEL) {
+    return { ok: false, status: 503, error: 'Configura ADMIN_TOKEN en Vercel (Environment Variables) para usar el panel de gestión.' };
+  }
+  if (isLocal) return { ok: true, devMode: true };
+  return { ok: false, status: 401, error: 'No autorizado' };
+}
+
+function publicOrderView(order) {
+  return {
     id: order.id,
     createdAt: order.createdAt,
-    customer: order.customer,
+    updatedAt: order.updatedAt,
+    status: order.status,
+    statusLabel: ORDER_STATUS_LABELS[order.status] || order.status,
+    paymentMethod: order.paymentMethod,
+    trackingCode: order.trackingCode || '',
+    trackingCarrier: order.trackingCarrier || '',
+    adminNotes: order.adminNotes || '',
+    statusHistory: order.statusHistory || [],
     totalItems: order.totalItems,
-      totalPriceCents: order.totalPriceCents,
-    items: order.items.map(function (i) {
-      return { title: i.title, size: i.size, name: i.name, number: i.number, patches: i.patches, qty: i.qty, unitPriceCents: i.unitPriceCents, lineTotalCents: i.lineTotalCents };
+    totalPriceCents: order.totalPriceCents,
+    items: (order.items || []).map(function (i) {
+      return {
+        title: i.title,
+        team: i.team,
+        season: i.season,
+        size: i.size,
+        qty: i.qty,
+        name: i.name,
+        number: i.number,
+        patches: i.patches,
+        unitPriceCents: i.unitPriceCents,
+        lineTotalCents: i.lineTotalCents,
+        image: i.image
+      };
     })
-  }) + '\n', 'utf8');
+  };
 }
 
 async function notifyOrder(order) {
@@ -719,7 +921,31 @@ async function handle(req, res) {
       refreshIfNeeded();
       return sendJson(res, 503, { syncing: true, status: syncModule.state }, req);
     }
-    return sendJson(res, 200, catalog, req);
+    var cacheHdr = 'public, max-age=300, stale-while-revalidate=3600';
+    if (catalogCache.etag && req.headers['if-none-match'] === catalogCache.etag) {
+      res.writeHead(304, {
+        'ETag': catalogCache.etag,
+        'Cache-Control': cacheHdr,
+        'Vary': 'Accept-Encoding'
+      });
+      return res.end();
+    }
+    if (catalogCache.raw) {
+      var acceptsGzip = /gzip/.test(req.headers['accept-encoding'] || '');
+      var bodyBuf = acceptsGzip && catalogCache.gzip ? catalogCache.gzip : catalogCache.raw;
+      var hdrs = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': cacheHdr,
+        'ETag': catalogCache.etag,
+        'Vary': 'Accept-Encoding',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Length': bodyBuf.length
+      };
+      if (acceptsGzip && catalogCache.gzip) hdrs['Content-Encoding'] = 'gzip';
+      res.writeHead(200, hdrs);
+      return res.end(bodyBuf);
+    }
+    return sendJson(res, 200, catalog, req, { 'Cache-Control': cacheHdr });
   }
 
   if (pathname === '/api/team-logos' && req.method === 'GET') {
@@ -738,13 +964,11 @@ async function handle(req, res) {
 
   if (pathname === '/api/sync' && req.method === 'POST') {
     if (IS_VERCEL) {
-      return sendJson(res, 503, { error: 'En Vercel, sincroniza el catálogo localmente y publica una nueva versión.' }, req);
+      return sendJson(res, 503, { error: 'En Vercel, sincroniza el catálogo localmente o mediante GitHub Action.' }, req);
     }
-    var remote = req.socket.remoteAddress || '';
-    var isLocal = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
-    var token = req.headers['x-admin-token'] || parsed.query.token;
-    if (!isLocal && (!ADMIN_TOKEN || token !== ADMIN_TOKEN)) {
-      return sendJson(res, 401, { error: 'No autorizado' }, req);
+    var syncAuth = isAdminAuthorized(req, parsed);
+    if (!syncAuth.ok) {
+      return sendJson(res, syncAuth.status, { error: syncAuth.error }, req);
     }
     if (syncModule.state.running) {
       return sendJson(res, 202, { ok: true, syncing: true, state: syncModule.state }, req);
@@ -767,6 +991,97 @@ async function handle(req, res) {
     }
   }
 
+  if (pathname === '/api/orders/track' && req.method === 'GET') {
+    var trackId = String(parsed.query.id || '').trim().toUpperCase();
+    var phone4 = String(parsed.query.phone4 || '').replace(/\D/g, '');
+    if (!/^KT-\d{6}-[A-F0-9]{4,8}$/.test(trackId)) {
+      return sendJson(res, 400, { error: 'Formato de código no válido (ej. KT-261115-ABCD).' }, req);
+    }
+    if (phone4.length !== 4) {
+      return sendJson(res, 400, { error: 'Introduce los últimos 4 dígitos de tu teléfono.' }, req);
+    }
+    var foundOrder = await getOrderById(trackId);
+    if (!foundOrder) {
+      return sendJson(res, 404, { error: 'Pedido no encontrado. Comprueba el código o contacta por WhatsApp.' }, req);
+    }
+    var orderPhone = String((foundOrder.customer && foundOrder.customer.phone) || '').replace(/\D/g, '');
+    if (orderPhone.slice(-4) !== phone4) {
+      return sendJson(res, 403, { error: 'Los últimos 4 dígitos del teléfono no coinciden con este pedido.' }, req);
+    }
+    return sendJson(res, 200, { ok: true, order: publicOrderView(foundOrder) }, req);
+  }
+
+  if (pathname === '/api/admin/orders' && req.method === 'GET') {
+    var authList = isAdminAuthorized(req, parsed);
+    if (!authList.ok) return sendJson(res, authList.status, { error: authList.error }, req);
+    var orders = await listAllOrders();
+    var stats = {
+      totalOrders: orders.length,
+      pendingCount: 0,
+      inProgressCount: 0,
+      shippedCount: 0,
+      revenueCents: 0,
+      topTeams: []
+    };
+    var teamCounts = {};
+    orders.forEach(function (o) {
+      if (o.status !== 'cancelled') stats.revenueCents += (Number(o.totalPriceCents) || 0);
+      if (o.status === 'pending' || o.status === 'bizum_pending') stats.pendingCount += 1;
+      else if (o.status === 'paid' || o.status === 'ordered') stats.inProgressCount += 1;
+      else if (o.status === 'shipped' || o.status === 'delivered') stats.shippedCount += 1;
+      (o.items || []).forEach(function (it) {
+        if (it.team) teamCounts[it.team] = (teamCounts[it.team] || 0) + (Number(it.qty) || 1);
+      });
+    });
+    stats.topTeams = Object.keys(teamCounts).map(function (t) { return { team: t, qty: teamCounts[t] }; })
+      .sort(function (a, b) { return b.qty - a.qty; }).slice(0, 5);
+    return sendJson(res, 200, {
+      ok: true,
+      storageMode: getStorageMode(),
+      isVercel: IS_VERCEL,
+      adminConfigured: !!ADMIN_TOKEN,
+      statuses: ORDER_STATUS_LABELS,
+      orders: orders,
+      stats: stats
+    }, req);
+  }
+
+  if (pathname.indexOf('/api/admin/orders/') === 0 && (req.method === 'PATCH' || req.method === 'POST')) {
+    var authPatch = isAdminAuthorized(req, parsed);
+    if (!authPatch.ok) return sendJson(res, authPatch.status, { error: authPatch.error }, req);
+    var targetId = decodeURIComponent(pathname.slice('/api/admin/orders/'.length)).trim().toUpperCase();
+    var existing = await getOrderById(targetId);
+    if (!existing) return sendJson(res, 404, { error: 'Pedido no encontrado' }, req);
+    try {
+      var patchRaw = await readBody(req, 32 * 1024);
+      var body = JSON.parse(patchRaw || '{}');
+      var nowUpdate = new Date().toISOString();
+      var prevStatus = existing.status;
+      var prevTracking = existing.trackingCode;
+
+      if (body.status !== undefined) {
+        if (ORDER_STATUSES.indexOf(body.status) === -1) return sendJson(res, 400, { error: 'Estado no válido' }, req);
+        existing.status = body.status;
+      }
+      if (body.trackingCode !== undefined) existing.trackingCode = sanitizeShort(body.trackingCode, 80);
+      if (body.trackingCarrier !== undefined) existing.trackingCarrier = sanitizeShort(body.trackingCarrier, 50);
+      if (body.adminNotes !== undefined) existing.adminNotes = sanitizeShort(body.adminNotes, 400);
+      existing.updatedAt = nowUpdate;
+
+      if (existing.status !== prevStatus || (existing.trackingCode && existing.trackingCode !== prevTracking)) {
+        var histNote = sanitizeShort(body.historyNote || '', 160) ||
+          (existing.trackingCode && existing.trackingCode !== prevTracking
+            ? (ORDER_STATUS_LABELS[existing.status] + ' · Tracking: ' + existing.trackingCode)
+            : (ORDER_STATUS_LABELS[existing.status] || existing.status));
+        existing.statusHistory.push({ status: existing.status, at: nowUpdate, note: histNote });
+      }
+      await saveOrder(existing, true);
+      return sendJson(res, 200, { ok: true, order: existing }, req);
+    } catch (err) {
+      return sendJson(res, 400, { error: err.message || 'No se pudo actualizar el pedido' }, req);
+    }
+  }
+
   if (pathname === '/api/orders' && req.method === 'POST') {
     var ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
     if (rateLimited(ip)) return sendJson(res, 429, { error: 'Demasiados intentos. Espera unos minutos.' }, req);
@@ -777,7 +1092,7 @@ async function handle(req, res) {
       var payload = JSON.parse(raw);
       var order = validateOrder(payload);
 
-      await saveOrder(order);
+      await saveOrder(order, false);
       var delivery = await notifyOrder(order);
       var text = orderToText(order);
       var whatsappUrl = STORE.whatsapp
@@ -790,7 +1105,7 @@ async function handle(req, res) {
       console.log('Pedido', order.id, '·', order.paymentMethod, '·', order.customer.name, '·', order.totalItems, 'art. · email:', delivery.email, '· wa:', delivery.whatsapp);
       return sendJson(res, 200, {
         ok: true,
-        order: { id: order.id, createdAt: order.createdAt, totalPriceCents: order.totalPriceCents, paymentMethod: order.paymentMethod },
+        order: { id: order.id, createdAt: order.createdAt, status: order.status, totalPriceCents: order.totalPriceCents, paymentMethod: order.paymentMethod },
         delivery: delivery,
         whatsappUrl: whatsappUrl,
         mailtoUrl: mailtoUrl,
@@ -803,7 +1118,7 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/health') {
-    return sendJson(res, 200, { ok: true, total: catalog.items.length, updatedAt: catalog.meta.generatedAt }, req);
+    return sendJson(res, 200, { ok: true, total: catalog.items.length, updatedAt: catalog.meta.generatedAt, storageMode: getStorageMode() }, req);
   }
 
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, pathname);

@@ -7,13 +7,13 @@
   <meta name="description" content="Catálogo online de camisetas, chándals y chaquetas de fútbol. Personaliza tu camiseta con nombre, dorsal y parches. Pedidos por WhatsApp o email.">
   <meta name="theme-color" content="#0a0c0f">
   <meta property="og:title" content="KANG Team · Viste tu pasión">
-  <meta property="og:description" content="Más de 7.500 prendas de tus equipos. Personaliza nombre, dorsal y parches.">
+  <meta property="og:description" content="Más de 10.900 prendas de tus equipos. Personaliza nombre, dorsal y parches.">
   <meta property="og:type" content="website">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261115-06">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-07">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -62,14 +62,14 @@
       <div class="announcement-group">
         <span>Personaliza tu camiseta con nombre, dorsal y parches</span><i>·</i>
         <span>Catálogo actualizado automáticamente</span><i>·</i>
-        <span>Pedidos por WhatsApp o email</span><i>·</i>
-        <span>Más de 7.500 prendas de tus equipos</span><i>·</i>
+        <span>Pago por Bizum directo o WhatsApp</span><i>·</i>
+        <span>Más de 10.900 prendas de tus equipos</span><i>·</i>
       </div>
       <div class="announcement-group" aria-hidden="true">
         <span>Personaliza tu camiseta con nombre, dorsal y parches</span><i>·</i>
         <span>Catálogo actualizado automáticamente</span><i>·</i>
-        <span>Pedidos por WhatsApp o email</span><i>·</i>
-        <span>Más de 7.500 prendas de tus equipos</span><i>·</i>
+        <span>Pago por Bizum directo o WhatsApp</span><i>·</i>
+        <span>Más de 10.900 prendas de tus equipos</span><i>·</i>
       </div>
     </div>
   </div>
@@ -91,8 +91,8 @@
         <a href="#/catalogo" data-nav="catalog">Catálogo</a>
         <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="seasonal">Primavera / invierno</a>
         <a href="#/equipos" data-nav="teams">Equipos</a>
-        <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
         <a href="#/precios" data-nav="prices">Precios</a>
+        <a href="#/seguimiento" data-nav="track">Seguimiento</a>
       </nav>
 
       <div class="header-actions">
@@ -134,8 +134,8 @@
               <a class="btn btn-ghost" href="#/equipos">Buscar mi equipo</a>
             </div>
             <div class="hero-stats">
-              <div><strong id="stat-total">7.500</strong><span>prendas</span></div>
-              <div><strong id="stat-teams">500</strong><span>equipos</span></div>
+              <div><strong id="stat-total">10.900+</strong><span>prendas</span></div>
+              <div><strong id="stat-teams">500+</strong><span>equipos</span></div>
               <div><strong>26/27</strong><span>nueva temporada</span></div>
             </div>
           </div>
@@ -206,9 +206,9 @@
               <h2>TU NOMBRE.<br>TU DORSAL.<br><em>TUS REGLAS.</em></h2>
               <p>Las camisetas se personalizan con el nombre y el número que quieras. Añade también los parches de tu competición y hazla única.</p>
               <ul class="check-list">
-                <li><svg><use href="#i-check"/></svg> Nombre y dorsal incluidos</li>
-                <li><svg><use href="#i-check"/></svg> Parches de Liga, Champions, Mundial o Copa</li>
-                <li><svg><use href="#i-check"/></svg> Tallas desde la S hasta la 5XL</li>
+                <li><svg><use href="#i-check"/></svg> Personalización de nombre y dorsal (+2,00 €) con vista previa real</li>
+                <li><svg><use href="#i-check"/></svg> Parches de Liga, Champions, Mundial o Copa (+1,00 €/ud.)</li>
+                <li><svg><use href="#i-check"/></svg> Tallas desde la S hasta la 5XL y conjuntos infantiles</li>
               </ul>
               <a class="btn btn-light" href="#/catalogo?tipo=jersey">Personalizar una camiseta <svg><use href="#i-arrow"/></svg></a>
             </div>
@@ -297,7 +297,7 @@
               <span class="step-num">01</span>
               <svg class="step-icon"><use href="#i-search"/></svg>
               <h3>Encuentra tu prenda</h3>
-              <p>Filtra por equipo, temporada, liga o tipo de prenda. Más de 7.500 referencias actualizadas.</p>
+              <p>Filtra por equipo, temporada, liga o versión Fan/Jugador. Más de 10.900 referencias actualizadas.</p>
             </article>
             <article class="step-card">
               <span class="step-num">02</span>
@@ -533,6 +533,29 @@
         </div>
       </div>
     </section>
+    <!-- ══════════════════════ SEGUIMIENTO ══════════════════════ -->
+    <section class="view" id="view-track" aria-label="Seguimiento de pedido" hidden>
+      <div class="page-head">
+        <div class="container">
+          <p class="eyebrow">Estado en tiempo real</p>
+          <h1>Seguimiento<br><em>de tu pedido.</em></h1>
+          <p class="page-lead">Introduce tu código de pedido (KT-...) y los últimos 4 dígitos de tu teléfono para consultar el estado y el número de envío.</p>
+        </div>
+      </div>
+      <div class="container track-body" id="track-content"></div>
+    </section>
+
+    <!-- ══════════════════════ GESTIÓN ADMIN ══════════════════════ -->
+    <section class="view" id="view-admin" aria-label="Gestión de pedidos" hidden>
+      <div class="page-head">
+        <div class="container">
+          <p class="eyebrow">Panel privado</p>
+          <h1>Gestión<br><em>de pedidos.</em></h1>
+          <p class="page-lead">Controla estados, añade códigos de seguimiento y avisa a tus clientes por WhatsApp en un clic.</p>
+        </div>
+      </div>
+      <div class="container admin-body" id="admin-content"></div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -560,20 +583,20 @@
           <h3>Ayuda</h3>
           <a href="#/como-funciona">Cómo funciona</a>
           <a href="#/precios">Precios</a>
+          <a href="#/seguimiento">Seguimiento de pedido</a>
           <a href="#/como-funciona">Tallas y personalización</a>
-          <a href="#/como-funciona">Envíos</a>
           <a href="#/como-funciona">Preguntas frecuentes</a>
         </div>
         <div>
           <h3>Contacto</h3>
           <a href="" id="footer-whatsapp">WhatsApp</a>
           <a href="" id="footer-email">Email</a>
-          <a href="https://minkang.x.yupoo.com/categories/712891" target="_blank" rel="noopener">Catálogo original</a>
+          <a href="#/admin">Gestión tienda</a>
         </div>
       </nav>
     </div>
     <div class="container footer-bottom">
-      <p>© <span id="year"></span> KANG Team. Catálogo de pedido asistido. No se realiza ningún cobro online.</p>
+      <p>© <span id="year"></span> KANG Team. Catálogo de pedido asistido. No se realiza ningún cobro automático en web.</p>
       <p class="sync-note"><span class="pulse-dot"></span> <span id="sync-note">Sincronizando catálogo…</span></p>
     </div>
   </footer>
@@ -589,8 +612,9 @@
       <a href="#/catalogo" data-nav="catalog">Catálogo</a>
       <a href="#/catalogo?coleccion=primavera-invierno&vista=grid" data-nav="seasonal">Primavera / invierno</a>
       <a href="#/equipos" data-nav="teams">Equipos</a>
-      <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
       <a href="#/precios" data-nav="prices">Precios</a>
+      <a href="#/seguimiento" data-nav="track">Seguimiento</a>
+      <a href="#/como-funciona" data-nav="how">Cómo funciona</a>
     </nav>
     <div class="mobile-menu-foot">
       <div class="mobile-menu-shortcuts">
@@ -738,7 +762,7 @@
     <div class="noscript">Este catálogo necesita JavaScript para mostrar las prendas y el carrito. Actívalo en tu navegador.</div>
   </noscript>
 
-  <script src="/js/pricing.js?v=20261115-03" defer></script>
-  <script src="/js/app.js?v=20261115-06" defer></script>
+  <script src="/js/pricing.js?v=20261115-04" defer></script>
+  <script src="/js/app.js?v=20261115-07" defer></script>
 </body>
 </html>
