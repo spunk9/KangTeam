@@ -924,50 +924,54 @@ svg { display: block; }
 .check-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #d3d6db; }
 .check-list svg { width: 17px; height: 17px; color: var(--volt); flex: none; }
 .custom-banner-visual { display: flex; align-items: center; justify-content: center; min-height: 380px; }
-.jersey-preview { position: relative; width: min(350px, 100%); aspect-ratio: 1 / 1.08; display: flex; align-items: center; justify-content: center; }
-.jersey-shirt {
+.jersey-preview { position: relative; width: min(370px, 100%); aspect-ratio: 1 / 1.06; display: flex; align-items: center; justify-content: center; }
+.jersey-stage {
   position: relative;
-  width: 74%;
-  aspect-ratio: .86;
-  background: linear-gradient(150deg, #f8f6f0 0%, #d9d5ca 100%);
-  clip-path: polygon(22% 0, 40% 7%, 60% 7%, 78% 0, 100% 22%, 84% 38%, 78% 30%, 78% 100%, 22% 100%, 22% 30%, 16% 38%, 0 22%);
+  width: 92%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  color: #14171c;
-  transform: rotate(-4deg);
-  filter: drop-shadow(0 30px 35px rgba(0, 0, 0, 0.45));
+  transform: rotate(-3.2deg);
+  transition: transform .45s cubic-bezier(.2, .8, .2, 1);
+  filter: drop-shadow(0 28px 34px rgba(0, 0, 0, 0.55));
 }
-.jersey-shirt::before {
-  content: '';
-  position: absolute;
-  inset: 12% 18% auto;
-  height: 2px;
-  background: repeating-linear-gradient(90deg, #d9ff3f 0 6px, transparent 6px 12px);
-  opacity: .65;
+.jersey-preview:hover .jersey-stage { transform: rotate(-1deg) translateY(-4px); }
+.jersey-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.jersey-svg-name {
+  font-family: var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  paint-order: stroke fill;
+  stroke-width: 1.8px;
+  stroke-linejoin: round;
+  transition: fill .35s ease, stroke .35s ease;
 }
-.jersey-name { font-family: var(--font-display); font-size: clamp(1rem, 2.2vw, 1.5rem); letter-spacing: .05em; text-transform: uppercase; }
-.jersey-number { font-family: var(--font-display); font-size: clamp(5rem, 10vw, 8rem); line-height: .78; color: #14171c; }
-.jersey-brand { font-size: 8px; font-weight: 800; letter-spacing: .35em; margin-top: 10px; color: #5d6258; }
-.jersey-shadow { position: absolute; bottom: 8%; width: 60%; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); filter: blur(16px); }
+.jersey-svg-number {
+  font-family: var(--font-display);
+  letter-spacing: -.02em;
+  paint-order: stroke fill;
+  stroke-width: 3.2px;
+  stroke-linejoin: round;
+  transition: fill .35s ease, stroke .35s ease;
+}
+.jersey-shadow { position: absolute; bottom: 5%; width: 64%; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, 0.52); filter: blur(18px); }
 .floating-tag {
   position: absolute;
-  padding: 9px 16px;
+  padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(15, 18, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(15, 18, 22, 0.78);
   backdrop-filter: blur(10px);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .18em;
   color: var(--text);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
   animation: floatTag 5s ease-in-out infinite;
 }
-.tag-1 { top: 12%; left: 0; }
-.tag-2 { top: 48%; right: -3%; animation-delay: -1.6s; }
-.tag-3 { bottom: 8%; left: 4%; animation-delay: -3.2s; }
+.tag-1 { top: 10%; left: -2%; }
+.tag-2 { top: 48%; right: -4%; animation-delay: -1.6s; }
+.tag-3 { bottom: 8%; left: 2%; animation-delay: -3.2s; }
 @keyframes floatTag { 50% { transform: translateY(-8px); } }
 
 /* ── Pasos / CTA ─────────────────────────────────────────── */
@@ -2381,7 +2385,7 @@ svg { display: block; }
 /* ── Vista previa en vivo del dorsal en ficha ────────────── */
 .custom-panel-grid {
   display:grid;
-  grid-template-columns:1fr 136px;
+  grid-template-columns:1fr 164px;
   gap:14px;
   align-items:center;
 }
@@ -2390,68 +2394,64 @@ svg { display: block; }
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  gap:6px;
-  padding:10px 8px;
+  gap:8px;
+  padding:12px 10px;
   border:1px solid var(--line);
-  border-radius:10px;
-  background:radial-gradient(circle at 50% 35%, rgba(217,255,63,.09), transparent 65%), var(--bg-soft);
+  border-radius:12px;
+  background:
+    radial-gradient(circle at 50% 34%, var(--team-glow-soft, rgba(217,255,63,.1)), transparent 68%),
+    linear-gradient(180deg, rgba(255,255,255,.025), rgba(0,0,0,.18)),
+    var(--bg-soft);
 }
-.product-jersey-shirt {
-  position:relative;
-  width:104px;
-  aspect-ratio:.86;
-  background:linear-gradient(155deg,#f6f4ee 0%,#d7d3c8 100%);
-  clip-path:polygon(22% 0,40% 7%,60% 7%,78% 0,100% 22%,84% 38%,78% 30%,78% 100%,22% 100%,22% 30%,16% 38%,0 22%);
+.product-jersey-stage {
+  width:136px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  filter:drop-shadow(0 12px 20px rgba(0,0,0,.48));
+}
+.product-jersey-svg {
+  width:100%;
+  height:auto;
+  display:block;
+  overflow:visible;
+}
+.jersey-svg-name.is-placeholder,
+.jersey-svg-number.is-placeholder { opacity:.38; }
+.product-jersey-meta {
   display:flex;
   flex-direction:column;
   align-items:center;
-  justify-content:center;
-  gap:1px;
-  padding:14px 18px 8px;
-  color:#14171c;
-  filter:drop-shadow(0 10px 18px rgba(0,0,0,.42));
+  gap:5px;
+  width:100%;
 }
-.product-jersey-shirt::before {
-  content:'';
-  position:absolute;
-  inset:12% 24% auto;
-  height:2px;
-  background:repeating-linear-gradient(90deg,var(--volt) 0 4px,transparent 4px 8px);
-  opacity:.8;
-}
-.product-jersey-name {
-  font-family:var(--font-display);
-  font-size:11px;
-  line-height:1.05;
-  letter-spacing:.05em;
+.product-jersey-sleeve-tag {
+  display:inline-flex;
+  align-items:center;
+  padding:2px 7px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.04);
+  color:var(--muted);
+  font-size:8.5px;
+  font-weight:700;
+  letter-spacing:.08em;
   text-transform:uppercase;
-  max-width:100%;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  text-align:center;
 }
-.product-jersey-number {
-  font-family:var(--font-display);
-  font-size:38px;
-  line-height:.84;
-  color:#14171c;
-}
-.product-jersey-name.is-placeholder,
-.product-jersey-number.is-placeholder { opacity:.35; }
 .product-jersey-patches {
   font-size:9px;
   font-weight:700;
-  color:var(--volt);
+  color:var(--team-accent-safe, var(--volt));
   text-align:center;
   line-height:1.25;
   min-height:12px;
 }
 @media (max-width:540px) {
   .custom-panel-grid { grid-template-columns:1fr; }
-  .product-jersey-preview { flex-direction:row; justify-content:space-between; padding:10px 14px; }
-  .product-jersey-shirt { width:84px; }
-  .product-jersey-number { font-size:32px; }
+  .product-jersey-preview { flex-direction:row; justify-content:space-between; gap:12px; padding:10px 14px; }
+  .product-jersey-stage { width:112px; flex:none; }
+  .product-jersey-meta { align-items:flex-end; }
+  .product-jersey-patches { text-align:right; }
 }
 
 /* ── Barra de progreso del carrito ───────────────────────── */
@@ -3232,18 +3232,7 @@ svg { display: block; }
   border-color:var(--team-border, rgba(217,255,63,.28));
 }
 
-/* ── Vista previa camiseta con colores del equipo + parches ── */
-.product-jersey-shirt {
-  background:linear-gradient(155deg, var(--jersey-bg, #f6f4ee) 0%, var(--jersey-bg2, #d7d3c8) 100%);
-  color:var(--jersey-ink, #14171c);
-}
-.product-jersey-shirt::before {
-  background:repeating-linear-gradient(90deg, var(--jersey-accent, var(--volt)) 0 5px, transparent 5px 10px);
-  opacity:.85;
-}
-.product-jersey-number {
-  color:var(--jersey-ink, #14171c);
-}
+/* ── Emblemas de parches en vista previa camiseta ────────── */
 .jersey-patch-badges {
   display:flex;
   flex-wrap:wrap;

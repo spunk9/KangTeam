@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261115-05">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-06">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -213,11 +213,66 @@
               <a class="btn btn-light" href="#/catalogo?tipo=jersey">Personalizar una camiseta <svg><use href="#i-arrow"/></svg></a>
             </div>
             <div class="custom-banner-visual" aria-hidden="true">
-              <div class="jersey-preview">
-                <div class="jersey-shirt">
-                  <span class="jersey-name" id="preview-name">TU NOMBRE</span>
-                  <span class="jersey-number" id="preview-number">10</span>
-                  <span class="jersey-brand">KANG</span>
+              <div class="jersey-preview" id="home-jersey-preview">
+                <div class="jersey-stage">
+                  <svg class="jersey-svg" id="home-jersey-svg" viewBox="0 0 320 340" role="presentation">
+                    <defs>
+                      <linearGradient id="home-kit-grad" x1="0.15" y1="0" x2="0.85" y2="1">
+                        <stop offset="0%" id="home-kit-stop1" stop-color="#f6f5f0"/>
+                        <stop offset="100%" id="home-kit-stop2" stop-color="#dedbd2"/>
+                      </linearGradient>
+                      <linearGradient id="home-kit-sheen" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#000000" stop-opacity="0.12"/>
+                        <stop offset="22%" stop-color="#ffffff" stop-opacity="0.06"/>
+                        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.14"/>
+                        <stop offset="78%" stop-color="#ffffff" stop-opacity="0.04"/>
+                        <stop offset="100%" stop-color="#000000" stop-opacity="0.14"/>
+                      </linearGradient>
+                      <linearGradient id="home-kit-vert" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.08"/>
+                        <stop offset="65%" stop-color="#000000" stop-opacity="0"/>
+                        <stop offset="100%" stop-color="#000000" stop-opacity="0.14"/>
+                      </linearGradient>
+                      <filter id="home-kit-print-shadow" x="-15%" y="-15%" width="130%" height="130%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000000" flood-opacity="0.22"/>
+                      </filter>
+                    </defs>
+                    <!-- Inner collar interior -->
+                    <path d="M 122 22 Q 160 11 198 22 Q 160 36 122 22 Z" fill="#171b22"/>
+                    <!-- Jersey main anatomical silhouette (short sleeve back view) -->
+                    <path d="M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 269 58 286 86 299 122 L 255 147 Q 245 141 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 Q 75 141 65 147 L 21 122 C 34 86 51 58 68 41 C 84 31 103 25 122 22 Z" fill="url(#home-kit-grad)"/>
+                    <!-- 3D fabric volume & depth shading -->
+                    <path d="M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 269 58 286 86 299 122 L 255 147 Q 245 141 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 Q 75 141 65 147 L 21 122 C 34 86 51 58 68 41 C 84 31 103 25 122 22 Z" fill="url(#home-kit-sheen)"/>
+                    <path d="M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 269 58 286 86 299 122 L 255 147 Q 245 141 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 Q 75 141 65 147 L 21 122 C 34 86 51 58 68 41 C 84 31 103 25 122 22 Z" fill="url(#home-kit-vert)"/>
+                    <!-- Side mesh panels -->
+                    <path d="M 82 132 C 95 182 96 242 92 307 L 84 306 C 88 242 88 182 82 132 Z" fill="rgba(0,0,0,0.07)"/>
+                    <path d="M 238 132 C 225 182 224 242 228 307 L 236 306 C 232 242 232 182 238 132 Z" fill="rgba(0,0,0,0.07)"/>
+                    <!-- Tailored raglan / armhole & hem seams -->
+                    <path d="M 120 27 Q 98 78 82 132" fill="none" stroke="rgba(0,0,0,0.14)" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M 200 27 Q 222 78 238 132" fill="none" stroke="rgba(0,0,0,0.14)" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M 85 301 Q 160 313 235 301" fill="none" stroke="rgba(0,0,0,0.16)" stroke-width="1" stroke-dasharray="3 2"/>
+                    <!-- Ribbed back collar band & cuff trim -->
+                    <path id="home-kit-collar" d="M 120 22 Q 160 37 200 22 L 198 30 Q 160 47 122 30 Z" fill="#d4af37"/>
+                    <path id="home-kit-cuff-l" d="M 21 122 L 65 147 L 69 140 L 24 115 Z" fill="#d4af37"/>
+                    <path id="home-kit-cuff-r" d="M 299 122 L 255 147 L 251 140 L 296 115 Z" fill="#d4af37"/>
+                    <!-- Outer crisp edge contour -->
+                    <path d="M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 269 58 286 86 299 122 L 255 147 Q 245 141 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 Q 75 141 65 147 L 21 122 C 34 86 51 58 68 41 C 84 31 103 25 122 22 Z" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.1"/>
+                    <!-- Nape inner crest mark -->
+                    <path id="home-kit-nape" d="M 160 43 L 166 46 V 51 C 166 55 163.5 57.5 160 59 C 156.5 57.5 154 55 154 51 V 46 Z" fill="#161b26" opacity="0.28"/>
+                    <!-- Active sleeve competition patch -->
+                    <g id="home-preview-patch" transform="translate(267 88) rotate(26)">
+                      <path d="M 0 -13 L 10 -8 V 2 C 10 8 5.5 12 0 14 C -5.5 12 -10 8 -10 2 V -8 Z" fill="#11161f" stroke="#7dd3fc" stroke-width="1.6"/>
+                      <circle cx="0" cy="0.5" r="3.4" fill="#7dd3fc"/>
+                    </g>
+                    <!-- Dorsal name & number -->
+                    <g filter="url(#home-kit-print-shadow)">
+                      <text class="jersey-svg-name" id="preview-name" x="160" y="106" text-anchor="middle" font-size="24" fill="#161b26" stroke="rgba(255,255,255,0.5)">TU NOMBRE</text>
+                      <text class="jersey-svg-number" id="preview-number" x="160" y="226" text-anchor="middle" font-size="114" fill="#161b26" stroke="rgba(255,255,255,0.5)">10</text>
+                    </g>
+                    <!-- Number bottom mini crest & authentic hem mark -->
+                    <path id="home-kit-num-dot" d="M 160 237 L 164 241 L 160 245 L 156 241 Z" fill="#d4af37" opacity="0.85"/>
+                    <text id="home-kit-brand" x="160" y="294" text-anchor="middle" font-size="7.5" font-weight="800" letter-spacing="2.8" fill="#161b26" opacity="0.38">KANG TEAM · PRO</text>
+                  </svg>
                 </div>
                 <div class="jersey-shadow"></div>
                 <span class="floating-tag tag-1">NOMBRE</span>
@@ -684,6 +739,6 @@
   </noscript>
 
   <script src="/js/pricing.js?v=20261115-03" defer></script>
-  <script src="/js/app.js?v=20261115-05" defer></script>
+  <script src="/js/app.js?v=20261115-06" defer></script>
 </body>
 </html>

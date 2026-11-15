@@ -254,6 +254,118 @@
     }).join('');
   }
 
+  function jerseyDorsalStroke(inkHex) {
+    return hexLuminance(inkHex) > 0.45 ? 'rgba(8, 10, 14, 0.52)' : 'rgba(255, 255, 255, 0.55)';
+  }
+
+  function jerseyNameFontSize(nameText) {
+    var len = String(nameText || '').length;
+    if (len <= 7) return 25;
+    if (len <= 9) return 22;
+    if (len <= 11) return 19;
+    if (len <= 13) return 16.5;
+    return 15;
+  }
+
+  function jerseyNumberFontSize(numText) {
+    return String(numText || '').length <= 1 ? 118 : 110;
+  }
+
+  function jerseyPatchColor(name) {
+    var colors = { Liga: '#ff6b4a', Champions: '#7dd3fc', Mundial: '#facc15', Copa: '#86efac', Personalizado: '#d9ff3f' };
+    return colors[name] || '#d9ff3f';
+  }
+
+  function renderJerseySleevePatchesSvg(patchesText, isLongSleeve) {
+    if (!patchesText || patchesText === 'No') return '';
+    var list = String(patchesText).split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+    if (!list.length) return '';
+    var rPos = isLongSleeve ? 'translate(271 84) rotate(22)' : 'translate(267 88) rotate(26)';
+    var lPos = isLongSleeve ? 'translate(49 84) rotate(-22)' : 'translate(53 88) rotate(-26)';
+    function shieldSvg(pos, patchName) {
+      var c = jerseyPatchColor(patchName);
+      var abbr = patchName.slice(0, 3).toUpperCase();
+      return '<g transform="' + pos + '">' +
+        '<path d="M 0 -13 L 10 -8 V 2 C 10 8 5.5 12 0 14 C -5.5 12 -10 8 -10 2 V -8 Z" fill="#11161f" stroke="' + c + '" stroke-width="1.6"/>' +
+        '<text x="0" y="3.5" text-anchor="middle" font-size="6.4" font-weight="800" letter-spacing="0.4" fill="' + c + '">' + esc(abbr) + '</text>' +
+      '</g>';
+    }
+    var out = shieldSvg(rPos, list[0]);
+    if (list.length > 1) out += shieldSvg(lPos, list[1]);
+    return out;
+  }
+
+  function renderJerseyBackSvg(opts) {
+    var id = opts.idPrefix || 'modal-kit';
+    var theme = opts.theme || getTeamTheme('');
+    var isLong = !!opts.isLongSleeve;
+    var rawName = String(opts.name || '').trim().toUpperCase().slice(0, 14);
+    var rawNum = String(opts.number || '').replace(/\D/g, '').slice(0, 2);
+    var dispName = rawName || 'TU NOMBRE';
+    var dispNum = rawNum || '10';
+    var strokeCol = jerseyDorsalStroke(theme.ink);
+    var accent = theme.accent || '#d9ff3f';
+
+    var bodyPath = isLong
+      ? 'M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 274 72 292 136 308 224 L 275 235 C 264 186 252 152 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 C 68 152 56 186 45 235 L 12 224 C 28 136 46 72 68 41 C 84 31 103 25 122 22 Z'
+      : 'M 122 22 Q 160 38 198 22 C 217 25 236 31 252 41 C 269 58 286 86 299 122 L 255 147 Q 245 141 238 132 C 232 182 232 242 236 306 Q 160 318 84 306 C 88 242 88 182 82 132 Q 75 141 65 147 L 21 122 C 34 86 51 58 68 41 C 84 31 103 25 122 22 Z';
+
+    var cuffL = isLong
+      ? 'M 12 224 L 45 235 L 47 227 L 14 216 Z'
+      : 'M 21 122 L 65 147 L 69 140 L 24 115 Z';
+    var cuffR = isLong
+      ? 'M 308 224 L 275 235 L 273 227 L 306 216 Z'
+      : 'M 299 122 L 255 147 L 251 140 L 296 115 Z';
+
+    var armStrokeOpacity = hexLuminance(theme.bg) > 0.55 ? '0.14' : '0.24';
+    var armStrokeColor = hexLuminance(theme.bg) > 0.55 ? 'rgba(0,0,0,' + armStrokeOpacity + ')' : 'rgba(255,255,255,' + armStrokeOpacity + ')';
+
+    return '<svg class="product-jersey-svg" viewBox="0 0 320 340" role="presentation">' +
+      '<defs>' +
+        '<linearGradient id="' + id + '-grad" x1="0.15" y1="0" x2="0.85" y2="1">' +
+          '<stop offset="0%" stop-color="' + esc(theme.bg) + '"/>' +
+          '<stop offset="100%" stop-color="' + esc(theme.bg2 || theme.bg) + '"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + '-sheen" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0%" stop-color="#000000" stop-opacity="0.13"/>' +
+          '<stop offset="22%" stop-color="#ffffff" stop-opacity="0.05"/>' +
+          '<stop offset="50%" stop-color="#ffffff" stop-opacity="0.14"/>' +
+          '<stop offset="78%" stop-color="#ffffff" stop-opacity="0.04"/>' +
+          '<stop offset="100%" stop-color="#000000" stop-opacity="0.15"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + '-vert" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%" stop-color="#ffffff" stop-opacity="0.08"/>' +
+          '<stop offset="65%" stop-color="#000000" stop-opacity="0"/>' +
+          '<stop offset="100%" stop-color="#000000" stop-opacity="0.14"/>' +
+        '</linearGradient>' +
+        '<filter id="' + id + '-shadow" x="-15%" y="-15%" width="130%" height="130%">' +
+          '<feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000000" flood-opacity="0.24"/>' +
+        '</filter>' +
+      '</defs>' +
+      '<path d="M 122 22 Q 160 11 198 22 Q 160 36 122 22 Z" fill="#171b22"/>' +
+      '<path d="' + bodyPath + '" fill="url(#' + id + '-grad)"/>' +
+      '<path d="' + bodyPath + '" fill="url(#' + id + '-sheen)"/>' +
+      '<path d="' + bodyPath + '" fill="url(#' + id + '-vert)"/>' +
+      '<path d="M 82 132 C 95 182 96 242 92 307 L 84 306 C 88 242 88 182 82 132 Z" fill="rgba(0,0,0,0.08)"/>' +
+      '<path d="M 238 132 C 225 182 224 242 228 307 L 236 306 C 232 242 232 182 238 132 Z" fill="rgba(0,0,0,0.08)"/>' +
+      '<path d="M 120 27 Q 98 78 82 132" fill="none" stroke="' + armStrokeColor + '" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M 200 27 Q 222 78 238 132" fill="none" stroke="' + armStrokeColor + '" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M 85 301 Q 160 313 235 301" fill="none" stroke="' + armStrokeColor + '" stroke-width="1" stroke-dasharray="3 2"/>' +
+      '<path d="M 120 22 Q 160 37 200 22 L 198 30 Q 160 47 122 30 Z" fill="' + esc(accent) + '"/>' +
+      '<path d="' + cuffL + '" fill="' + esc(accent) + '"/>' +
+      '<path d="' + cuffR + '" fill="' + esc(accent) + '"/>' +
+      '<path d="' + bodyPath + '" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.15"/>' +
+      '<path d="M 160 43 L 166 46 V 51 C 166 55 163.5 57.5 160 59 C 156.5 57.5 154 55 154 51 V 46 Z" fill="' + esc(theme.ink) + '" opacity="0.28"/>' +
+      '<g id="product-preview-sleeve-patches">' + renderJerseySleevePatchesSvg(opts.patches, isLong) + '</g>' +
+      '<g filter="url(#' + id + '-shadow)">' +
+        '<text class="jersey-svg-name' + (rawName ? '' : ' is-placeholder') + '" id="product-preview-name" x="160" y="106" text-anchor="middle" font-size="' + jerseyNameFontSize(dispName) + '" fill="' + esc(theme.ink) + '" stroke="' + strokeCol + '">' + esc(dispName) + '</text>' +
+        '<text class="jersey-svg-number' + (rawNum ? '' : ' is-placeholder') + '" id="product-preview-number" x="160" y="226" text-anchor="middle" font-size="' + jerseyNumberFontSize(dispNum) + '" fill="' + esc(theme.ink) + '" stroke="' + strokeCol + '">' + esc(dispNum) + '</text>' +
+      '</g>' +
+      '<path d="M 160 237 L 164 241 L 160 245 L 156 241 Z" fill="' + esc(accent) + '" opacity="0.85"/>' +
+      '<text x="160" y="294" text-anchor="middle" font-size="7.5" font-weight="800" letter-spacing="2.8" fill="' + esc(theme.ink) + '" opacity="0.38">KANG TEAM · PRO</text>' +
+    '</svg>';
+  }
+
   function recommendSize(item, isKids, heightCm, weightKg) {
     if (isKids) {
       var kh = Number(heightCm) || 130;
@@ -1331,16 +1443,61 @@
 
   function startPreviewLoop() {
     if (state.previewTimer) return;
-    var names = ['TU NOMBRE', 'MBAPPÉ', 'VINICIUS', 'BELLINGHAM', 'LAMINE'];
-    var numbers = ['10', '9', '7', '5', '19'];
-    var index = 0;
-    state.previewTimer = setInterval(function () {
-      if (state.route !== 'home') return;
-      index = (index + 1) % names.length;
+    var slides = [
+      { name: 'TU NOMBRE', number: '10', team: 'Real Madrid', patch: 'Champions' },
+      { name: 'MBAPPÉ', number: '9', team: 'Real Madrid', patch: 'Champions' },
+      { name: 'LAMINE', number: '19', team: 'FC Barcelona', patch: 'Liga' },
+      { name: 'VINICIUS', number: '7', team: 'Brasil', patch: 'Mundial' },
+      { name: 'N. WILLIAMS', number: '11', team: 'España', patch: 'Mundial' }
+    ];
+    function applySlide(slide) {
+      var theme = getTeamTheme(slide.team);
+      var strokeCol = jerseyDorsalStroke(theme.ink);
+      var s1 = $('#home-kit-stop1');
+      var s2 = $('#home-kit-stop2');
+      var collar = $('#home-kit-collar');
+      var cuffL = $('#home-kit-cuff-l');
+      var cuffR = $('#home-kit-cuff-r');
+      var nape = $('#home-kit-nape');
+      var numDot = $('#home-kit-num-dot');
+      var brand = $('#home-kit-brand');
+      var patchEl = $('#home-preview-patch');
       var nameEl = $('#preview-name');
       var numberEl = $('#preview-number');
-      if (nameEl) nameEl.textContent = names[index];
-      if (numberEl) numberEl.textContent = numbers[index];
+
+      if (s1) s1.setAttribute('stop-color', theme.bg);
+      if (s2) s2.setAttribute('stop-color', theme.bg2 || theme.bg);
+      if (collar) collar.setAttribute('fill', theme.accent);
+      if (cuffL) cuffL.setAttribute('fill', theme.accent);
+      if (cuffR) cuffR.setAttribute('fill', theme.accent);
+      if (nape) nape.setAttribute('fill', theme.ink);
+      if (numDot) numDot.setAttribute('fill', theme.accent);
+      if (brand) brand.setAttribute('fill', theme.ink);
+      if (patchEl) {
+        var pc = jerseyPatchColor(slide.patch);
+        patchEl.innerHTML =
+          '<path d="M 0 -13 L 10 -8 V 2 C 10 8 5.5 12 0 14 C -5.5 12 -10 8 -10 2 V -8 Z" fill="#11161f" stroke="' + pc + '" stroke-width="1.6"/>' +
+          '<text x="0" y="3.5" text-anchor="middle" font-size="6.4" font-weight="800" letter-spacing="0.4" fill="' + pc + '">' + esc(slide.patch.slice(0, 3).toUpperCase()) + '</text>';
+      }
+      if (nameEl) {
+        nameEl.textContent = slide.name;
+        nameEl.setAttribute('font-size', String(jerseyNameFontSize(slide.name)));
+        nameEl.setAttribute('fill', theme.ink);
+        nameEl.setAttribute('stroke', strokeCol);
+      }
+      if (numberEl) {
+        numberEl.textContent = slide.number;
+        numberEl.setAttribute('font-size', String(jerseyNumberFontSize(slide.number)));
+        numberEl.setAttribute('fill', theme.ink);
+        numberEl.setAttribute('stroke', strokeCol);
+      }
+    }
+    var index = 0;
+    applySlide(slides[0]);
+    state.previewTimer = setInterval(function () {
+      if (state.route !== 'home') return;
+      index = (index + 1) % slides.length;
+      applySlide(slides[index]);
     }, 3200);
   }
 
@@ -2869,8 +3026,18 @@
     }).join('');
 
     var teamTheme = getTeamTheme(item.team);
-    var jerseyStyle = '--jersey-bg:' + teamTheme.bg + ';--jersey-bg2:' + teamTheme.bg2 + ';--jersey-ink:' + teamTheme.ink + ';--jersey-accent:' + teamTheme.accent;
     var patchBadgesHtml = renderPatchBadgesHtml(state.patches);
+    var isLongJersey = (window.KangPricing && KangPricing.calculate(item, {}).isLongSleeve) ||
+      /\b(long[-\s]?sleeves?d?|manga\s+larga)\b/i.test(item.title || '') ||
+      (Array.isArray(item.flags) && item.flags.indexOf('long') !== -1);
+    var jerseySvgHtml = renderJerseyBackSvg({
+      idPrefix: 'modal-kit',
+      theme: teamTheme,
+      name: state.customName,
+      number: state.customNumber,
+      patches: state.patches,
+      isLongSleeve: isLongJersey
+    });
 
     var customPanel = item.custom ?
       '<div class="custom-panel">' +
@@ -2888,11 +3055,11 @@
             '<div class="patch-row" id="patch-row">' + patches + '</div>' +
           '</div>' +
           '<div class="product-jersey-preview" aria-hidden="true">' +
-            '<div class="product-jersey-shirt" style="' + jerseyStyle + '">' +
-              '<span class="product-jersey-name' + (state.customName ? '' : ' is-placeholder') + '" id="product-preview-name">' + esc((state.customName || 'TU NOMBRE').toUpperCase()) + '</span>' +
-              '<span class="product-jersey-number' + (state.customNumber ? '' : ' is-placeholder') + '" id="product-preview-number">' + esc(state.customNumber || '10') + '</span>' +
+            '<div class="product-jersey-stage" id="product-jersey-stage">' + jerseySvgHtml + '</div>' +
+            '<div class="product-jersey-meta">' +
+              (isLongJersey ? '<span class="product-jersey-sleeve-tag">Manga larga</span>' : '') +
+              '<div class="jersey-patch-badges" id="product-preview-patches">' + (patchBadgesHtml || '<span class="product-jersey-patches">Vista previa ' + esc(item.team) + '</span>') + '</div>' +
             '</div>' +
-            '<div class="jersey-patch-badges" id="product-preview-patches">' + (patchBadgesHtml || '<span class="product-jersey-patches">Vista previa ' + esc(item.team) + '</span>') + '</div>' +
           '</div>' +
         '</div>' +
         '<p class="custom-note"><svg><use href="#i-shield"/></svg> Nombre y dorsal: +2,00 € por prenda. Cada parche añade 1,00 €. El nombre se imprime en mayúsculas y el dorsal debe ser del 0 al 99.</p>' +
@@ -2943,16 +3110,28 @@
   function updateCustomPreview() {
     var nameEl = $('#product-preview-name');
     var numEl = $('#product-preview-number');
+    var sleevePatchesEl = $('#product-preview-sleeve-patches');
     var patchesEl = $('#product-preview-patches');
     var name = String(state.customName || '').trim().toUpperCase().slice(0, 14);
     var number = String(state.customNumber || '').replace(/\D/g, '').slice(0, 2);
+    var dispName = name || 'TU NOMBRE';
+    var dispNum = number || '10';
     if (nameEl) {
-      nameEl.textContent = name || 'TU NOMBRE';
+      nameEl.textContent = dispName;
+      nameEl.setAttribute('font-size', String(jerseyNameFontSize(dispName)));
       nameEl.classList.toggle('is-placeholder', !name);
     }
     if (numEl) {
-      numEl.textContent = number || '10';
+      numEl.textContent = dispNum;
+      numEl.setAttribute('font-size', String(jerseyNumberFontSize(dispNum)));
       numEl.classList.toggle('is-placeholder', !number);
+    }
+    if (sleevePatchesEl) {
+      var item = state.product;
+      var isLong = item ? ((window.KangPricing && KangPricing.calculate(item, {}).isLongSleeve) ||
+        /\b(long[-\s]?sleeves?d?|manga\s+larga)\b/i.test(item.title || '') ||
+        (Array.isArray(item.flags) && item.flags.indexOf('long') !== -1)) : false;
+      sleevePatchesEl.innerHTML = renderJerseySleevePatchesSvg(state.patches, isLong);
     }
     if (patchesEl) {
       var badges = renderPatchBadgesHtml(state.patches);
