@@ -206,19 +206,41 @@
     return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
   }
 
+  function hexLuminance(hex) {
+    var clean = String(hex || '').replace('#', '');
+    if (clean.length === 3) clean = clean.split('').map(function (c) { return c + c; }).join('');
+    if (!/^[0-9a-f]{6}$/i.test(clean)) return 0;
+    var r = parseInt(clean.slice(0, 2), 16) / 255;
+    var g = parseInt(clean.slice(2, 4), 16) / 255;
+    var b = parseInt(clean.slice(4, 6), 16) / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
   function applyTeamThemeVars(el, teamName) {
     if (!el) return;
+    var props = ['--team-c1', '--team-c2', '--team-accent-safe', '--team-glow', '--team-glow-2', '--team-glow-soft', '--team-border'];
     if (!teamName) {
       el.classList.remove('has-team-theme');
-      el.style.removeProperty('--team-glow');
-      el.style.removeProperty('--team-border');
+      props.forEach(function (p) { el.style.removeProperty(p); });
       return;
     }
     var theme = getTeamTheme(teamName);
-    var glowSource = (theme.accent === '#ffffff' || theme.accent === '#f8fafc' || theme.accent === '#f3f4f6' || theme.accent === '#e5e7eb') ? theme.bg : theme.accent;
+    var isLightBg = hexLuminance(theme.bg) > 0.65;
+    var accentCand = hexLuminance(theme.accent) > 0.14 ? theme.accent : (hexLuminance(theme.bg) > 0.25 ? theme.bg : '#d9ff3f');
+    var safeAccent = (accentCand === '#ffffff' || accentCand === '#f8fafc' || accentCand === '#f3f4f6' || accentCand === '#e5e7eb')
+      ? '#f4f2ec'
+      : accentCand;
+    var glowSource = isLightBg && hexLuminance(theme.accent) > 0.14 ? theme.accent : (hexLuminance(theme.bg) > 0.14 ? theme.bg : safeAccent);
+    var glow2Source = hexLuminance(theme.bg2) > 0.14 ? theme.bg2 : safeAccent;
+
     el.classList.add('has-team-theme');
-    el.style.setProperty('--team-glow', hexToRgba(glowSource, 0.2));
-    el.style.setProperty('--team-border', hexToRgba(glowSource, 0.42));
+    el.style.setProperty('--team-c1', theme.bg || safeAccent);
+    el.style.setProperty('--team-c2', theme.bg2 || safeAccent);
+    el.style.setProperty('--team-accent-safe', safeAccent);
+    el.style.setProperty('--team-glow', hexToRgba(glowSource, 0.22));
+    el.style.setProperty('--team-glow-2', hexToRgba(glow2Source, 0.16));
+    el.style.setProperty('--team-glow-soft', hexToRgba(safeAccent, 0.14));
+    el.style.setProperty('--team-border', hexToRgba(safeAccent, 0.45));
   }
 
   function renderPatchBadgesHtml(patchesText) {
@@ -968,11 +990,128 @@
     } catch (err) {}
   }
 
+  function pickTeamFeaturedItem(teamItems) {
+    if (!teamItems || !teamItems.length) return null;
+    var scored = teamItems.map(function (item) {
+      var score = 0;
+      if (item.type === 'jersey') score += 50;
+      if (item.seasonGroup === '26/27') score += 30;
+      else if (item.seasonGroup === '25/26') score += 20;
+      if (/\bhome\b/i.test(item.title || '')) score += 16;
+      if (!Array.isArray(item.flags) || item.flags.indexOf('kids') === -1) score += 8;
+      if (Array.isArray(item.flags) && item.flags.indexOf('player') !== -1) score += 4;
+      score += (Number(item.seasonSort) || 0) / 10000;
+      return { item: item, score: score };
+    }).sort(function (a, b) { return b.score - a.score; });
+    return scored[0].item;
+  }
+
   function updateCatalogIntro() {
+    var teamName = state.filters.team;
     var isSeasonal = state.filters.collection === 'primavera-invierno';
     var eyebrow = $('#catalog-eyebrow');
     var title = $('#catalog-title');
     var lead = $('#catalog-lead');
+    var navEl = $('#catalog-team-nav');
+    var leagueEl = $('#catalog-team-league');
+    var crestEl = $('#catalog-team-crest');
+    var watermarkEl = $('#catalog-team-watermark');
+    var shortcutsEl = $('#catalog-team-shortcuts');
+    var featureEl = $('#catalog-team-feature');
+    var stripeEl = $('#catalog-team-stripe');
+
+    if (teamName) {
+      var teamInfo = state.teams.get(teamName);
+      var teamItems = state.items.filter(function (item) { return item.team === teamName; });
+      var leagueName = (teamInfo && teamInfo.league) || (teamItems[0] && teamItems[0].league) || 'Club oficial';
+      var logo = teamLogoUrl(teamName);
+      var seasonsList = teamInfo ? Array.from(teamInfo.seasons.keys()).sort(function (a, b) {
+        return SEASON_ORDER.indexOf(a) - SEASON_ORDER.indexOf(b);
+      }).slice(0, 4).map(seasonLabel) : [];
+
+      if (navEl) navEl.hidden = false;
+      if (leagueEl) leagueEl.textContent = leagueName;
+      if (eyebrow) eyebrow.textContent = leagueName === 'Selecciones' ? 'Selección nacional' : 'Equipaciones del club';
+      if (title) title.innerHTML = esc(teamName);
+      if (lead) {
+        lead.textContent = teamItems.length
+          ? fmt(teamItems.length) + ' prendas disponibles' + (seasonsList.length ? ' · Temporadas: ' + seasonsList.join(' · ') : '') + '.'
+          : 'Cargando colección de ' + teamName + '…';
+      }
+
+      if (crestEl) {
+        crestEl.hidden = false;
+        crestEl.innerHTML = logo
+          ? '<img src="' + esc(logo) + '" alt="Escudo de ' + esc(teamName) + '" onerror="this.remove();this.parentNode.innerHTML=this.parentNode.getAttribute(\'data-fallback\')" data-fallback="' + esc(teamMono(teamName)) + '">'
+          : teamMono(teamName);
+      }
+
+      if (watermarkEl) {
+        if (logo) {
+          watermarkEl.hidden = false;
+          watermarkEl.innerHTML = '<img src="' + esc(logo) + '" alt="" onerror="this.parentNode.hidden=true">';
+        } else {
+          watermarkEl.hidden = true;
+          watermarkEl.innerHTML = '';
+        }
+      }
+
+      if (stripeEl) stripeEl.hidden = false;
+
+      if (shortcutsEl) {
+        if (teamItems.length) {
+          var c26 = teamItems.filter(function (i) { return i.seasonGroup === '26/27'; }).length;
+          var cPlayer = teamItems.filter(function (i) { return matchesVersion(i, 'player'); }).length;
+          var cFan = teamItems.filter(function (i) { return matchesVersion(i, 'fan'); }).length;
+          var cRetro = teamItems.filter(function (i) { return Array.isArray(i.flags) && i.flags.indexOf('retro') !== -1; }).length;
+          var cLong = teamItems.filter(function (i) { return Array.isArray(i.flags) && i.flags.indexOf('long') !== -1; }).length;
+          var btns = [];
+          if (c26) btns.push({ k: 'season', v: '26/27', label: 'Temporada 26/27', count: c26, active: state.filters.season === '26/27' });
+          if (cFan) btns.push({ k: 'version', v: 'fan', label: 'Versión Fan', count: cFan, active: state.filters.version === 'fan' });
+          if (cPlayer) btns.push({ k: 'version', v: 'player', label: 'Versión Jugador', count: cPlayer, active: state.filters.version === 'player' });
+          if (cRetro) btns.push({ k: 'flag', v: 'retro', label: 'Retro', count: cRetro, active: state.filters.flag === 'retro' });
+          if (cLong) btns.push({ k: 'flag', v: 'long', label: 'Manga larga', count: cLong, active: state.filters.flag === 'long' });
+          shortcutsEl.hidden = !btns.length;
+          shortcutsEl.innerHTML = btns.map(function (b) {
+            return '<button type="button" class="team-shortcut-btn' + (b.active ? ' is-active' : '') + '" data-team-shortcut="' + esc(b.k + ':' + b.v) + '">' +
+              esc(b.label) + ' <span>' + fmt(b.count) + '</span></button>';
+          }).join('');
+        } else {
+          shortcutsEl.hidden = true;
+          shortcutsEl.innerHTML = '';
+        }
+      }
+
+      if (featureEl) {
+        var featured = pickTeamFeaturedItem(teamItems);
+        if (featured) {
+          var fPrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(featured)) : '';
+          featureEl.hidden = false;
+          featureEl.setAttribute('data-feature-product', featured.id);
+          featureEl.setAttribute('role', 'button');
+          featureEl.setAttribute('tabindex', '0');
+          featureEl.innerHTML =
+            '<div class="catalog-team-feature-thumb"><img src="' + esc(coverUrl(featured, 'small')) + '" alt="' + esc(cleanTitle(featured)) + '"></div>' +
+            '<div class="catalog-team-feature-copy">' +
+              '<span class="catalog-team-feature-kicker">Destacada · ' + esc(featured.season || featured.seasonGroup || 'Club') + '</span>' +
+              '<strong>' + esc(cleanTitle(featured)) + '</strong>' +
+              '<div class="catalog-team-feature-foot">' + (fPrice ? esc(fPrice) : '') + '<span>Ver y personalizar →</span></div>' +
+            '</div>';
+        } else {
+          featureEl.hidden = true;
+          featureEl.innerHTML = '';
+        }
+      }
+      return;
+    }
+
+    if (navEl) navEl.hidden = true;
+    if (crestEl) { crestEl.hidden = true; crestEl.innerHTML = ''; }
+    if (watermarkEl) { watermarkEl.hidden = true; watermarkEl.innerHTML = ''; }
+    if (shortcutsEl) { shortcutsEl.hidden = true; shortcutsEl.innerHTML = ''; }
+    if (featureEl) { featureEl.hidden = true; featureEl.innerHTML = ''; featureEl.removeAttribute('data-feature-product'); }
+    if (stripeEl) stripeEl.hidden = true;
+
     if (eyebrow) eyebrow.textContent = isSeasonal ? 'Colección GXG' : 'Catálogo completo';
     if (title) title.innerHTML = isSeasonal ? 'Ropa de<br><em>primavera / invierno.</em>' : 'Toda la colección,<br><em>equipo a equipo.</em>';
     if (lead) lead.textContent = isSeasonal
@@ -1576,14 +1715,14 @@
     if (!container) return;
 
     var chips = [];
-    function chip(key, label) {
-      return '<span class="filter-chip">' + esc(label) +
+    function chip(key, label, extraAttr) {
+      return '<span class="filter-chip"' + (extraAttr ? ' ' + extraAttr : '') + '>' + esc(label) +
         '<button type="button" data-clear-filter="' + key + '" aria-label="Quitar filtro ' + esc(label) + '">' +
         '<svg><use href="#i-close"/></svg></button></span>';
     }
 
     if (state.filters.q) chips.push(chip('q', 'Búsqueda: ' + state.filters.q));
-    if (state.filters.team) chips.push(chip('team', 'Equipo: ' + state.filters.team));
+    if (state.filters.team) chips.push(chip('team', 'Equipo: ' + state.filters.team, 'data-team-chip'));
     if (state.filters.league) chips.push(chip('league', 'Liga: ' + state.filters.league));
     if (state.filters.season) chips.push(chip('season', 'Temporada: ' + seasonLabel(state.filters.season)));
     if (state.filters.type) chips.push(chip('type', 'Tipo: ' + typeLabel(state.filters.type)));
@@ -1639,6 +1778,7 @@
     syncFilterInputs();
     renderCatalog();
     updateCatalogHash();
+    updateCatalogIntro();
   }
 
   // ── Opciones de filtro ───────────────────────────────────
@@ -2234,6 +2374,44 @@
         }
         var type = event.target.closest('[data-type]');
         if (type) applyFilters({ type: type.getAttribute('data-type') });
+      });
+    }
+
+    var teamBackBtn = $('#catalog-team-back');
+    if (teamBackBtn) {
+      teamBackBtn.addEventListener('click', function () {
+        state.view = 'teams';
+        applyFilters({ team: '' });
+      });
+    }
+
+    var teamShortcuts = $('#catalog-team-shortcuts');
+    if (teamShortcuts) {
+      teamShortcuts.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-team-shortcut]');
+        if (!btn) return;
+        var pair = btn.getAttribute('data-team-shortcut').split(':');
+        var k = pair[0];
+        var v = pair[1];
+        if (!k || !v) return;
+        var patch = {};
+        patch[k] = state.filters[k] === v ? '' : v;
+        applyFilters(patch);
+      });
+    }
+
+    var teamFeature = $('#catalog-team-feature');
+    if (teamFeature) {
+      var openFeatured = function () {
+        var id = teamFeature.getAttribute('data-feature-product');
+        if (id) openProduct(id);
+      };
+      teamFeature.addEventListener('click', openFeatured);
+      teamFeature.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openFeatured();
+        }
       });
     }
 

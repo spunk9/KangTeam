@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css?v=20261115-03">
+  <link rel="stylesheet" href="/css/styles.css?v=20261115-05">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -275,12 +275,25 @@
 
     <!-- ══════════════════════ CATÁLOGO ══════════════════════ -->
     <section class="view" id="view-catalog" aria-label="Catálogo" hidden>
-      <div class="page-head">
-        <div class="container">
-          <p class="eyebrow" id="catalog-eyebrow">Catálogo completo</p>
-          <h1 id="catalog-title">Toda la colección,<br><em>equipo a equipo.</em></h1>
-          <p class="page-lead" id="catalog-lead">Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.</p>
+      <div class="page-head" id="catalog-page-head">
+        <div class="catalog-team-watermark" id="catalog-team-watermark" aria-hidden="true" hidden></div>
+        <div class="container catalog-head-layout">
+          <div class="catalog-head-main">
+            <div class="catalog-team-nav" id="catalog-team-nav" hidden>
+              <button type="button" class="catalog-back-btn" id="catalog-team-back"><svg><use href="#i-arrow-left"/></svg> Todos los equipos</button>
+              <span class="catalog-team-league" id="catalog-team-league"></span>
+            </div>
+            <p class="eyebrow" id="catalog-eyebrow">Catálogo completo</p>
+            <div class="catalog-head-title-row">
+              <div class="catalog-team-crest" id="catalog-team-crest" hidden aria-hidden="true"></div>
+              <h1 id="catalog-title">Toda la colección,<br><em>equipo a equipo.</em></h1>
+            </div>
+            <p class="page-lead" id="catalog-lead">Camisetas, chándals, chaquetas y más. Filtra por equipo y temporada y encuentra tu próxima prenda.</p>
+            <div class="catalog-team-shortcuts" id="catalog-team-shortcuts" hidden></div>
+          </div>
+          <div class="catalog-team-feature" id="catalog-team-feature" hidden></div>
         </div>
+        <div class="catalog-team-stripe" id="catalog-team-stripe" aria-hidden="true" hidden></div>
       </div>
 
       <div class="catalog-toolbar" id="catalog-toolbar">
@@ -671,6 +684,6 @@
   </noscript>
 
   <script src="/js/pricing.js?v=20261115-03" defer></script>
-  <script src="/js/app.js?v=20261115-04" defer></script>
+  <script src="/js/app.js?v=20261115-05" defer></script>
 </body>
 </html>
