@@ -7,15 +7,15 @@ module.exports = function (req, res) {
   var folder = query.folder;
   var hash = query.hash;
   var filename = query.filename;
-  var source = query.source === 'gxg' ? 'gxg' : 'minkang';
+  var source = (query.source === 'gxg' || query.source === 'gxgfootball') ? query.source : 'minkang';
 
   if (typeof folder !== 'string' || typeof hash !== 'string' || typeof filename !== 'string') {
     res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('Ruta de imagen no válida');
   }
 
-  req.url = source === 'gxg'
-    ? '/img/gxg/' + folder + '/' + hash + '/' + filename
+  req.url = source !== 'minkang'
+    ? '/img/' + source + '/' + folder + '/' + hash + '/' + filename
     : '/img/' + folder + '/' + hash + '/' + filename;
   return require('../server').handleRequest(req, res);
 };

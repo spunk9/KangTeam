@@ -5,7 +5,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   var groups = [
-    { title: 'Camisetas', items: [['Camiseta Oficial (Versión Fan · Manga corta)',2500],['Camiseta Oficial Manga Larga (Versión Fan)',2800],['Camiseta Jugador / Retro (Manga corta)',2900],['Camiseta Jugador / Retro (Manga larga)',3200],['Camiseta Baloncesto (NBA)',3900]] },
+    { title: 'Camisetas', items: [['Camiseta Oficial (Versión Fan · Manga corta)',2500],['Camiseta Oficial Manga Larga (Versión Fan)',2800],['Camiseta Jugador / Retro (Manga corta)',2900],['Camiseta Jugador / Retro (Manga larga)',3200],['Camiseta Baloncesto (NBA)',3200]] },
     { title: 'Infantil', items: [['Conjunto Niño (Camiseta manga corta + Pantalón)',2500],['Camiseta Niño Manga Larga',2800],['Traje Entrenamiento Niño (Corto)',3000],['Chándal Completo Niño (Chaqueta + Pantalón largo)',4200]] },
     { title: 'Entrenamiento & Verano', items: [['Conjunto Adulto (Camiseta + Pantalón corto)',2700],['Traje Entrenamiento (Chaleco / Manga corta + Short)',3500],['Traje Entrenamiento (Polo + Pantalón largo)',4000]] },
     { title: 'Chándals & Cortavientos', items: [['Chaqueta Cortavientos',4500],['Chándal Entrenamiento (Media cremallera + Pantalón)',4900],['Chándal Entrenamiento (Cremallera completa / Capucha)',5500],['Conjunto Cortavientos Completo',5500]] },
@@ -74,7 +74,7 @@
 
     // 2. Baloncesto / NBA (solo camisetas, no pantalones cortos)
     if ((/\bnba\b|basketball/.test(t) || /nba/i.test(product.league || '')) && type !== 'shorts' && !/\bshorts?\b/.test(t)) {
-      return 3900;
+      return 3200;
     }
 
     // 3. Abrigos e invierno (acolchados / plumas / puffer / down)

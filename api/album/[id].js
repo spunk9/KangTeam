@@ -10,6 +10,7 @@ module.exports = function (req, res) {
     return res.end(JSON.stringify({ error: 'ID no válido' }));
   }
 
-  req.url = '/api/album/' + id + (query.source === 'gxg' ? '?source=gxg' : '');
+  var src = (query.source === 'gxg' || query.source === 'gxgfootball') ? query.source : '';
+  req.url = '/api/album/' + id + (src ? '?source=' + src : '');
   return require('../../server').handleRequest(req, res);
 };

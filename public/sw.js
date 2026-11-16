@@ -1,6 +1,6 @@
 'use strict';
 
-var CACHE_NAME = 'kangteam-shell-v20261116-06';
+var CACHE_NAME = 'kangteam-shell-v20261116-08';
 var SHELL_ASSETS = [
   '/',
   '/index.html',

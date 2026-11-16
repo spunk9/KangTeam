@@ -49,6 +49,20 @@ async function mapLimit(list, limit, worker) {
   return results;
 }
 
+var NON_PRODUCT_TITLE_RE = /^(new\s*catalog|aviso\s+importante|important\s+notice|payment|about\s+price|about\s+us|shipment|shipping|size\s+chart|size\s+table|notice|whatsapp|contact|how\s+to\s+order|catalog)\b/i;
+var DIVIDER_EXACT_RE = /^(women|video|size\s+table|adult\/kid\s+kits?|player\s+version|retro\s+shirt|training\s+wear|adult\/kid\s+socks)$/i;
+
+function isNonProductRaw(raw, excludedIds) {
+  if (!raw || !raw.id || !raw.cover) return true;
+  if (excludedIds && excludedIds[String(raw.id)]) return true;
+  var title = String(raw.title || '').trim();
+  if (!title) return true;
+  if (/加密相册|加密|\u26bd/.test(title)) return true;
+  if (NON_PRODUCT_TITLE_RE.test(title) || DIVIDER_EXACT_RE.test(title)) return true;
+  if (/\b(?:world\s+cup|league|club)\s+patch(?:es)?$/i.test(title)) return true;
+  return false;
+}
+
 var GXG_CATEGORIES = [
   { id: '994258', parent: '5332912', audience: 'adult', department: 'training', subcategory: 'Chaleco + pantalón corto' },
   { id: '994257', parent: '5332912', audience: 'adult', department: 'training', subcategory: 'Manga corta + pantalón corto' },
@@ -103,6 +117,64 @@ async function fetchCategory(base, category) {
   });
 }
 
+async function fetchGxgFootball(baseProgressPages, pageLimit) {
+  var base = yupoo.SOURCES.gxgfootball.base;
+  var requestOptions = { timeout: 35000, headers: { 'Referer': yupoo.SOURCES.gxgfootball.referer } };
+  var excludedIds = {};
+
+  try {
+    var aboutHtml = await yupoo.fetchWithRetries(base + '/categories/5152610', requestOptions, 2);
+    yupoo.parseListing(aboutHtml).forEach(function (item) {
+      if (item && item.id) excludedIds[String(item.id)] = true;
+    });
+  } catch (err) {
+    log('Aviso GXGFootball About us:', err.message);
+  }
+
+  var firstUrl = base + '/albums?tab=gallery&page=1';
+  var firstHtml = await yupoo.fetchWithRetries(firstUrl, requestOptions, 3);
+  var totalPages = yupoo.parsePageCount(firstHtml);
+  if (pageLimit) totalPages = Math.min(totalPages, pageLimit);
+  state.totalPages = baseProgressPages + totalPages + GXG_CATEGORIES.length;
+  log('GXGFootball páginas detectadas:', totalPages);
+
+  var rows = yupoo.parseListing(firstHtml).filter(function (item) {
+    return !isNonProductRaw(item, excludedIds);
+  }).map(function (item) {
+    item.source = 'gxgfootball';
+    return item;
+  });
+
+  state.page = baseProgressPages + 1;
+  state.items += rows.length;
+
+  var pages = [];
+  for (var p = 2; p <= totalPages; p++) pages.push(p);
+
+  await mapLimit(pages, 3, async function (page) {
+    var url = base + '/albums?tab=gallery&page=' + page;
+    try {
+      var html = await yupoo.fetchWithRetries(url, requestOptions, 3);
+      var pageItems = yupoo.parseListing(html).filter(function (item) {
+        return !isNonProductRaw(item, excludedIds);
+      }).map(function (item) {
+        item.source = 'gxgfootball';
+        return item;
+      });
+      rows = rows.concat(pageItems);
+      state.page = baseProgressPages + page;
+      state.items += pageItems.length;
+      if (page % 5 === 0 || page === totalPages) {
+        log('GXGFootball página', page + '/' + totalPages, '·', rows.length, 'prendas');
+      }
+    } catch (err) {
+      log('ERROR en GXGFootball página', page + ':', err.message);
+    }
+  });
+
+  return { rows: rows, pages: totalPages };
+}
+
 async function runSync(options) {
   options = options || {};
   if (state.running) return state;
@@ -116,14 +188,15 @@ async function runSync(options) {
   state.items = 0;
 
   var started = Date.now();
+  var pageLimit = pageArg ? (parseInt(pageArg.split('=')[1], 10) || 0) : (options.pages || 0);
 
   try {
     log('Descargando portada del catálogo…');
     var firstHtml = await yupoo.fetchWithRetries(yupoo.BASE + '/categories/712891?page=1');
     var totalPages = yupoo.parsePageCount(firstHtml);
-    if (pageArg) totalPages = Math.min(totalPages, parseInt(pageArg.split('=')[1], 10) || totalPages);
-    state.totalPages = totalPages;
-    log('Páginas detectadas:', totalPages);
+    if (pageLimit) totalPages = Math.min(totalPages, pageLimit);
+    state.totalPages = totalPages + GXG_CATEGORIES.length;
+    log('Páginas detectadas (Minkang):', totalPages);
 
     var sidebar = yupoo.parseSidebar(firstHtml);
     log('Equipos en el menú de Yupoo:', sidebar.length);
@@ -150,19 +223,29 @@ async function runSync(options) {
         state.page = page;
         state.items = allRaw.length;
         if (page % 5 === 0 || page === totalPages) {
-          log('Página', page + '/' + totalPages, '·', allRaw.length, 'prendas');
+          log('Minkang página', page + '/' + totalPages, '·', allRaw.length, 'prendas');
         }
       } catch (err) {
         log('ERROR en la página', page + ':', err.message);
       }
     });
 
+    var gxgFootballPages = 0;
+    try {
+      var gxgfRes = await fetchGxgFootball(totalPages, pageLimit);
+      gxgFootballPages = gxgfRes.pages;
+      allRaw = allRaw.concat(gxgfRes.rows);
+      log('GXGFootball descargado:', gxgfRes.rows.length, 'prendas válidas');
+    } catch (err) {
+      log('ERROR general en GXGFootball:', err.message);
+    }
+
     var gxgBase = yupoo.SOURCES.gxg.base;
     var gxgRows = await mapLimit(GXG_CATEGORIES, 2, async function (category, index) {
       try {
         var rows = await fetchCategory(gxgBase, category);
         log('GXG', category.subcategory, '·', rows.length, 'prendas');
-        state.page = totalPages + index + 1;
+        state.page = totalPages + gxgFootballPages + index + 1;
         state.items += rows.length;
         return rows;
       } catch (err) {
@@ -175,18 +258,41 @@ async function runSync(options) {
     state.phase = 'parsing';
     var resolver = parser.buildResolver(sidebar);
     var seen = {};
+    var seenFp = {};
+    var dedupCrossCount = 0;
+    var dedupSamples = [];
     var items = [];
 
     allRaw.forEach(function (raw) {
-      var itemKey = String(raw.source || 'minkang') + ':' + String(raw.id || '');
+      var src = String(raw.source || 'minkang');
+      var itemKey = src + ':' + String(raw.id || '');
       if (!raw.id || seen[itemKey]) return;
-      if (/加密相册|加密/.test(raw.title)) return; // álbumes privados sin datos
-      if (!raw.cover) return;
+      if (isNonProductRaw(raw)) return;
       seen[itemKey] = true;
       try {
         var itemRaw = Object.assign({}, raw);
-        if (raw.source === 'gxg') { itemRaw.albumId = String(raw.id); itemRaw.id = 'gxg-' + raw.id; }
-        items.push(parser.parseItem(itemRaw, resolver));
+        if (src === 'gxg') { itemRaw.albumId = String(raw.id); itemRaw.id = 'gxg-' + raw.id; }
+        else if (src === 'gxgfootball') { itemRaw.albumId = String(raw.id); itemRaw.id = 'gxgf-' + raw.id; }
+
+        var parsed = parser.parseItem(itemRaw, resolver);
+        if (!parsed.team || parsed.team === 'Catalog') return;
+
+        var fp = parsed.collection === 'primavera-invierno' ? '' : parser.dedupFingerprint(parsed);
+        if (fp) {
+          if (seenFp[fp]) {
+            if (seenFp[fp].source !== parsed.source) {
+              dedupCrossCount += 1;
+              if (dedupSamples.length < 8) {
+                dedupSamples.push('[' + seenFp[fp].source + '] "' + seenFp[fp].title + '" == [' + parsed.source + '] "' + parsed.title + '"');
+              }
+              return;
+            }
+          } else {
+            seenFp[fp] = parsed;
+          }
+        }
+
+        items.push(parsed);
       } catch (err) {
         log('ERROR al procesar', raw.id, err.message);
       }
@@ -209,14 +315,26 @@ async function runSync(options) {
       throw new Error('La sincronización devolvió 0 prendas; se conserva el catálogo anterior.');
     }
 
+    var bySource = {};
+    items.forEach(function (it) {
+      bySource[it.source] = (bySource[it.source] || 0) + 1;
+    });
+
     var catalog = {
       meta: {
         generatedAt: new Date().toISOString(),
         source: 'https://minkang.x.yupoo.com/categories/712891',
-        sources: ['https://minkang.x.yupoo.com/categories/712891', 'https://gxgtrainingwear.x.yupoo.com/albums'],
+        sources: [
+          'https://minkang.x.yupoo.com/categories/712891',
+          'https://gxgfootball.x.yupoo.com/albums?tab=gallery',
+          'https://gxgtrainingwear.x.yupoo.com/albums'
+        ],
         store: 'KANG Team Official',
         total: items.length,
-        pages: totalPages
+        pages: totalPages,
+        gxgFootballPages: gxgFootballPages,
+        deduplicated: dedupCrossCount,
+        bySource: bySource
       },
       items: items
     };
@@ -241,6 +359,10 @@ async function runSync(options) {
     state.running = false;
 
     log('✔ Catálogo guardado:', items.length, 'prendas ·', Object.keys(byTeam).length, 'equipos ·', Object.keys(bySeason).length, 'temporadas');
+    log('Por proveedor:', JSON.stringify(bySource), '· Duplicados entre proveedores omitidos:', dedupCrossCount);
+    if (dedupSamples.length) {
+      log('Ejemplos deduplicados:', dedupSamples.slice(0, 4).join(' || '));
+    }
     log('Sin equipo reconocido:', otros, '(' + (otros / Math.max(items.length, 1) * 100).toFixed(1) + '%)');
     log('Top equipos:', topTeams.map(function (t) { return t + ' (' + byTeam[t] + ')'; }).join(', '));
     log('Tiempo:', ((Date.now() - started) / 1000).toFixed(1) + 's');

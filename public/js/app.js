@@ -3531,7 +3531,8 @@
     var id = item.albumId || item.id;
     var cacheKey = (item.source || 'minkang') + '-' + id;
     if (state.albumCache.has(cacheKey)) return state.albumCache.get(cacheKey);
-    var res = await fetch('/api/album/' + encodeURIComponent(id) + (item.source === 'gxg' ? '?source=gxg' : ''), { headers: { 'Accept': 'application/json' } });
+    var srcParam = item.source && item.source !== 'minkang' ? '?source=' + encodeURIComponent(item.source) : '';
+    var res = await fetch('/api/album/' + encodeURIComponent(id) + srcParam, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) return [];
     var album = await res.json();
     var ordered = normalizeAlbumImages(album, item);

@@ -380,7 +380,7 @@ function validateOrder(payload) {
       priceBreakdown: price,
       unitPriceCents: price.unitPriceCents,
       lineTotalCents: price.unitPriceCents * qty,
-      image: product.cover ? '/img' + product.cover + '/small.jpg' : ''
+      image: product.cover ? ((product.source && product.source !== 'minkang' ? '/img/' + product.source : '/img') + product.cover + '/small.jpg') : ''
     };
   });
 
@@ -970,19 +970,21 @@ var PLACEHOLDER = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="60
   '</svg>');
 
 function serveImage(req, res, pathname) {
-  // Minkang keeps the legacy path; GXG images use /img/gxg/gxgtrainingwear/...
+  // Minkang keeps the legacy path; GXG & GXGFootball images use /img/<source>/<folder>/...
   var legacy = pathname.match(/^\/img\/(minkang)\/([a-z0-9]+)\/(small|medium|big)\.jpg$/i);
   var gxg = pathname.match(/^\/img\/(gxg)\/(gxgtrainingwear)\/([a-z0-9]+)\/(small|medium|big)\.jpg$/i);
-  var source = gxg ? 'gxg' : 'minkang';
-  var folder = gxg ? gxg[2] : (legacy && legacy[1]);
-  var hash = gxg ? gxg[3] : (legacy && legacy[2]);
-  var filename = gxg ? gxg[4] + '.jpg' : (legacy && legacy[3] + '.jpg');
+  var gxgFootball = pathname.match(/^\/img\/(gxgfootball)\/(gxgfootball)\/([a-z0-9]+)\/(small|medium|big)\.jpg$/i);
+  var multi = gxg || gxgFootball;
+  var source = multi ? multi[1] : 'minkang';
+  var folder = multi ? multi[2] : (legacy && legacy[1]);
+  var hash = multi ? multi[3] : (legacy && legacy[2]);
+  var filename = multi ? multi[4] + '.jpg' : (legacy && legacy[3] + '.jpg');
   if (!folder || !hash || !filename) {
     res.writeHead(404, { 'Content-Type': 'image/svg+xml' });
     return res.end(PLACEHOLDER);
   }
   var remotePath = folder + '/' + hash + '/' + filename;
-  var cachePath = (source === 'gxg' ? 'gxg/' : '') + remotePath;
+  var cachePath = (source !== 'minkang' ? source + '/' : '') + remotePath;
   var diskPath = path.join(IMG_CACHE_DIR, cachePath);
 
   function sendBuffer(buffer) {
@@ -1036,7 +1038,7 @@ function serveImage(req, res, pathname) {
 // ─────────────────────────────────────────────────────────────
 
 async function getAlbum(id, source) {
-  source = source === 'gxg' ? 'gxg' : 'minkang';
+  source = (source === 'gxg' || source === 'gxgfootball') ? source : 'minkang';
   var sourceConfig = yupoo.SOURCES[source];
   var key = source + '-' + id;
   var now = Date.now();

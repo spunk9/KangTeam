@@ -6,6 +6,7 @@ var os = require('os');
 var http = require('http');
 var childProcess = require('child_process');
 var pricing = require('../public/js/pricing');
+var parser = require('../lib/parse');
 
 var ROOT = path.resolve(__dirname, '..');
 var PUBLIC_DIR = path.join(ROOT, 'public');
@@ -389,6 +390,9 @@ function runPricingSuite() {
   );
   assert(retroCustom.unitPriceCents === 3600, 'Retro + Nombre/Dorsal + 2 parches + 3XL = 36,00 € (' + retroCustom.unitPriceCents + ')');
 
+  var nbaJersey = pricing.calculate({ title: 'Lakers 24 NBA Basketball Jersey', league: 'NBA', type: 'jersey' }, { size: 'M' });
+  assert(nbaJersey.unitPriceCents === 3200, 'Camiseta Baloncesto (NBA) = 32,00 € (' + nbaJersey.unitPriceCents + ')');
+
   assert(pricing.getVolumeDiscount(4).discountCents === 0, '4 prendas -> 0 € descuento por volumen');
   assert(pricing.getVolumeDiscount(5).discountCents === 500, '5 prendas -> -5,00 € (-1 €/ud)');
   assert(pricing.getVolumeDiscount(10).discountCents === 2000, '10 prendas -> -20,00 € (-2 €/ud)');
@@ -397,6 +401,18 @@ function runPricingSuite() {
   var next3 = pricing.nextVolumeTier(3);
   var next16 = pricing.nextVolumeTier(16);
   assert(next3 && next3.minQty === 5 && next16 === null, 'Progresión nextVolumeTier correcta (3->5, 16->null)');
+
+  var resolver = parser.buildResolver([]);
+  var mkBetis = parser.parseItem({ id: '1', source: 'minkang', title: 'Real Betis 26/27 Home Long-Sleeve Jersey S-4XL', cover: 'https://photo.yupoo.com/minkang/abc/small.jpg' }, resolver);
+  var gfBetis = parser.parseItem({ id: 'gxgf-2', albumId: '2', source: 'gxgfootball', title: '26/27 Real Betis Home long sleeves S-4XL', cover: 'https://photo.yupoo.com/gxgfootball/def/small.jpg' }, resolver);
+  assert(parser.dedupFingerprint(mkBetis) && parser.dedupFingerprint(mkBetis) === parser.dedupFingerprint(gfBetis), 'Deduplicación unifica orden de temporada/manga entre Minkang y GXGFootball');
+
+  var mkPsgThird = parser.parseItem({ id: '3', source: 'minkang', title: 'PSG 26/27 Third Away Black Jersey S-4XL', cover: 'https://photo.yupoo.com/minkang/a1/small.jpg' }, resolver);
+  var gfPsgThird = parser.parseItem({ id: 'gxgf-4', albumId: '4', source: 'gxgfootball', title: '26/27 PSG Third Away S-4XL', cover: 'https://photo.yupoo.com/gxgfootball/b1/small.jpg' }, resolver);
+  assert(parser.dedupFingerprint(mkPsgThird) === parser.dedupFingerprint(gfPsgThird), 'Deduplicación detecta misma 3ª equipación aunque un proveedor mencione color');
+
+  var gfSpecial = parser.parseItem({ id: 'gxgf-5', albumId: '5', source: 'gxgfootball', title: '26/27 PSG Special Edition player version S-2XL', cover: 'https://photo.yupoo.com/gxgfootball/c1/small.jpg' }, resolver);
+  assert(parser.dedupFingerprint(gfSpecial) === '', 'Ediciones especiales sin color ni franja mantienen variantes distintas');
 }
 
 async function runBrowserVisualSuite() {
@@ -631,6 +647,33 @@ async function runApiAndPrivacySuite() {
     var cat = await httpRequest(TEST_PORT, 'GET', '/api/catalog');
     var items = (cat.json && cat.json.items) || [];
     assert(cat.status === 200 && items.length > 0, 'GET /api/catalog devuelve catálogo con artículos (' + items.length + ')');
+
+    var hasMinkang = items.some(function (it) { return it && it.source === 'minkang'; });
+    var gxgfItems = items.filter(function (it) { return it && it.source === 'gxgfootball'; });
+    var hasGxg = items.some(function (it) { return it && it.source === 'gxg'; });
+    assert(hasMinkang && gxgfItems.length > 0 && hasGxg, 'Catálogo combina los 3 orígenes (minkang + gxgfootball:' + gxgfItems.length + ' + gxg)');
+
+    var fpSources = {};
+    var crossDupCount = 0;
+    items.forEach(function (it) {
+      if (!it || it.collection === 'primavera-invierno') return;
+      var fp = parser.dedupFingerprint(it);
+      if (!fp) return;
+      if (fpSources[fp] && fpSources[fp] !== it.source) crossDupCount += 1;
+      else fpSources[fp] = it.source;
+    });
+    assert(crossDupCount === 0, 'Cero duplicados entre Minkang y GXGFootball en el catálogo (' + crossDupCount + ' colisiones)');
+
+    var sampleGxgf = gxgfItems.find(function (it) { return it && it.cover && /^\d+$/.test(String(it.albumId || '')); });
+    if (sampleGxgf) {
+      var imgRes = await httpRequest(TEST_PORT, 'GET', '/img/gxgfootball' + sampleGxgf.cover + '/small.jpg');
+      assert(imgRes.status === 200 && /image\/jpeg/i.test(String(imgRes.headers['content-type'] || '')) && imgRes.size > 1000, 'Proxy /img/gxgfootball sirve imagen JPEG válida (' + imgRes.size + ' B)');
+
+      var albRes = await httpRequest(TEST_PORT, 'GET', '/api/album/' + sampleGxgf.albumId + '?source=gxgfootball');
+      assert(albRes.status === 200 && albRes.json && Array.isArray(albRes.json.images) && albRes.json.images.length > 0, 'GET /api/album/:id?source=gxgfootball devuelve galería (' + (albRes.json && albRes.json.images ? albRes.json.images.length : 0) + ' fotos)');
+    } else {
+      fail('Artículo de prueba GXGFootball localizado en catálogo');
+    }
 
     var sampleItem = items.find(function (it) {
       return it && it.id && (!it.sizeRange || /S-2XL|S-XL/i.test(it.sizeRange));
