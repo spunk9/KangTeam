@@ -437,8 +437,39 @@ async function runBrowserVisualSuite() {
     var loaded = await cdp.waitUntil("document.querySelectorAll('#home-teams .team-card').length > 0", 10000);
     assert(loaded, 'Desktop 1280px: portada e índices de catálogo cargados en navegador real');
 
-    var desktopCheck = await cdp.evalJs("({ overflow: document.documentElement.scrollWidth - window.innerWidth, totalText: (document.querySelector('#stat-total')||{}).textContent || '' })");
+    var desktopCheck = await cdp.evalJs("({ overflow: document.documentElement.scrollWidth - window.innerWidth, totalText: (document.querySelector('#stat-total')||{}).textContent || '', spotlightTabs: document.querySelectorAll('[data-spotlight-idx]').length, bentoLead: !!document.querySelector('.season-card.is-lead'), lightBand: !!document.querySelector('.section-light .volume-strip') })");
     assert(desktopCheck && desktopCheck.overflow <= 1, 'Desktop 1280px: sin desbordamiento horizontal en portada (' + (desktopCheck ? desktopCheck.overflow : '?') + 'px)');
+    assert(desktopCheck && desktopCheck.spotlightTabs >= 2, 'Desktop 1280px: Hero Matchday Spotlight interactivo renderizado (' + (desktopCheck ? desktopCheck.spotlightTabs : 0) + ' pestañas)');
+    assert(desktopCheck && desktopCheck.bentoLead && desktopCheck.lightBand, 'Desktop 1280px: Bento de temporadas y banda clara Ivory con descuentos cargados');
+
+    // Interactive Spotlight tab switch & Home Jersey Studio live preview
+    await cdp.evalJs("document.querySelectorAll('[data-spotlight-idx]')[1] && document.querySelectorAll('[data-spotlight-idx]')[1].click()");
+    var spotlightSwitched = await cdp.waitUntil("document.querySelectorAll('[data-spotlight-idx]')[1].classList.contains('is-active')", 3000);
+    assert(spotlightSwitched, 'Hero Spotlight cambia de prenda destacada al pulsar pestaña');
+
+    await cdp.evalJs("(function(){ var n=document.querySelector('#home-studio-name'); var d=document.querySelector('#home-studio-number'); if(n){ n.value='KANGQA'; n.dispatchEvent(new Event('input',{bubbles:true})); } if(d){ d.value='99'; d.dispatchEvent(new Event('input',{bubbles:true})); } })()");
+    var studioSynced = await cdp.waitUntil("document.querySelector('#preview-name').textContent === 'KANGQA' && document.querySelector('#preview-number').textContent === '99'", 3000);
+    assert(studioSynced, 'Home Jersey Studio actualiza nombre y dorsal en vivo sobre el SVG');
+
+    // Mobile 375px Home check (verify Spotlight + 0px horizontal overflow on redesigned Home)
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 375,
+      height: 812,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await sleep(160);
+    var mobileHomeOverflow = await cdp.evalJs("({ overflow: document.documentElement.scrollWidth - window.innerWidth, featureH: (document.querySelector('#hero-feature') && document.querySelector('#hero-feature').getBoundingClientRect().height) || 0 })");
+    assert(mobileHomeOverflow && mobileHomeOverflow.overflow <= 1 && mobileHomeOverflow.featureH > 40, 'Móvil 375px: portada + Hero Spotlight visibles y sin desbordamiento horizontal (' + (mobileHomeOverflow ? mobileHomeOverflow.overflow : '?') + 'px)');
+
+    // Switch back to Desktop 1280x800 for catalog flow checks
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await sleep(100);
 
     // Quick filters in catalog (Personalizable + Temporada 26/27)
     await cdp.evalJs("location.hash = '#/catalogo'");
@@ -458,7 +489,7 @@ async function runBrowserVisualSuite() {
     var modalOpened = await cdp.waitUntil("document.querySelector('#product-modal.is-open') !== null && document.querySelector('#product-volume-progress') !== null && document.querySelector('.product-bizum-tip') !== null", 5000);
     assert(modalOpened, 'Ficha de producto muestra progreso de descuento grupo y acceso rápido Bizum');
 
-    // Mobile 375x812 responsive audit
+    // Mobile 375x812 responsive audit for Product, Cart & Contact
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 375,
       height: 812,
@@ -485,6 +516,51 @@ async function runBrowserVisualSuite() {
 
     var mobileHowOverflow = await cdp.evalJs("document.documentElement.scrollWidth - window.innerWidth");
     assert(mobileHowOverflow <= 1, 'Móvil 375px: sin desbordamiento horizontal en Cómo funciona / Contacto (' + mobileHowOverflow + 'px)');
+
+    // Check #/equipos league ordering: primary leagues -> Selecciones -> ... -> Otras ligas -> Otros
+    await cdp.evalJs("location.hash = '#/equipos'");
+    var teamsLoaded = await cdp.waitUntil("document.querySelectorAll('#teams-results .league-block-head h2').length > 5", 5000);
+    assert(teamsLoaded, 'Sección Equipos cargada con todas sus ligas');
+    var leagueHeadings = await cdp.evalJs("Array.from(document.querySelectorAll('#teams-results .league-block-head h2')).map(function(h){ return h.textContent.trim(); })");
+    var idxLaLiga = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('LaLiga') : -1;
+    var idxPremier = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('Premier League') : -1;
+    var idxChilean = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('Chilean League') : -1;
+    var idxSelecciones = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('Selecciones') : -1;
+    var idxOtras = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('Otras ligas') : -1;
+    var idxOtros = Array.isArray(leagueHeadings) ? leagueHeadings.indexOf('Otros') : -1;
+    var validLeagueOrder = idxLaLiga === 0 &&
+      idxPremier === 1 &&
+      idxSelecciones > idxChilean &&
+      idxOtras > idxSelecciones &&
+      idxOtros === leagueHeadings.length - 1 &&
+      idxOtras === idxOtros - 1;
+    assert(validLeagueOrder, 'Equipos: principales ligas primero, luego Selecciones y Otras ligas justo antes de Otros (' + (leagueHeadings || []).join(' -> ') + ')');
+
+    var teamCardLazy = await cdp.evalJs("(function(){ var imgs = Array.from(document.querySelectorAll('#teams-results .team-card img')); return { total: imgs.length, nonLazy: imgs.filter(function(i){ return i.getAttribute('loading') !== 'lazy'; }).length }; })()");
+    assert(teamCardLazy && teamCardLazy.total > 0 && teamCardLazy.nonLazy === 0, 'Tarjetas de equipos usan loading="lazy" (' + (teamCardLazy ? teamCardLazy.total : 0) + ' imágenes, ' + (teamCardLazy ? teamCardLazy.nonLazy : '?') + ' sin lazy)');
+
+    var teamsUxCheck = await cdp.evalJs("({ spotlight: document.querySelectorAll('#teams-spotlight .team-spotlight-chip').length, jumpChips: document.querySelectorAll('#teams-league-jump .league-jump-chip').length, laLigaSubs: document.querySelectorAll('#league-laliga .league-subhead').length, otrasInitial: document.querySelectorAll('#league-otras-ligas .team-card').length, hasExpandBtn: !!document.querySelector('[data-expand-league=\"Otras ligas\"]'), overflow: document.documentElement.scrollWidth - window.innerWidth, chipColor: getComputedStyle(document.querySelector('#teams-spotlight .team-spotlight-chip')).color, subColor: getComputedStyle(document.querySelector('#league-laliga .league-subhead h3')).color })");
+    assert(teamsUxCheck && teamsUxCheck.spotlight >= 10 && teamsUxCheck.jumpChips >= 10, 'Equipos: tira de más buscados (' + (teamsUxCheck ? teamsUxCheck.spotlight : 0) + ') e índice de ligas (' + (teamsUxCheck ? teamsUxCheck.jumpChips : 0) + ') activos');
+    assert(teamsUxCheck && /244,\s*242,\s*236/.test(teamsUxCheck.chipColor) && /244,\s*242,\s*236/.test(teamsUxCheck.subColor), 'Contraste legible (texto claro sobre fondo oscuro) en Más buscados y divisiones');
+    assert(teamsUxCheck && teamsUxCheck.laLigaSubs === 2, 'Equipos: LaLiga separada en 1ª División y 2ª División e históricos');
+    assert(teamsUxCheck && teamsUxCheck.otrasInitial === 24 && teamsUxCheck.hasExpandBtn, 'Equipos: Otras ligas plegada a 24 clubes con botón expandir');
+    assert(teamsUxCheck && teamsUxCheck.overflow <= 1, 'Móvil 375px: sin desbordamiento horizontal en Equipos (' + (teamsUxCheck ? teamsUxCheck.overflow : '?') + 'px)');
+
+    // Test division filter 2ª División -> Cordoba visible, Real Madrid hidden -> reset
+    await cdp.evalJs("document.querySelector('[data-teams-div=\"2\"]').click()");
+    var div2Filtered = await cdp.waitUntil("document.querySelector('[data-teams-div=\"2\"].is-active') !== null && Array.from(document.querySelectorAll('#teams-results .team-card-copy strong')).some(function(el){ return el.textContent === 'Cordoba'; }) && !Array.from(document.querySelectorAll('#teams-results .team-card-copy strong')).some(function(el){ return el.textContent === 'Real Madrid'; })", 4000);
+    assert(div2Filtered, 'Filtro «2ª División / Históricos» muestra Córdoba y oculta clubes de 1ª');
+    await cdp.evalJs("document.querySelector('[data-teams-div=\"\"]').click()");
+    await cdp.waitUntil("document.querySelector('[data-expand-league=\"Otras ligas\"]') !== null", 4000);
+    await cdp.evalJs("document.querySelector('[data-expand-league=\"Otras ligas\"]').click()");
+    var otrasExpanded = await cdp.waitUntil("document.querySelectorAll('#league-otras-ligas .team-card').length > 100", 4000);
+    assert(otrasExpanded, 'Botón expandir de Otras ligas despliega el listado completo');
+
+    await cdp.evalJs("location.hash = '#/catalogo?equipo=Real%20Madrid&vista=grid'");
+    var teamCatalogLoaded = await cdp.waitUntil("document.querySelectorAll('#catalog-results .card img').length > 0", 5000);
+    assert(teamCatalogLoaded, 'Catálogo por equipo cargado con tarjetas de producto');
+    var productCardLazy = await cdp.evalJs("(function(){ var imgs = Array.from(document.querySelectorAll('#catalog-results .card img, .catalog-team-crest img, .catalog-team-feature-thumb img')); return { total: imgs.length, nonLazy: imgs.filter(function(i){ return i.getAttribute('loading') !== 'lazy'; }).length }; })()");
+    assert(productCardLazy && productCardLazy.total > 0 && productCardLazy.nonLazy === 0, 'Tarjetas de producto y cabecera de equipo usan loading="lazy" (' + (productCardLazy ? productCardLazy.total : 0) + ' imágenes, ' + (productCardLazy ? productCardLazy.nonLazy : '?') + ' sin lazy)');
 
     assert(cdp.runtimeExceptions.length === 0, 'Cero errores JS no controlados en navegador real', cdp.runtimeExceptions.join(' | '));
   } finally {

@@ -38,6 +38,113 @@
 
   var SEASON_ORDER = ['27/28', '26/27', '25/26', '24/25', '23/24', '22/23', '21/22', '20/21', '2016-2019', '2010-2015', 'Retro', 'Sin temporada'];
   var SEASON_LABELS = { '2016-2019': '2016–2019', '2010-2015': '2010–2015', 'Sin temporada': 'Sin temporada' };
+  var PRIMARY_LEAGUE_ORDER = [
+    'LaLiga',
+    'Premier League',
+    'Serie A',
+    'Bundesliga',
+    'Ligue 1',
+    'Primeira Liga',
+    'Brasileirão',
+    'Liga MX',
+    'Liga Profesional',
+    'Eredivisie',
+    'Scottish League',
+    'MLS',
+    'Chilean League'
+  ];
+  var TAIL_LEAGUE_ORDER = ['Selecciones', 'Jugadores', 'Otras ligas', 'Otros'];
+  var POPULAR_TEAM_SPOTS = [
+    'Real Madrid', 'Barcelona', 'Atlético de Madrid', 'Real Betis', 'Sevilla', 'Cordoba',
+    'Manchester United', 'Arsenal', 'Chelsea', 'Manchester City', 'Liverpool',
+    'Bayern Múnich', 'Paris Saint-Germain', 'AC Milan', 'Inter de Milán',
+    'España', 'Argentina', 'Brasil', 'Francia', 'Portugal'
+  ];
+  var TOP_FLIGHT_LEAGUES = [
+    'Primeira Liga', 'Brasileirão', 'Liga MX', 'Liga Profesional',
+    'Eredivisie', 'Scottish League', 'MLS', 'Chilean League'
+  ];
+  var TOP_DIVISION_CLUBS = {
+    'LaLiga': new Set([
+      'Real Madrid', 'Barcelona', 'Atlético de Madrid', 'Sevilla', 'Real Betis',
+      'Athletic Bilbao', 'Valencia', 'Villarreal', 'Real Sociedad', 'Celta de Vigo',
+      'Osasuna', 'Getafe', 'Girona', 'Mallorca', 'Rayo Vallecano',
+      'Deportivo Alavés', 'Espanyol', 'Las Palmas', 'Leganés', 'Real Valladolid',
+      'Levante', 'Elche', 'Real Oviedo'
+    ]),
+    'Premier League': new Set([
+      'Manchester United', 'Arsenal', 'Chelsea', 'Manchester City', 'Liverpool',
+      'Tottenham Hotspur', 'Newcastle United', 'Aston Villa', 'West Ham United',
+      'Brighton', 'Fulham', 'Crystal Palace', 'Everton', 'Brentford',
+      'Wolverhampton', 'Nottingham Forest', 'AFC Bournemouth', 'Leicester City',
+      'Ipswich Town', 'Southampton', 'Leeds United', 'Burnley'
+    ]),
+    'Serie A': new Set([
+      'AC Milan', 'Inter de Milán', 'Napoli', 'Roma', 'Lazio',
+      'Fiorentina', 'Atalanta', 'Bologna', 'Torino', 'Como',
+      'Parma', 'Cagliari', 'Genoa', 'Hellas Verona', 'Monza',
+      'Venezia', 'Sassuolo', 'Pisa', 'Cremonese'
+    ]),
+    'Bundesliga': new Set([
+      'Bayern Múnich', 'Borussia Dortmund', 'RB Leipzig', 'Bayer Leverkusen',
+      'Eintracht Frankfurt', 'VfB Stuttgart', 'Borussia Mönchengladbach',
+      'Werder Bremen', 'Wolfsburg', 'Freiburg', 'TSG Hoffenheim',
+      'Union Berlin', 'St. Pauli', 'Holstein Kiel', 'VfL Bochum',
+      'Hamburger SV', 'Köln'
+    ]),
+    'Ligue 1': new Set([
+      'Paris Saint-Germain', 'Olympique de Marsella', 'Olympique de Lyon',
+      'Mónaco', 'LOSC Lille', 'RC Lens', 'Stade Rennais', 'OGC Nice',
+      'RC Strasbourg', 'Stade Brestois', 'Toulouse', 'Nantes', 'Paris FC'
+    ])
+  };
+  var DIVISION_LABELS = {
+    'LaLiga': { '1': 'Primera División', '2': 'Segunda División e históricos' },
+    'Premier League': { '1': 'Premier League (1ª División)', '2': 'Championship e históricos' },
+    'Serie A': { '1': 'Serie A (1ª División)', '2': 'Serie B e históricos' },
+    'Bundesliga': { '1': 'Bundesliga (1ª División)', '2': '2. Bundesliga e históricos' },
+    'Ligue 1': { '1': 'Ligue 1 (1ª División)', '2': 'Ligue 2 e históricos' }
+  };
+  var OTHER_LEAGUE_PRIORITY_CLUBS = [
+    'Galatasaray', 'Al Nassr', 'Al Hilal', 'Al Ahli', 'Al Ittihad',
+    'Peñarol', 'Nacional', 'Olympiacos', 'Panathinaikos', 'Beşiktaş',
+    'Fenerbahçe', 'Olimpia', 'PAOK', 'AEK Atenas', 'Club Brugge',
+    'Anderlecht', 'Shakhtar Donetsk', 'Dinamo Zagreb', 'Red Bull Salzburg',
+    'Basel', 'Young Boys', 'Bohemians', 'Kawasaki Frontale', 'Vissel Kobe'
+  ];
+  var OTHER_LEAGUE_NON_CLUBS = new Set([
+    'AD', 'NK', 'PM', 'JD', 'TNF', 'Otros', 'Jordan',
+    'Oasis Live', 'Oasis Tour', 'Oasis', 'Chinese New Year Tang-style',
+    'Plain Mesh-windbreaker', 'TSV', 'CR7'
+  ]);
+
+  function getTeamDivision(name, league) {
+    var topSet = TOP_DIVISION_CLUBS[league];
+    if (topSet) return topSet.has(name) ? '1' : '2';
+    if (TOP_FLIGHT_LEAGUES.indexOf(league) !== -1) return '1';
+    return '';
+  }
+
+  function leagueSlug(name) {
+    return 'league-' + String(name || 'otros').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function leaguePriority(name) {
+    var primaryIdx = PRIMARY_LEAGUE_ORDER.indexOf(name);
+    if (primaryIdx !== -1) return { tier: 0, idx: primaryIdx };
+    var tailIdx = TAIL_LEAGUE_ORDER.indexOf(name);
+    if (tailIdx !== -1) return { tier: 2 + tailIdx, idx: 0 };
+    return { tier: 1, idx: 0 };
+  }
+
+  function compareLeagues(a, b, countA, countB) {
+    var pa = leaguePriority(a);
+    var pb = leaguePriority(b);
+    if (pa.tier !== pb.tier) return pa.tier - pb.tier;
+    if (pa.idx !== pb.idx) return pa.idx - pb.idx;
+    if (countB !== countA) return countB - countA;
+    return a.localeCompare(b, 'es');
+  }
 
   var numberFormat = new Intl.NumberFormat('es-ES');
   var cartStorageKey = 'kang_cart_v1';
@@ -61,6 +168,10 @@
     sort: 'new',
     gridPage: 1,
     groupPage: 1,
+    teamsDivision: '',
+    teamsPopularOnly: false,
+    teamsSort: 'count',
+    teamsExpandedLeagues: new Set(),
     route: 'home',
     lastListHash: '#/',
     loading: true,
@@ -92,6 +203,11 @@
     overlayCount: 0,
     returnFocus: null,
     previewTimer: null,
+    heroSpotlight: [],
+    heroSpotlightIdx: 0,
+    studioTeam: 'Real Madrid',
+    studioUserActive: false,
+    revealObserver: null,
     albumCache: new Map(),
     helpTopic: '',
     searchVocab: [],
@@ -1067,11 +1183,24 @@
       item._search = normalize([item.team, item.title, display, item.season, item.league, typeLabel(item.type), item.subcategory, DEPARTMENT_LABELS[item.department] || ''].join(' '));
       var team = state.teams.get(item.team);
       if (!team) {
-        team = { name: item.team, league: item.league || 'Otras ligas', count: 0, seasons: new Map(), cover: item.cover, sample: item };
+        var teamLeague = item.league || 'Otras ligas';
+        team = {
+          name: item.team,
+          league: teamLeague,
+          division: getTeamDivision(item.team, teamLeague),
+          count: 0,
+          seasons: new Map(),
+          hasNew: false,
+          hasRetro: false,
+          cover: item.cover,
+          sample: item
+        };
         state.teams.set(item.team, team);
       }
       team.count += 1;
       team.seasons.set(item.seasonGroup, (team.seasons.get(item.seasonGroup) || 0) + 1);
+      if (item.seasonGroup === '26/27' || item.seasonGroup === '27/28') team.hasNew = true;
+      if (item.seasonGroup === 'Retro' || (Array.isArray(item.flags) && item.flags.indexOf('retro') !== -1)) team.hasRetro = true;
       if (!team.cover) team.cover = item.cover;
 
       state.leagues.set(team.league, (state.leagues.get(team.league) || 0) + 1);
@@ -1451,14 +1580,14 @@
       if (crestEl) {
         crestEl.hidden = false;
         crestEl.innerHTML = logo
-          ? '<img src="' + esc(logo) + '" alt="Escudo de ' + esc(teamName) + '" onerror="this.remove();this.parentNode.innerHTML=this.parentNode.getAttribute(\'data-fallback\')" data-fallback="' + esc(teamMono(teamName)) + '">'
+          ? '<img src="' + esc(logo) + '" alt="Escudo de ' + esc(teamName) + '" loading="lazy" decoding="async" onerror="var p=this.parentNode,fb=this.getAttribute(\'data-fallback\');if(p&&fb){p.innerHTML=fb;}else{this.remove();}" data-fallback="' + esc(teamMono(teamName)) + '">'
           : teamMono(teamName);
       }
 
       if (watermarkEl) {
         if (logo) {
           watermarkEl.hidden = false;
-          watermarkEl.innerHTML = '<img src="' + esc(logo) + '" alt="" onerror="this.parentNode.hidden=true">';
+          watermarkEl.innerHTML = '<img src="' + esc(logo) + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.hidden=true">';
         } else {
           watermarkEl.hidden = true;
           watermarkEl.innerHTML = '';
@@ -1500,7 +1629,7 @@
           featureEl.setAttribute('role', 'button');
           featureEl.setAttribute('tabindex', '0');
           featureEl.innerHTML =
-            '<div class="catalog-team-feature-thumb"><img src="' + esc(coverUrl(featured, 'small')) + '" alt="' + esc(cleanTitle(featured)) + '"></div>' +
+            '<div class="catalog-team-feature-thumb"><img src="' + esc(coverUrl(featured, 'small')) + '" alt="' + esc(cleanTitle(featured)) + '" loading="lazy" decoding="async"></div>' +
             '<div class="catalog-team-feature-copy">' +
               '<span class="catalog-team-feature-kicker">Destacada · ' + esc(featured.season || featured.seasonGroup || 'Club') + '</span>' +
               '<strong>' + esc(cleanTitle(featured)) + '</strong>' +
@@ -1563,12 +1692,49 @@
     renderHomeCollections();
     renderHomeTeams();
     startPreviewLoop();
+    initScrollReveal();
+  }
+
+  function renderHeroSpotlightCard() {
+    var feature = $('#hero-feature');
+    if (!feature) return;
+    var picks = state.heroSpotlight || [];
+    if (!picks.length) {
+      feature.innerHTML = '';
+      return;
+    }
+    var idx = Math.max(0, Math.min(state.heroSpotlightIdx || 0, picks.length - 1));
+    var current = picks[idx];
+    var heroItem = current.item;
+    var heroTitle = cleanTitle(heroItem);
+    var heroPrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(heroItem)) : '';
+
+    var tabsHtml = picks.length > 1
+      ? '<div class="hero-spotlight-tabs" role="tablist" aria-label="Destacados de temporada">' +
+          picks.map(function (p, i) {
+            return '<button type="button" class="hero-spotlight-tab' + (i === idx ? ' is-active' : '') + '" role="tab" aria-selected="' + (i === idx) + '" data-spotlight-idx="' + i + '">' + esc(p.label) + '</button>';
+          }).join('') +
+        '</div>'
+      : '';
+
+    feature.innerHTML = '<div class="hero-feature-card">' +
+      tabsHtml +
+      '<button type="button" class="hero-feature-trigger" data-spotlight-open="' + esc(heroItem.id) + '" aria-label="Ver ' + esc(heroTitle) + '">' +
+        '<div class="hero-feature-img">' +
+          imgTag(coverUrl(heroItem, 'medium'), heroTitle, { eager: true }) +
+          (heroPrice ? '<span class="hero-feature-price">' + esc(heroPrice) + '</span>' : '') +
+        '</div>' +
+        '<div class="hero-feature-meta">' +
+          '<div><span>' + esc(heroItem.team) + ' · ' + esc(heroItem.season) + '</span><strong>' + esc(heroTitle) + '</strong></div>' +
+          '<svg><use href="#i-arrow"/></svg>' +
+        '</div>' +
+      '</button>' +
+    '</div>';
   }
 
   function renderHero() {
     var collage = $('#hero-collage');
     var feature = $('#hero-feature');
-    var marquee = $('#marquee-track');
 
     var withCover = state.items.filter(function (item) { return item.cover; });
     var chosen = withCover.slice(0, 42);
@@ -1577,25 +1743,46 @@
       for (var col = 0; col < 3; col++) {
         var slice = chosen.filter(function (_, index) { return index % 3 === col; }).slice(0, 14);
         var doubled = slice.concat(slice);
-        html += '<div class="hero-strip">' + doubled.map(function (item, index) {
-          return '<div class="hero-shot">' + imgTag(coverUrl(item, 'small'), item.title, { eager: col === 0 && index < 3 }) + '</div>';
+        html += '<div class="hero-strip">' + doubled.map(function (item) {
+          return '<div class="hero-shot">' + imgTag(coverUrl(item, 'small'), item.title) + '</div>';
         }).join('') + '</div>';
       }
       collage.innerHTML = html;
     }
 
     if (feature) {
-      var heroItem = chosen.filter(function (item) { return item.custom && item.seasonGroup === '26/27'; })[0] || chosen[0];
-      if (heroItem) {
-        var heroTitle = cleanTitle(heroItem);
-        var heroPrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(heroItem)) : '';
-        feature.innerHTML = '<div class="hero-feature-card">' +
-          '<div class="hero-badge">NUEVO<span>26/27</span></div>' +
-          '<div class="hero-feature-img">' + imgTag(coverUrl(heroItem, 'medium'), heroTitle, { eager: true }) + '</div>' +
-          '<div class="hero-feature-meta"><div><span>' + esc(heroItem.team) + ' · ' + esc(heroItem.season) + (heroPrice ? ' · ' + esc(heroPrice) : '') + '</span><strong>' + esc(heroTitle) + '</strong></div><svg><use href="#i-arrow"/></svg></div>' +
-          '</div>';
-        feature.style.cursor = 'pointer';
-        feature.onclick = function () { openProduct(heroItem.id); };
+      var picks = [];
+      var usedIds = new Set();
+      function pickFirst(label, fn) {
+        var found = withCover.find(function (it) { return !usedIds.has(it.id) && fn(it); });
+        if (found) {
+          usedIds.add(found.id);
+          picks.push({ label: label, item: found });
+        }
+      }
+      pickFirst('26/27', function (it) { return it.custom && it.seasonGroup === '26/27'; });
+      pickFirst('Jugador', function (it) { return Array.isArray(it.flags) && it.flags.indexOf('player') !== -1; });
+      pickFirst('Retro', function (it) { return (Array.isArray(it.flags) && it.flags.indexOf('retro') !== -1) || it.seasonGroup === 'Retro'; });
+      if (!picks.length && chosen[0]) picks.push({ label: 'Destacada', item: chosen[0] });
+
+      state.heroSpotlight = picks;
+      if ((state.heroSpotlightIdx || 0) >= picks.length) state.heroSpotlightIdx = 0;
+      renderHeroSpotlightCard();
+
+      if (!feature.getAttribute('data-spotlight-bound')) {
+        feature.setAttribute('data-spotlight-bound', '1');
+        feature.addEventListener('click', function (event) {
+          var tabBtn = event.target.closest('[data-spotlight-idx]');
+          if (tabBtn) {
+            state.heroSpotlightIdx = parseInt(tabBtn.getAttribute('data-spotlight-idx'), 10) || 0;
+            renderHeroSpotlightCard();
+            return;
+          }
+          var openBtn = event.target.closest('[data-spotlight-open]');
+          if (openBtn) {
+            openProduct(openBtn.getAttribute('data-spotlight-open'));
+          }
+        });
       }
     }
 
@@ -1626,15 +1813,16 @@
     var nations = state.items.filter(function (item) { return item.league === 'Selecciones'; });
 
     var cards = [
-      { key: '26/27', label: '26/27', sub: 'Nueva temporada', count: current.length, img: current[0] },
+      { key: '26/27', label: '26/27', sub: 'Nueva temporada', count: current.length, img: current[0], lead: true },
       { key: '25/26', label: '25/26', sub: 'Temporada anterior', count: previous.length, img: previous[0] },
       { key: 'Retro', label: 'Retro', sub: 'Clásicas de siempre', count: retro.length, img: retro[0] },
-      { key: 'Selecciones', label: 'Selecciones', sub: 'Mundial 2026', count: nations.length, img: nations[0], league: true }
+      { key: 'Selecciones', label: 'Selecciones', sub: 'Mundial 2026', count: nations.length, img: nations[0], league: true, wide: true }
     ];
 
     container.innerHTML = cards.map(function (card) {
       var href = card.league ? '#/catalogo?liga=Selecciones' : '#/catalogo?temporada=' + enc(card.key);
-      return '<a class="season-card" href="' + href + '">' +
+      var cls = 'season-card' + (card.lead ? ' is-lead' : '') + (card.wide ? ' is-wide' : '');
+      return '<a class="' + cls + '" href="' + href + '">' +
         (card.img ? imgTag(coverUrl(card.img, 'medium'), card.sub) + '<div class="img-skeleton" aria-hidden="true"></div>' : '') +
         '<div class="season-card-body"><small>' + esc(card.sub) + '</small><strong>' + esc(card.label) + '</strong><span>' + fmt(card.count) + ' prendas <svg><use href="#i-arrow"/></svg></span></div>' +
         '</a>';
@@ -1691,30 +1879,31 @@
   }
 
   function productCard(item) {
-    var badges = '';
-    if (item.custom) badges += '<span class="badge badge-volt">Personalizable</span>';
-    if (item.flags && item.flags.indexOf('retro') !== -1) badges += '<span class="badge badge-light">Retro</span>';
-    if (item.flags && item.flags.indexOf('kids') !== -1) badges += '<span class="badge">Niños</span>';
+    var metaTags = [];
+    if (item.custom) metaTags.push('Personalizable');
+    if (item.flags && item.flags.indexOf('retro') !== -1) metaTags.push('Retro');
+    if (item.flags && item.flags.indexOf('kids') !== -1) metaTags.push('Niños');
+    if (item.flags && item.flags.indexOf('player') !== -1) metaTags.push('Jugador');
 
     var title = cleanTitle(item);
     var baseCents = itemBasePriceCents(item);
     var priceText = window.KangPricing ? KangPricing.money(baseCents) : '';
     var hasSpecialSize = /(?:3XL|4XL)/.test(String(item.sizeRange || ''));
     var priceMeta = item.custom
-      ? '+2 € nombre/dorsal · +1 € parche'
+      ? '+2 € dorsal · +1 € parche'
       : (hasSpecialSize ? '3XL/4XL +3 €' : 'Tallas ' + (item.sizeRange || 'S-2XL'));
 
     var isLongJersey = (item.type === 'jersey' || item.type === 'polo' || item.type === 'other') &&
       ((item.flags && item.flags.indexOf('long') !== -1) || /\b(long[-\s]?sleeves?d?|manga\s+larga)\b/i.test(item.title || ''));
     var favActive = isFavorite(item.id);
     var photoCount = parseInt(item.photos, 10) || 1;
+    if (photoCount > 1) metaTags.push(photoCount + ' fotos');
+
     return '<article class="card" data-product="' + esc(item.id) + '" data-photos="' + photoCount + '">' +
       '<div class="card-media">' +
         '<button class="card-open" type="button" aria-label="Ver ' + esc(title) + '"></button>' +
         imgTag(coverUrl(item, 'small'), title) +
         '<div class="img-skeleton" aria-hidden="true"></div>' +
-        '<div class="card-badges" aria-hidden="true">' + badges + '</div>' +
-        (photoCount > 1 ? '<span class="card-photo-pill" aria-hidden="true">' + photoCount + ' fotos</span>' : '') +
         '<button class="card-fav' + (favActive ? ' is-active' : '') + '" type="button" data-fav-toggle="' + esc(item.id) + '" aria-pressed="' + favActive + '" aria-label="' + (favActive ? 'Quitar de favoritos ' : 'Guardar en favoritos ') + esc(title) + '"><svg><use href="#i-heart"/></svg></button>' +
         '<button class="card-quick" type="button" aria-label="Ver y personalizar ' + esc(title) + '"><svg><use href="#i-plus"/></svg></button>' +
       '</div>' +
@@ -1722,25 +1911,114 @@
         '<div class="card-kicker"><span>' + esc(item.team) + '</span><span>' + esc(item.season) + '</span></div>' +
         '<h3 class="card-title" title="' + esc(item.title) + '">' + esc(title) + '</h3>' +
         (priceText ? '<div class="card-price-row"><strong class="card-price">' + esc(priceText) + '</strong><span class="card-price-note">' + esc(priceMeta) + '</span></div>' : '') +
+        (metaTags.length ? '<div class="card-meta-tags">' + esc(metaTags.slice(0, 3).join(' · ')) + '</div>' : '') +
         '<div class="card-foot"><span class="type-label">' + esc((item.subcategory || typeLabel(item.type)) + (isLongJersey && !item.subcategory ? ' · Manga larga' : '')) + '</span>' +
-          (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Nombre + dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
+          (item.custom ? '<span class="custom-label"><svg><use href="#i-shirt"/></svg> Dorsal</span>' : '<span class="custom-label">' + esc(item.sizeRange) + '</span>') +
         '</div>' +
       '</div>' +
     '</article>';
   }
 
-  function teamCard(team) {
+  function teamCard(team, options) {
+    options = options || {};
     var topSeasons = Array.from(team.seasons.keys()).sort(function (a, b) {
       return SEASON_ORDER.indexOf(a) - SEASON_ORDER.indexOf(b);
     }).slice(0, 2).map(seasonLabel).join(' · ');
+    var badges = [];
+    if (team.hasNew) badges.push('<span class="team-mini-tag is-new">26/27</span>');
+    if (team.hasRetro) badges.push('<span class="team-mini-tag">Retro</span>');
+    if (options.showDiv && team.division === '2') badges.push('<span class="team-mini-tag is-div2">2ª Div.</span>');
     return '<a class="team-card" href="#/catalogo?equipo=' + enc(team.name) + '">' +
       teamMono(team.name) +
-      '<div class="team-card-copy"><strong>' + esc(team.name) + '</strong><span>' + fmt(team.count) + ' prendas · ' + esc(topSeasons) + '</span></div>' +
+      '<div class="team-card-copy"><strong>' + esc(team.name) + '</strong><span>' + fmt(team.count) + ' prendas · ' + esc(topSeasons) + '</span>' +
+      (badges.length ? '<div class="team-card-badges">' + badges.join('') + '</div>' : '') +
+      '</div>' +
       '<svg class="team-card-arrow"><use href="#i-arrow"/></svg>' +
       '</a>';
   }
 
+  function applyHomeStudioSlide(slide) {
+    var theme = getTeamTheme(slide.team);
+    var strokeCol = jerseyDorsalStroke(theme.ink);
+    var s1 = $('#home-kit-stop1');
+    var s2 = $('#home-kit-stop2');
+    var collar = $('#home-kit-collar');
+    var cuffL = $('#home-kit-cuff-l');
+    var cuffR = $('#home-kit-cuff-r');
+    var nape = $('#home-kit-nape');
+    var numDot = $('#home-kit-num-dot');
+    var brand = $('#home-kit-brand');
+    var patchEl = $('#home-preview-patch');
+    var nameEl = $('#preview-name');
+    var numberEl = $('#preview-number');
+
+    if (s1) s1.setAttribute('stop-color', theme.bg);
+    if (s2) s2.setAttribute('stop-color', theme.bg2 || theme.bg);
+    if (collar) collar.setAttribute('fill', theme.accent);
+    if (cuffL) cuffL.setAttribute('fill', theme.accent);
+    if (cuffR) cuffR.setAttribute('fill', theme.accent);
+    if (nape) nape.setAttribute('fill', theme.ink);
+    if (numDot) numDot.setAttribute('fill', theme.accent);
+    if (brand) brand.setAttribute('fill', theme.ink);
+    if (patchEl) {
+      var pc = jerseyPatchColor(slide.patch);
+      patchEl.innerHTML =
+        '<path d="M 0 -13 L 10 -8 V 2 C 10 8 5.5 12 0 14 C -5.5 12 -10 8 -10 2 V -8 Z" fill="#11161f" stroke="' + pc + '" stroke-width="1.6"/>' +
+        '<text x="0" y="3.5" text-anchor="middle" font-size="6.4" font-weight="800" letter-spacing="0.4" fill="' + pc + '">' + esc(slide.patch.slice(0, 3).toUpperCase()) + '</text>';
+    }
+    if (nameEl) {
+      nameEl.textContent = slide.name;
+      nameEl.setAttribute('font-size', String(jerseyNameFontSize(slide.name)));
+      nameEl.setAttribute('fill', theme.ink);
+      nameEl.setAttribute('stroke', strokeCol);
+    }
+    if (numberEl) {
+      numberEl.textContent = slide.number;
+      numberEl.setAttribute('font-size', String(jerseyNumberFontSize(slide.number)));
+      numberEl.setAttribute('fill', theme.ink);
+      numberEl.setAttribute('stroke', strokeCol);
+    }
+
+    $$('.studio-kit-btn').forEach(function (btn) {
+      btn.classList.toggle('is-active', btn.getAttribute('data-studio-team') === slide.team);
+    });
+  }
+
   function startPreviewLoop() {
+    var nameInput = $('#home-studio-name');
+    var numInput = $('#home-studio-number');
+    var teamsBox = $('#home-studio-teams');
+
+    if (nameInput && !nameInput.getAttribute('data-studio-bound')) {
+      nameInput.setAttribute('data-studio-bound', '1');
+      var syncCustomStudio = function () {
+        var rawN = (nameInput.value || '').toUpperCase().replace(/[^A-ZÁÉÍÓÚÑÜ.\- ]/g, '').slice(0, 14);
+        var rawD = (numInput ? numInput.value : '').replace(/\D/g, '').slice(0, 2);
+        if (nameInput.value !== rawN) nameInput.value = rawN;
+        if (numInput && numInput.value !== rawD) numInput.value = rawD;
+        state.studioUserActive = Boolean(rawN || rawD);
+        var team = state.studioTeam || 'Real Madrid';
+        var patch = team === 'España' ? 'Mundial' : (team === 'FC Barcelona' ? 'Liga' : 'Champions');
+        applyHomeStudioSlide({
+          name: rawN || 'TU NOMBRE',
+          number: rawD || '10',
+          team: team,
+          patch: patch
+        });
+      };
+      nameInput.addEventListener('input', syncCustomStudio);
+      if (numInput) numInput.addEventListener('input', syncCustomStudio);
+      if (teamsBox) {
+        teamsBox.addEventListener('click', function (event) {
+          var btn = event.target.closest('[data-studio-team]');
+          if (!btn) return;
+          state.studioTeam = btn.getAttribute('data-studio-team') || 'Real Madrid';
+          state.studioUserActive = true;
+          syncCustomStudio();
+        });
+      }
+    }
+
     if (state.previewTimer) return;
     var slides = [
       { name: 'TU NOMBRE', number: '10', team: 'Real Madrid', patch: 'Champions' },
@@ -1749,55 +2027,44 @@
       { name: 'VINICIUS', number: '7', team: 'Brasil', patch: 'Mundial' },
       { name: 'N. WILLIAMS', number: '11', team: 'España', patch: 'Mundial' }
     ];
-    function applySlide(slide) {
-      var theme = getTeamTheme(slide.team);
-      var strokeCol = jerseyDorsalStroke(theme.ink);
-      var s1 = $('#home-kit-stop1');
-      var s2 = $('#home-kit-stop2');
-      var collar = $('#home-kit-collar');
-      var cuffL = $('#home-kit-cuff-l');
-      var cuffR = $('#home-kit-cuff-r');
-      var nape = $('#home-kit-nape');
-      var numDot = $('#home-kit-num-dot');
-      var brand = $('#home-kit-brand');
-      var patchEl = $('#home-preview-patch');
-      var nameEl = $('#preview-name');
-      var numberEl = $('#preview-number');
-
-      if (s1) s1.setAttribute('stop-color', theme.bg);
-      if (s2) s2.setAttribute('stop-color', theme.bg2 || theme.bg);
-      if (collar) collar.setAttribute('fill', theme.accent);
-      if (cuffL) cuffL.setAttribute('fill', theme.accent);
-      if (cuffR) cuffR.setAttribute('fill', theme.accent);
-      if (nape) nape.setAttribute('fill', theme.ink);
-      if (numDot) numDot.setAttribute('fill', theme.accent);
-      if (brand) brand.setAttribute('fill', theme.ink);
-      if (patchEl) {
-        var pc = jerseyPatchColor(slide.patch);
-        patchEl.innerHTML =
-          '<path d="M 0 -13 L 10 -8 V 2 C 10 8 5.5 12 0 14 C -5.5 12 -10 8 -10 2 V -8 Z" fill="#11161f" stroke="' + pc + '" stroke-width="1.6"/>' +
-          '<text x="0" y="3.5" text-anchor="middle" font-size="6.4" font-weight="800" letter-spacing="0.4" fill="' + pc + '">' + esc(slide.patch.slice(0, 3).toUpperCase()) + '</text>';
-      }
-      if (nameEl) {
-        nameEl.textContent = slide.name;
-        nameEl.setAttribute('font-size', String(jerseyNameFontSize(slide.name)));
-        nameEl.setAttribute('fill', theme.ink);
-        nameEl.setAttribute('stroke', strokeCol);
-      }
-      if (numberEl) {
-        numberEl.textContent = slide.number;
-        numberEl.setAttribute('font-size', String(jerseyNumberFontSize(slide.number)));
-        numberEl.setAttribute('fill', theme.ink);
-        numberEl.setAttribute('stroke', strokeCol);
-      }
-    }
     var index = 0;
-    applySlide(slides[0]);
+    applyHomeStudioSlide(slides[0]);
     state.previewTimer = setInterval(function () {
-      if (state.route !== 'home') return;
+      if (state.route !== 'home' || state.studioUserActive) return;
       index = (index + 1) % slides.length;
-      applySlide(slides[index]);
+      state.studioTeam = slides[index].team;
+      applyHomeStudioSlide(slides[index]);
     }, 3200);
+  }
+
+  function initScrollReveal() {
+    var sections = $$('#view-home .section');
+    if (!sections.length) return;
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || typeof IntersectionObserver !== 'function') {
+      sections.forEach(function (sec) { sec.classList.add('is-revealed'); });
+      return;
+    }
+    if (!state.revealObserver) {
+      state.revealObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-revealed');
+            state.revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.06, rootMargin: '0px 0px -24px 0px' });
+    }
+    sections.forEach(function (sec) {
+      if (sec.classList.contains('is-revealed')) return;
+      var rect = sec.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.95) {
+        sec.classList.add('is-revealed');
+      } else {
+        sec.classList.add('reveal-section');
+        state.revealObserver.observe(sec);
+      }
+    });
   }
 
   // ── Equipos ──────────────────────────────────────────────
@@ -1806,30 +2073,107 @@
     var select = $('#teams-league');
     if (!select) return;
     var current = select.value;
-    var leagues = Array.from(state.leagues.entries()).sort(function (a, b) { return b[1] - a[1]; });
+    var leagues = Array.from(state.leagues.entries()).sort(function (a, b) {
+      return compareLeagues(a[0], b[0], a[1], b[1]);
+    });
     select.innerHTML = '<option value="">Todas las ligas</option>' + leagues.map(function (row) {
       return '<option value="' + esc(row[0]) + '">' + esc(row[0]) + ' (' + fmt(row[1]) + ')</option>';
     }).join('');
     select.value = current;
   }
 
+  function renderTeamsSpotlight() {
+    var el = $('#teams-spotlight');
+    if (!el) return;
+    var chips = POPULAR_TEAM_SPOTS.map(function (name) {
+      return state.teams.get(name);
+    }).filter(Boolean);
+    if (!chips.length) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML =
+      '<div class="teams-spotlight-head">' +
+        '<span>Equipos más buscados</span>' +
+        '<small>Acceso directo en 1 clic</small>' +
+      '</div>' +
+      '<div class="teams-spotlight-list">' +
+        chips.map(function (team) {
+          var isLocal = team.name === 'Cordoba';
+          return '<a class="team-spotlight-chip' + (isLocal ? ' is-local' : '') + '" href="#/catalogo?equipo=' + enc(team.name) + '">' +
+            teamMono(team.name) +
+            '<span>' + esc(team.name) + '</span>' +
+            (isLocal ? '<em>Córdoba</em>' : '<b>' + fmt(team.count) + '</b>') +
+          '</a>';
+        }).join('') +
+      '</div>';
+  }
+
+  function sortLeagueTeams(leagueName, list) {
+    var sortMode = state.teamsSort === 'az' ? 'az' : 'count';
+    return list.slice().sort(function (a, b) {
+      if (sortMode === 'az') return a.name.localeCompare(b.name, 'es');
+      if (leagueName === 'Otras ligas') {
+        var priA = OTHER_LEAGUE_PRIORITY_CLUBS.indexOf(a.name);
+        var priB = OTHER_LEAGUE_PRIORITY_CLUBS.indexOf(b.name);
+        if (priA !== -1 || priB !== -1) {
+          if (priA === -1) return 1;
+          if (priB === -1) return -1;
+          return priA - priB;
+        }
+        var nonA = OTHER_LEAGUE_NON_CLUBS.has(a.name) ? 1 : 0;
+        var nonB = OTHER_LEAGUE_NON_CLUBS.has(b.name) ? 1 : 0;
+        if (nonA !== nonB) return nonA - nonB;
+      }
+      return b.count - a.count || a.name.localeCompare(b.name, 'es');
+    });
+  }
+
+  function syncTeamsControlsUI() {
+    var sortEl = $('#teams-sort');
+    if (sortEl) sortEl.value = state.teamsSort;
+    $$('[data-teams-div]').forEach(function (btn) {
+      var active = (btn.getAttribute('data-teams-div') || '') === state.teamsDivision;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    var popBtn = $('#teams-popular-toggle');
+    if (popBtn) {
+      popBtn.classList.toggle('is-active', state.teamsPopularOnly);
+      popBtn.setAttribute('aria-pressed', state.teamsPopularOnly ? 'true' : 'false');
+    }
+  }
+
   function renderTeamsView() {
     if (!state.items.length) return;
     populateTeamsLeague();
+    renderTeamsSpotlight();
+    syncTeamsControlsUI();
     var container = $('#teams-results');
+    var jumpEl = $('#teams-league-jump');
     if (!container) return;
 
-    var query = expandQueryText($('#teams-search') ? $('#teams-search').value : '');
+    var rawQuery = $('#teams-search') ? $('#teams-search').value.trim() : '';
+    var query = expandQueryText(rawQuery);
     var qTokens = query ? query.split(' ').filter(Boolean) : [];
     var league = $('#teams-league') ? $('#teams-league').value : '';
+    var divFilter = state.teamsDivision;
+    var popularOnly = state.teamsPopularOnly;
+    var hasActiveFilter = Boolean(rawQuery || league || divFilter || popularOnly);
+
     var teams = Array.from(state.teams.values()).filter(function (team) {
       if (league && team.league !== league) return false;
+      if (divFilter && team.division !== divFilter) return false;
+      if (popularOnly && team.count < 10) return false;
       if (qTokens.length && !textMatchesSearchTokens(normalize(team.name + ' ' + team.league), qTokens)) return false;
       return true;
     });
 
     if (!teams.length) {
-      container.innerHTML = '<div class="empty-state"><svg><use href="#i-search"/></svg><h3>Sin equipos</h3><p>No encontramos equipos con esa búsqueda.</p></div>';
+      if (jumpEl) { jumpEl.hidden = true; jumpEl.innerHTML = ''; }
+      container.innerHTML = '<div class="empty-state"><svg><use href="#i-search"/></svg><h3>Sin equipos</h3><p>No encontramos equipos con los filtros seleccionados.</p><button type="button" class="btn btn-primary" id="teams-reset-filters">Ver todos los equipos</button></div>';
       return;
     }
 
@@ -1840,18 +2184,57 @@
     });
 
     var leagueNames = Object.keys(grouped).sort(function (a, b) {
-      return grouped[b].length - grouped[a].length;
+      return compareLeagues(a, b, grouped[a].length, grouped[b].length);
     });
-    if (leagueNames.indexOf('Selecciones') !== -1) {
-      leagueNames = ['Selecciones'].concat(leagueNames.filter(function (name) { return name !== 'Selecciones'; }));
+
+    if (jumpEl) {
+      if (leagueNames.length > 1) {
+        jumpEl.hidden = false;
+        jumpEl.innerHTML = leagueNames.map(function (name) {
+          return '<button type="button" class="league-jump-chip" data-jump-league="' + esc(leagueSlug(name)) + '">' +
+            esc(name) + ' <span>' + fmt(grouped[name].length) + '</span></button>';
+        }).join('');
+      } else {
+        jumpEl.hidden = true;
+        jumpEl.innerHTML = '';
+      }
     }
 
     container.innerHTML = leagueNames.map(function (name) {
-      var list = grouped[name].sort(function (a, b) { return b.count - a.count; });
-      var total = list.reduce(function (sum, team) { return sum + team.count; }, 0);
-      return '<section class="league-block">' +
-        '<div class="league-block-head"><h2>' + esc(name) + '</h2><span>' + fmt(list.length) + ' equipos · ' + fmt(total) + ' prendas</span></div>' +
-        '<div class="team-grid">' + list.map(teamCard).join('') + '</div>' +
+      var sorted = sortLeagueTeams(name, grouped[name]);
+      var total = sorted.reduce(function (sum, team) { return sum + team.count; }, 0);
+      var divLabels = DIVISION_LABELS[name];
+      var bodyHtml = '';
+
+      if (divLabels && !divFilter) {
+        var div1 = sorted.filter(function (t) { return t.division === '1'; });
+        var div2 = sorted.filter(function (t) { return t.division !== '1'; });
+        if (div1.length && div2.length) {
+          bodyHtml =
+            '<div class="league-subhead"><h3>' + esc(divLabels['1']) + '</h3><span>' + fmt(div1.length) + ' equipos</span></div>' +
+            '<div class="team-grid">' + div1.map(function (t) { return teamCard(t, { showDiv: true }); }).join('') + '</div>' +
+            '<div class="league-subhead"><h3>' + esc(divLabels['2']) + '</h3><span>' + fmt(div2.length) + ' equipos</span></div>' +
+            '<div class="team-grid">' + div2.map(function (t) { return teamCard(t, { showDiv: true }); }).join('') + '</div>';
+        } else {
+          bodyHtml = '<div class="team-grid">' + sorted.map(function (t) { return teamCard(t, { showDiv: true }); }).join('') + '</div>';
+        }
+      } else {
+        var limit = (!hasActiveFilter && name === 'Otras ligas' && !state.teamsExpandedLeagues.has(name) && sorted.length > 24) ? 24 : sorted.length;
+        var visible = sorted.slice(0, limit);
+        bodyHtml = '<div class="team-grid">' + visible.map(function (t) { return teamCard(t, { showDiv: !!divLabels }); }).join('') + '</div>';
+        if (name === 'Otras ligas' && sorted.length > 24 && !hasActiveFilter) {
+          var isExpanded = state.teamsExpandedLeagues.has(name);
+          bodyHtml += '<div class="league-more"><button type="button" class="btn btn-ghost" data-expand-league="Otras ligas">' +
+            (isExpanded
+              ? 'Mostrar solo los 24 destacados'
+              : 'Mostrar los ' + fmt(sorted.length) + ' equipos de Otras ligas (+' + fmt(sorted.length - 24) + ' más)') +
+            '</button></div>';
+        }
+      }
+
+      return '<section class="league-block" id="' + esc(leagueSlug(name)) + '">' +
+        '<div class="league-block-head"><h2>' + esc(name) + '</h2><span>' + fmt(sorted.length) + ' equipos · ' + fmt(total) + ' prendas</span></div>' +
+        bodyHtml +
         '</section>';
     }).join('');
   }
@@ -2285,7 +2668,7 @@
   function leagueOptionsHtml(allLabel, items) {
     var counts = withSelectedFacet(countFacet(items || itemsForFacet('league'), 'league'), 'league');
     var rows = Object.keys(counts).map(function (name) { return [name, counts[name]]; }).sort(function (a, b) {
-      return b[1] - a[1] || a[0].localeCompare(b[0], 'es');
+      return compareLeagues(a[0], b[0], a[1], b[1]);
     });
     return '<option value="">' + esc(allLabel) + '</option>' + rows.map(function (row) {
       return '<option value="' + esc(row[0]) + '">' + esc(row[0]) + ' (' + fmt(row[1]) + ')</option>';
@@ -2312,9 +2695,7 @@
     var leagues = Object.keys(byLeague).sort(function (a, b) {
       var countA = Object.keys(byLeague[a]).reduce(function (sum, name) { return sum + byLeague[a][name]; }, 0);
       var countB = Object.keys(byLeague[b]).reduce(function (sum, name) { return sum + byLeague[b][name]; }, 0);
-      if (a === 'Selecciones') return -1;
-      if (b === 'Selecciones') return 1;
-      return countB - countA || a.localeCompare(b, 'es');
+      return compareLeagues(a, b, countA, countB);
     });
 
     return '<option value="">' + esc(allLabel) + '</option>' + leagues.map(function (league) {
@@ -2592,7 +2973,7 @@
       html += '<div class="suggest-group-label">Prendas destacadas</div>';
       html += products.map(function (item) {
         return '<button type="button" class="suggest-item" role="option" data-suggest-product="' + esc(item.id) + '">' +
-          '<div class="suggest-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+          '<div class="suggest-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy" decoding="async"></div>' +
           '<div class="suggest-copy"><strong>' + esc(cleanTitle(item)) + '</strong><span>' + esc(item.team) + ' · ' + esc(item.season) + '</span></div>' +
           '<span class="suggest-price">' + esc(KangPricing.money(itemBasePriceCents(item))) + '</span>' +
         '</button>';
@@ -2915,6 +3296,54 @@
     if (teamsSearch) teamsSearch.addEventListener('input', debounce(renderTeamsView, 180));
     var teamsLeague = $('#teams-league');
     if (teamsLeague) teamsLeague.addEventListener('change', renderTeamsView);
+    var teamsSort = $('#teams-sort');
+    if (teamsSort) {
+      teamsSort.addEventListener('change', function () {
+        state.teamsSort = teamsSort.value === 'az' ? 'az' : 'count';
+        renderTeamsView();
+      });
+    }
+    var teamsView = $('#view-teams');
+    if (teamsView) {
+      teamsView.addEventListener('click', function (event) {
+        var divBtn = event.target.closest('[data-teams-div]');
+        if (divBtn) {
+          state.teamsDivision = divBtn.getAttribute('data-teams-div') || '';
+          renderTeamsView();
+          return;
+        }
+        if (event.target.closest('#teams-popular-toggle')) {
+          state.teamsPopularOnly = !state.teamsPopularOnly;
+          renderTeamsView();
+          return;
+        }
+        var jumpBtn = event.target.closest('[data-jump-league]');
+        if (jumpBtn) {
+          var targetId = jumpBtn.getAttribute('data-jump-league');
+          var targetBlock = targetId ? document.getElementById(targetId) : null;
+          if (targetBlock) targetBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        var expandBtn = event.target.closest('[data-expand-league]');
+        if (expandBtn) {
+          var lName = expandBtn.getAttribute('data-expand-league');
+          if (lName) {
+            if (state.teamsExpandedLeagues.has(lName)) state.teamsExpandedLeagues.delete(lName);
+            else state.teamsExpandedLeagues.add(lName);
+            renderTeamsView();
+          }
+          return;
+        }
+        if (event.target.closest('#teams-reset-filters')) {
+          if ($('#teams-search')) $('#teams-search').value = '';
+          if ($('#teams-league')) $('#teams-league').value = '';
+          state.teamsDivision = '';
+          state.teamsPopularOnly = false;
+          state.teamsSort = 'count';
+          renderTeamsView();
+        }
+      });
+    }
   }
 
   // ── Capas y bloqueo del scroll ───────────────────────────
@@ -3147,7 +3576,7 @@
       thumbs.innerHTML = state.gallery.map(function (photo, index) {
         return '<button type="button" class="' + (index === state.galleryIndex ? 'is-active' : '') + '" ' +
           'data-photo="' + index + '" aria-label="Ver foto ' + (index + 1) + '">' +
-          '<img src="' + esc(photoUrl(photo, 'medium', item.source)) + '" alt="" loading="lazy"></button>';
+          '<img src="' + esc(photoUrl(photo, 'medium', item.source)) + '" alt="" loading="lazy" decoding="async"></button>';
       }).join('');
     }
   }
@@ -4005,7 +4434,7 @@
       var prices = linePricing(line, item);
       var displayTitle = cleanTitle(item);
       return '<article class="cart-item" data-cart-line="' + esc(line.key) + '">' +
-        '<div class="cart-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+        '<div class="cart-thumb"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy" decoding="async"></div>' +
         '<div class="cart-item-copy">' +
           '<span class="cart-team">' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
           '<h4 title="' + esc(item.title) + '">' + esc(displayTitle) + '</h4>' +
@@ -4236,7 +4665,7 @@
     body.innerHTML = valid.map(function (item) {
       var title = cleanTitle(item);
       return '<article class="fav-item" data-fav-item="' + esc(item.id) + '">' +
-        '<div class="fav-thumb" data-fav-open="' + esc(item.id) + '"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy"></div>' +
+        '<div class="fav-thumb" data-fav-open="' + esc(item.id) + '"><img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy" decoding="async"></div>' +
         '<div class="fav-copy" data-fav-open="' + esc(item.id) + '">' +
           '<span>' + esc(item.team) + ' · ' + esc(item.season) + '</span>' +
           '<h4>' + esc(title) + '</h4>' +
@@ -4359,7 +4788,7 @@
           (line.name ? ' · ' + esc(line.name) : '') +
           (line.number ? ' #' + esc(line.number) : '');
         return '<div class="order-history-item">' +
-          '<img src="' + esc(thumb) + '" alt="" loading="lazy">' +
+          '<img src="' + esc(thumb) + '" alt="" loading="lazy" decoding="async">' +
           '<div class="order-history-item-copy"><b>' + esc(title) + '</b><small>' + detail + '</small></div>' +
         '</div>';
       }).join('');
@@ -4505,7 +4934,7 @@
       var prices = linePricing(line, item);
       var displayTitle = cleanTitle(item);
       return '<div class="summary-item">' +
-        '<img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy">' +
+        '<img src="' + esc(coverUrl(item, 'small')) + '" alt="" loading="lazy" decoding="async">' +
         '<div class="summary-item-copy"><strong title="' + esc(item.title) + '">' + esc(displayTitle) + '</strong><span>' + esc(detail) + '</span><span>' + esc(KangPricing.money(prices.unitPriceCents)) + ' / unidad · Subtotal: ' + esc(KangPricing.money(prices.unitPriceCents * line.qty)) + '</span></div>' +
       '</div>';
     }).join('');
