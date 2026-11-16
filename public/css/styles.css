@@ -1982,7 +1982,7 @@ svg { display: block; }
   .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
   .contact-card { flex-direction: column; align-items: flex-start; }
   .contact-actions { width: 100%; }
-  .contact-actions .btn { flex: 1; }
+  .contact-actions .btn { flex: 1 1 130px; justify-content: center; }
   .product-modal { width: 100vw; max-height: 100vh; height: 100%; border-radius: 0; border: 0; top: 0; left: 0; transform: translateY(3%) scale(1); }
   .product-modal.is-open { transform: none; }
   .product-layout { grid-template-columns: minmax(0, 1fr); max-height: none; }
@@ -4270,10 +4270,22 @@ svg { display: block; }
 }
 .footer-install-link:hover { text-decoration:underline; }
 
-.pwa-ios-modal {
+.modal.pwa-ios-modal {
+  position:fixed;
+  top:50%;
+  left:50%;
   max-width:440px;
-  width:calc(100% - 32px);
+  width:calc(100vw - 32px);
+  height:auto;
+  max-height:calc(100vh - 32px);
   padding:28px 26px;
+  border-radius:18px;
+  border:1px solid var(--line-strong);
+  transform:translate(-50%, -48%);
+  overflow-y:auto;
+}
+.modal.pwa-ios-modal.is-open {
+  transform:translate(-50%, -50%);
 }
 .pwa-ios-content h2 {
   margin:4px 0 8px;
@@ -4338,6 +4350,7 @@ svg { display: block; }
 .promo-row {
   display:flex;
   align-items:center;
+  flex-wrap:wrap;
   gap:8px;
 }
 .promo-row input {
@@ -4501,6 +4514,59 @@ svg { display: block; }
   background:rgba(255,91,46,.22);
   border-color:var(--orange);
   color:#ffd5c7;
+}
+
+/* ── Mejoras UX QA: Progreso grupo en ficha, atajos Bizum/Carrito ── */
+.product-volume-progress {
+  margin-top:12px;
+  padding-top:11px;
+  border-top:1px dashed var(--line);
+}
+.product-volume-copy {
+  font-size:11.5px;
+  line-height:1.4;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.product-volume-copy strong {
+  color:var(--volt);
+  font-weight:700;
+}
+.product-volume-progress.is-complete .product-volume-copy {
+  color:var(--text);
+}
+.product-bizum-tip {
+  margin-top:12px;
+  padding:9px 12px;
+  border-radius:10px;
+  border:1px solid rgba(217,255,63,.2);
+  background:rgba(217,255,63,.04);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:12px;
+  color:var(--muted);
+}
+.product-bizum-tip strong {
+  color:var(--text);
+}
+.cart-quick-actions {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:8px;
+}
+.btn-sm {
+  min-height:34px;
+  padding:6px 10px;
+  font-size:11.5px;
+}
+.bizum-head-right {
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
 
 

@@ -56,7 +56,7 @@
     leagues: new Map(),
     seasons: new Map(),
     types: new Map(),
-    filters: { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' },
+    filters: { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '', custom: '' },
     view: 'teams',
     sort: 'new',
     gridPage: 1,
@@ -1289,13 +1289,14 @@
         subcategory: route.params.get('subcategoria') || '',
         flag: rawExtra,
         price: route.params.get('precio') || '',
-        favs: route.params.get('favoritos') || ''
+        favs: route.params.get('favoritos') || '',
+        custom: route.params.get('personalizable') || ''
       };
       var sortParam = route.params.get('orden');
       if (sortParam && ['new', 'price-asc', 'price-desc', 'team', 'season', 'name'].indexOf(sortParam) !== -1) {
         state.sort = sortParam;
       }
-      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo') || !!state.filters.favs || !!state.filters.price || !!state.filters.version) ? 'grid' : 'teams';
+      state.view = (route.params.get('vista') === 'grid' || !!route.params.get('equipo') || !!state.filters.favs || !!state.filters.price || !!state.filters.version || !!state.filters.custom) ? 'grid' : 'teams';
       state.groupPage = 1;
       state.gridPage = 1;
       if (state.items.length) {
@@ -1387,6 +1388,7 @@
     if (state.filters.flag) params.set('extra', state.filters.flag);
     if (state.filters.price) params.set('precio', state.filters.price);
     if (state.filters.favs) params.set('favoritos', state.filters.favs);
+    if (state.filters.custom) params.set('personalizable', state.filters.custom);
     if (state.sort && state.sort !== 'new') params.set('orden', state.sort);
     if (state.view === 'grid') params.set('vista', 'grid');
     var query = params.toString();
@@ -1898,9 +1900,11 @@
     var flag = state.filters.flag;
     var price = state.filters.price;
     var onlyFavs = state.filters.favs === '1';
+    var onlyCustom = state.filters.custom === '1';
 
     var items = state.items.filter(function (item) {
       if (onlyFavs && !isFavorite(item.id)) return false;
+      if (onlyCustom && !item.custom) return false;
       if (team && item.team !== team) return false;
       if (league && item.league !== league) return false;
       if (season && item.seasonGroup !== season) return false;
@@ -2004,6 +2008,8 @@
     var favCount = state.favorites.length;
     var chips = [];
     chips.push('<button type="button" class="quick-chip is-fav' + (state.filters.favs === '1' ? ' is-active' : '') + '" data-quick-fav aria-pressed="' + (state.filters.favs === '1') + '"><svg><use href="#i-heart"/></svg>Favoritos' + (favCount ? ' (' + favCount + ')' : '') + '</button>');
+    chips.push('<button type="button" class="quick-chip' + (state.filters.custom === '1' ? ' is-active' : '') + '" data-quick-custom aria-pressed="' + (state.filters.custom === '1') + '">Personalizable</button>');
+    chips.push('<button type="button" class="quick-chip' + (state.filters.season === '26/27' ? ' is-active' : '') + '" data-quick-season="26/27" aria-pressed="' + (state.filters.season === '26/27') + '">Nueva 26/27</button>');
     chips.push('<span class="quick-chip-sep" aria-hidden="true"></span>');
     [
       ['fan', 'Versión Fan'],
@@ -2044,7 +2050,7 @@
     applyTeamThemeVars($('#view-catalog'), state.filters.team || state.filters.league);
 
     var items = getFilteredItems();
-    var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || !!state.filters.version || state.sort === 'price-asc' || state.sort === 'price-desc';
+    var useGrid = state.view === 'grid' || !!state.filters.team || !!state.filters.favs || !!state.filters.price || !!state.filters.version || !!state.filters.custom || state.sort === 'price-asc' || state.sort === 'price-desc';
 
     renderQuickFilters();
     renderActiveFilters();
@@ -2151,7 +2157,7 @@
   }
 
   function activeFilterCount() {
-    return ['q', 'team', 'league', 'season', 'type', 'version', 'collection', 'department', 'subcategory', 'flag', 'price', 'favs'].filter(function (key) {
+    return ['q', 'team', 'league', 'season', 'type', 'version', 'collection', 'department', 'subcategory', 'flag', 'price', 'favs', 'custom'].filter(function (key) {
       return !!state.filters[key];
     }).length;
   }
@@ -2188,6 +2194,7 @@
     if (state.filters.flag) chips.push(chip('flag', 'Extra: ' + flagLabel(state.filters.flag)));
     if (state.filters.price) chips.push(chip('price', 'Precio: ' + (PRICE_BAND_LABELS[state.filters.price] || state.filters.price)));
     if (state.filters.favs) chips.push(chip('favs', 'Solo favoritos'));
+    if (state.filters.custom) chips.push(chip('custom', 'Personalizable'));
 
     if (!chips.length) {
       container.innerHTML = '';
@@ -2214,7 +2221,7 @@
       if (team && team.league !== state.filters.league) state.filters.team = '';
     }
     if ('team' in patch && state.filters.team) state.view = 'grid';
-    if (('flag' in patch && state.filters.flag) || ('price' in patch && state.filters.price) || ('favs' in patch && state.filters.favs) || ('version' in patch && state.filters.version)) {
+    if (('flag' in patch && state.filters.flag) || ('price' in patch && state.filters.price) || ('favs' in patch && state.filters.favs) || ('version' in patch && state.filters.version) || ('custom' in patch && state.filters.custom)) {
       state.view = 'grid';
     }
 
@@ -2227,7 +2234,7 @@
   }
 
   function clearAllFilters() {
-    state.filters = { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '' };
+    state.filters = { q: '', team: '', league: '', season: '', type: '', version: '', collection: '', department: '', subcategory: '', flag: '', price: '', favs: '', custom: '' };
     state.gridPage = 1;
     state.groupPage = 1;
     syncFilterInputs();
@@ -2243,6 +2250,7 @@
     var onlyFavs = state.filters.favs === '1';
     return state.items.filter(function (item) {
       if (excludedFilter !== 'favs' && onlyFavs && !isFavorite(item.id)) return false;
+      if (excludedFilter !== 'custom' && state.filters.custom === '1' && !item.custom) return false;
       if (excludedFilter !== 'team' && state.filters.team && item.team !== state.filters.team) return false;
       if (excludedFilter !== 'league' && state.filters.league && item.league !== state.filters.league) return false;
       if (excludedFilter !== 'season' && state.filters.season && item.seasonGroup !== state.filters.season) return false;
@@ -2723,6 +2731,16 @@
           applyFilters({ favs: state.filters.favs === '1' ? '' : '1' });
           return;
         }
+        if (event.target.closest('[data-quick-custom]')) {
+          applyFilters({ custom: state.filters.custom === '1' ? '' : '1' });
+          return;
+        }
+        var seasonBtn = event.target.closest('[data-quick-season]');
+        if (seasonBtn) {
+          var seasonVal = seasonBtn.getAttribute('data-quick-season');
+          applyFilters({ season: state.filters.season === seasonVal ? '' : seasonVal });
+          return;
+        }
         var versionBtn = event.target.closest('[data-quick-version]');
         if (versionBtn) {
           var version = versionBtn.getAttribute('data-quick-version');
@@ -2925,7 +2943,7 @@
   }
 
   function initOverlays() {
-    ['product-modal', 'cart-drawer', 'favs-drawer', 'orders-drawer', 'filters-drawer', 'checkout-modal', 'mobile-menu', 'lightbox'].forEach(function (id) {
+    ['product-modal', 'cart-drawer', 'favs-drawer', 'orders-drawer', 'filters-drawer', 'checkout-modal', 'pwa-ios-modal', 'mobile-menu', 'lightbox'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el && !el.classList.contains('is-open')) setOverlayState(el, false);
     });
@@ -3187,12 +3205,38 @@
       rows.push('<div class="price-breakdown-row is-active"><span>Cantidad (' + qty + ' × ' + esc(KangPricing.money(calc.unitPriceCents)) + ')</span><strong>' + esc(KangPricing.money(totalCents)) + '</strong></div>');
     }
 
+    var inCartQty = cartTotalItems();
+    var projectedQty = inCartQty + qty;
+    var vol = (typeof KangPricing.getVolumeDiscount === 'function')
+      ? KangPricing.getVolumeDiscount(projectedQty)
+      : { discountCents: 0, perItemCents: 0, label: '' };
+    var nextVol = (typeof KangPricing.nextVolumeTier === 'function')
+      ? KangPricing.nextVolumeTier(projectedQty)
+      : null;
+    var volPct = nextVol ? Math.min(100, Math.round((projectedQty / nextVol.minQty) * 100)) : 100;
+    var volCopy = '';
+    if (vol.perItemCents > 0) {
+      volCopy = '<strong>Descuento grupo activo (-' + esc(KangPricing.money(vol.perItemCents)) + '/ud.)</strong> · Ahorrarías <strong>-' + esc(KangPricing.money(vol.discountCents)) + '</strong> en tu pedido' +
+        (nextVol ? ' · +' + (nextVol.minQty - projectedQty) + ' más para -' + esc(KangPricing.money(nextVol.perItemCents)) + '/ud.' : '');
+    } else if (nextVol) {
+      var needMore = nextVol.minQty - projectedQty;
+      volCopy = (inCartQty > 0 ? 'Con tu carrito llevarías <strong>' + projectedQty + '/' + nextVol.minQty + ' uds.</strong> · ' : '') +
+        'Añade <strong>' + needMore + (needMore === 1 ? ' prenda más' : ' prendas más') + '</strong> para aplicar <strong>-' + esc(KangPricing.money(nextVol.perItemCents)) + '/ud.</strong>';
+    }
+    var volHtml = volCopy
+      ? '<div class="product-volume-progress' + (vol.perItemCents > 0 ? ' is-complete' : '') + '" id="product-volume-progress">' +
+          '<div class="product-volume-copy">' + volCopy + '</div>' +
+          '<div class="cart-progress-track"><div class="cart-progress-fill" style="width:' + volPct + '%"></div></div>' +
+        '</div>'
+      : '';
+
     return '<div class="product-price-head">' +
         '<div><span class="product-price-label">' + (qty > 1 ? 'Total (' + qty + ' uds.)' : 'Precio total') + '</span>' +
         '<strong class="product-price-main">' + esc(KangPricing.money(totalCents)) + '</strong></div>' +
         (qty > 1 ? '<span class="product-price-unit">' + esc(KangPricing.money(calc.unitPriceCents)) + ' / ud.</span>' : (calc.unitPriceCents > calc.basePriceCents ? '<span class="product-price-unit">Base ' + esc(KangPricing.money(calc.basePriceCents)) + '</span>' : '<span class="product-price-unit">Sin extras</span>')) +
       '</div>' +
-      '<div class="price-breakdown">' + rows.join('') + '</div>';
+      '<div class="price-breakdown">' + rows.join('') + '</div>' +
+      volHtml;
   }
 
   function updateProductPricing() {
@@ -3444,7 +3488,16 @@
         '</button>' +
         '<div class="bulk-panel" id="bulk-order-panel"' + (state.bulkOpen ? '' : ' hidden') + '>' + (state.bulkOpen ? renderBulkPanelHtml() : '') + '</div>' +
       '</div>' +
-      '<p class="product-disclaimer">Sin pago online. Confirmamos precio, disponibilidad y envío por WhatsApp o email.</p>';
+      (function () {
+        var st = state.config && state.config.store ? state.config.store : {};
+        var bNum = bizumDisplayNumber(st.bizum || '699234010');
+        var bFmt = formatBizumPhone(st.bizum || '699234010');
+        return '<div class="product-bizum-tip">' +
+          '<span>Bizum directo <strong>' + esc(bFmt) + '</strong> · Recogida gratis en Córdoba (2–3 sem.)</span>' +
+          '<button type="button" class="bizum-copy-btn" data-copy-value="' + esc(bNum) + '" data-copy-label="Teléfono Bizum (' + esc(bFmt) + ') copiado">Copiar Bizum</button>' +
+        '</div>';
+      }()) +
+      '<p class="product-disclaimer">Sin comisiones. Confirmamos pago Bizum, disponibilidad y recogida por WhatsApp o email.</p>';
 
     updateProductPricing();
   }
@@ -4066,6 +4119,46 @@
 
     var checkout = $('#checkout-open');
     if (checkout) checkout.addEventListener('click', openCheckout);
+
+    var cartCopySummary = $('#cart-copy-summary');
+    if (cartCopySummary) {
+      cartCopySummary.addEventListener('click', function () {
+        if (!state.cart.length) return;
+        var vol = cartVolumeDiscount();
+        var lines = ['RESUMEN CARRITO · KANG TEAM'];
+        state.cart.forEach(function (line, idx) {
+          var item = state.byId.get(line.id);
+          if (!item) return;
+          var pr = linePricing(line, item);
+          var row = (idx + 1) + '. ' + cleanTitle(item) + ' (' + item.team + ') · Talla ' + line.size + ' × ' + line.qty + ' = ' + KangPricing.money(pr.unitPriceCents * line.qty);
+          if (line.name || line.number) row += ' [' + [line.name, line.number ? '#' + line.number : ''].filter(Boolean).join(' ') + ']';
+          if (line.patches && line.patches !== 'No') row += ' [Parches: ' + line.patches + ']';
+          lines.push(row);
+        });
+        if (vol.discountCents > 0) lines.push('Descuento grupo (' + vol.label + '): -' + KangPricing.money(vol.discountCents));
+        lines.push('Total estimado: ' + KangPricing.money(cartPriceCents()));
+        lines.push('Entrega: Recogida gratuita en Córdoba capital (2–3 semanas)');
+        copyText(lines.join('\n')).then(function () {
+          toast('Resumen del carrito copiado');
+        }).catch(function () {
+          toast('No se pudo copiar el resumen', 'error');
+        });
+      });
+    }
+
+    var cartCopyBizum = $('#cart-copy-bizum');
+    if (cartCopyBizum) {
+      cartCopyBizum.addEventListener('click', function () {
+        var st = state.config && state.config.store ? state.config.store : {};
+        var rawBizum = bizumDisplayNumber(st.bizum || '699234010');
+        var fmtBizum = formatBizumPhone(st.bizum || '699234010');
+        copyText(rawBizum).then(function () {
+          toast('Bizum ' + fmtBizum + ' copiado · Pon tu código KT-... en el concepto al confirmar');
+        }).catch(function () {
+          toast('No se pudo copiar el teléfono Bizum', 'error');
+        });
+      });
+    }
 
     var cartOrdersBtn = $('#cart-orders-btn');
     if (cartOrdersBtn) {
@@ -4847,12 +4940,21 @@
     if (order.volumeDiscountCents > 0) savingsParts.push('Dto. grupo -' + KangPricing.money(order.volumeDiscountCents));
     if (order.promoDiscountCents > 0) savingsParts.push('Cupón ' + order.promoCode + ' -' + KangPricing.money(order.promoDiscountCents));
 
+    var bizumAllCopy = [
+      bizumFormatted ? ('Bizum: ' + bizumCopyPhone) : '',
+      amountCopy ? ('Importe: ' + amountCopy + ' €') : '',
+      id ? ('Concepto: ' + id) : ''
+    ].filter(Boolean).join(' · ');
+
     var bizumHtml = '';
     if (isBizum) {
       bizumHtml = '<div class="bizum-box">' +
         '<div class="bizum-box-head">' +
           '<span class="bizum-badge">Pago por Bizum</span>' +
-          '<span>Sin comisiones</span>' +
+          '<div class="bizum-head-right">' +
+            '<span>Sin comisiones</span>' +
+            (bizumAllCopy ? '<button class="bizum-copy-btn bizum-copy-all-btn" type="button" data-copy-value="' + esc(bizumAllCopy) + '" data-copy-label="Todos los datos Bizum copiados">Copiar todo</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="bizum-rows">' +
           (bizumFormatted
@@ -5239,6 +5341,8 @@
   function handleEscape() {
     var lightbox = $('#lightbox');
     if (lightbox && lightbox.classList.contains('is-open')) return closeLightbox();
+    var pwaModal = $('#pwa-ios-modal');
+    if (pwaModal && pwaModal.classList.contains('is-open')) return closeIosPwaModal();
     var checkout = $('#checkout-modal');
     if (checkout && checkout.classList.contains('is-open')) return closeCheckout();
     var product = $('#product-modal');
@@ -5425,6 +5529,10 @@
       requestAnimationFrame(function () { backdrop.classList.add('is-open'); });
     }
     lockScroll();
+    setTimeout(function () {
+      var done = $('#pwa-ios-done');
+      if (done) done.focus();
+    }, 120);
   }
 
   function closeIosPwaModal() {
@@ -5817,6 +5925,12 @@
       });
       var data = null;
       try { data = await res.json(); } catch (e) {}
+      if (res.status === 401) {
+        state.adminNeedsToken = true;
+        state.adminError = 'Sesión caducada o token incorrecto';
+        renderAdminView();
+        return;
+      }
       if (!res.ok) throw new Error(extractApiError(data, 'No se pudo actualizar (' + res.status + ')'));
       toast('Pedido ' + orderId + ' actualizado' + (data && data.emailSent ? ' · Email enviado al cliente' : ''));
       await loadAdminOrders();
@@ -5835,6 +5949,12 @@
       });
       var data = null;
       try { data = await res.json(); } catch (e) {}
+      if (res.status === 401) {
+        state.adminNeedsToken = true;
+        state.adminError = 'Sesión caducada o token incorrecto';
+        renderAdminView();
+        return;
+      }
       if (!res.ok) throw new Error(extractApiError(data, 'No se pudo eliminar (' + res.status + ')'));
       state.adminDeleteConfirmId = '';
       toast('Pedido ' + orderId + ' eliminado');
