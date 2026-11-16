@@ -52,15 +52,114 @@ async function mapLimit(list, limit, worker) {
 var NON_PRODUCT_TITLE_RE = /^(new\s*catalog|aviso\s+importante|important\s+notice|payment|about\s+price|about\s+us|shipment|shipping|size\s+chart|size\s+table|notice|whatsapp|contact|how\s+to\s+order|catalog)\b/i;
 var DIVIDER_EXACT_RE = /^(women|video|size\s+table|adult\/kid\s+kits?|player\s+version|retro\s+shirt|training\s+wear|adult\/kid\s+socks)$/i;
 
+var PLACEHOLDER_LOCKED_RE = /^(?:加密相册|加密|liver[-_\s]*paal|juva[-_\s]*ntus|roma)$/i;
+
 function isNonProductRaw(raw, excludedIds) {
   if (!raw || !raw.id || !raw.cover) return true;
   if (excludedIds && excludedIds[String(raw.id)]) return true;
   var title = String(raw.title || '').trim();
   if (!title) return true;
-  if (/加密相册|加密|\u26bd/.test(title)) return true;
+  if ((raw.encrypted || /加密相册|加密/.test(title)) && !raw.allowEncrypted) return true;
+  if (/\u26bd/.test(title)) return true;
   if (NON_PRODUCT_TITLE_RE.test(title) || DIVIDER_EXACT_RE.test(title)) return true;
   if (/\b(?:world\s+cup|league|club)\s+patch(?:es)?$/i.test(title)) return true;
   return false;
+}
+
+var LOCKED_CLUB_SUBCATEGORIES = [
+  { source: 'minkang', catId: '720293', isSubCate: true, team: 'Liverpool', league: 'Premier League' },
+  { source: 'minkang', catId: '724785', isSubCate: true, team: 'Juventus', league: 'Serie A' },
+  { source: 'minkang', catId: '724793', isSubCate: true, team: 'Roma', league: 'Serie A' },
+  { source: 'gxgfootball', catId: '818835', isSubCate: true, team: 'Liverpool', league: 'Premier League', typeOverride: 'jersey', customOverride: true },
+  { source: 'gxgfootball', catId: '818836', isSubCate: true, team: 'Juventus', league: 'Serie A', typeOverride: 'jersey', customOverride: true },
+  { source: 'gxg', catId: '5332886', isSubCate: false, team: 'Liverpool', league: 'Premier League', collection: 'primavera-invierno', department: 'training', typeOverride: 'training', customOverride: false },
+  { source: 'gxg', catId: '5332888', isSubCate: false, team: 'Juventus', league: 'Serie A', collection: 'primavera-invierno', department: 'training', typeOverride: 'training', customOverride: false }
+];
+
+function mapLockedGxgVariant(rawTitle, team) {
+  var clean = String(rawTitle || '').split('/')[0].trim();
+  var specs = [
+    { re: /\bkids?\b.*\bshort\s+sleeve\b/i, sub: 'Niños · Manga corta + pantalón corto', audience: 'kids', size: '16-28', label: 'Conjunto Niño Manga Corta + Pantalón Corto' },
+    { re: /\bkids?\b.*\bhalf\s*zip\b/i, sub: 'Niños · Media cremallera + pantalón largo', audience: 'kids', size: '16-28', label: 'Chándal Niño Media Cremallera + Pantalón Largo' },
+    { re: /\bkids?\b.*\blong\s*zip\b/i, sub: 'Niños · Cremallera completa + pantalón largo', audience: 'kids', size: '16-28', label: 'Chándal Niño Cremallera Completa + Pantalón Largo' },
+    { re: /\bkids?\b.*\bhoodie\b/i, sub: 'Niños · Con capucha + pantalón largo', audience: 'kids', size: '16-28', label: 'Chándal Niño con Capucha + Pantalón Largo' },
+    { re: /\bvest\b.*\bshorts\b/i, sub: 'Chaleco + pantalón corto', audience: 'adult', size: 'S-2XL', label: 'Entrenamiento Chaleco + Pantalón Corto' },
+    { re: /\bshort\s+sleeve\b.*\bshorts\b/i, sub: 'Manga corta + pantalón corto', audience: 'adult', size: 'S-2XL', label: 'Entrenamiento Manga Corta + Pantalón Corto' },
+    { re: /\bpolo\b.*\blong\s+pants\b/i, sub: 'Polo + pantalón largo', audience: 'adult', size: 'S-2XL', label: 'Chándal Polo + Pantalón Largo' },
+    { re: /\bhalf\s*zip\b.*\blong\s+pants\b/i, sub: 'Media cremallera + pantalón largo', audience: 'adult', size: 'S-2XL', label: 'Chándal Media Cremallera + Pantalón Largo' },
+    { re: /\blong\s*zip\b.*\blong\s+pants\b/i, sub: 'Cremallera completa + pantalón largo', audience: 'adult', size: 'S-2XL', label: 'Chándal Cremallera Completa + Pantalón Largo' },
+    { re: /\bhoodie\b.*\blong\s+pants\b/i, sub: 'Con capucha + pantalón largo', audience: 'adult', size: 'S-2XL', label: 'Chándal con Capucha + Pantalón Largo' }
+  ];
+  for (var i = 0; i < specs.length; i++) {
+    if (specs[i].re.test(clean)) {
+      return {
+        subcategory: specs[i].sub,
+        audience: specs[i].audience,
+        title: team + ' · ' + specs[i].label + ' ' + specs[i].size
+      };
+    }
+  }
+  return null;
+}
+
+async function fetchLockedClubSubcategory(entry) {
+  var srcCfg = yupoo.SOURCES[entry.source];
+  if (!srcCfg) return [];
+  var suffix = entry.isSubCate ? '?isSubCate=true' : '';
+  var baseUrl = srcCfg.base + '/categories/' + entry.catId + suffix;
+  var sep = suffix ? '&' : '?';
+  var reqOpts = { timeout: 35000, headers: { 'Referer': srcCfg.referer } };
+  var firstHtml = await yupoo.fetchWithRetries(baseUrl, reqOpts, 2);
+  var totalPages = yupoo.parsePageCount(firstHtml);
+  var raw = yupoo.parseListing(firstHtml);
+  for (var p = 2; p <= totalPages; p++) {
+    var html = await yupoo.fetchWithRetries(baseUrl + sep + 'page=' + p, reqOpts, 2);
+    raw = raw.concat(yupoo.parseListing(html));
+  }
+  return raw.map(function (item) {
+    var rawTitle = String(item.title || '').trim();
+    var isEncrypted = !!(item.encrypted || /加密相册|加密/.test(rawTitle));
+    var out = Object.assign({}, item, {
+      source: entry.source,
+      teamOverride: entry.team,
+      leagueOverride: entry.league
+    });
+    if (entry.collection) out.collection = entry.collection;
+    if (entry.department) out.department = entry.department;
+
+    if (entry.source === 'gxg') {
+      var mapped = mapLockedGxgVariant(rawTitle, entry.team);
+      if (mapped) {
+        out.title = mapped.title;
+        out.subcategory = mapped.subcategory;
+        out.audience = mapped.audience;
+      } else {
+        out.subcategory = entry.team + ' · Entrenamiento';
+        out.title = entry.team + ' · Entrenamiento catálogo #' + item.id;
+      }
+      out.typeOverride = 'training';
+      out.customOverride = false;
+      out.allowEncrypted = true;
+      out.encrypted = isEncrypted;
+      return out;
+    }
+
+    if (isEncrypted) {
+      out.allowEncrypted = true;
+      out.encrypted = true;
+      if (!rawTitle || PLACEHOLDER_LOCKED_RE.test(rawTitle)) {
+        out.title = entry.team + ' · Equipación catálogo #' + item.id;
+        if (entry.typeOverride) out.typeOverride = entry.typeOverride;
+        if (entry.customOverride !== undefined) out.customOverride = entry.customOverride;
+      } else {
+        out.title = rawTitle;
+      }
+    } else {
+      if (entry.typeOverride) out.typeOverride = entry.typeOverride;
+      if (entry.customOverride !== undefined) out.customOverride = entry.customOverride;
+    }
+    return out;
+  });
 }
 
 var GXG_CATEGORIES = [
@@ -201,10 +300,15 @@ async function runSync(options) {
     var sidebar = yupoo.parseSidebar(firstHtml);
     log('Equipos en el menú de Yupoo:', sidebar.length);
 
-    var allRaw = yupoo.parseListing(firstHtml).map(function (item) {
+    function tagMinkangRaw(item) {
       item.source = 'minkang';
+      if (item.encrypted && item.title && !PLACEHOLDER_LOCKED_RE.test(item.title.trim())) {
+        item.allowEncrypted = true;
+      }
       return item;
-    });
+    }
+
+    var allRaw = yupoo.parseListing(firstHtml).map(tagMinkangRaw);
     state.page = 1;
     state.items = allRaw.length;
 
@@ -215,10 +319,7 @@ async function runSync(options) {
       var url = yupoo.BASE + '/categories/712891?page=' + page;
       try {
         var html = await yupoo.fetchWithRetries(url, { timeout: 35000 }, 3);
-        var items = yupoo.parseListing(html).map(function (item) {
-          item.source = 'minkang';
-          return item;
-        });
+        var items = yupoo.parseListing(html).map(tagMinkangRaw);
         allRaw = allRaw.concat(items);
         state.page = page;
         state.items = allRaw.length;
@@ -254,6 +355,19 @@ async function runSync(options) {
       }
     });
     gxgRows.forEach(function (rows) { allRaw = allRaw.concat(rows); });
+
+    var lockedRows = await mapLimit(LOCKED_CLUB_SUBCATEGORIES, 2, async function (entry) {
+      try {
+        var rows = await fetchLockedClubSubcategory(entry);
+        var encRows = rows.filter(function (r) { return r.encrypted; }).length;
+        if (encRows) log('Subcategoría club (' + entry.source + ' · ' + entry.team + '):', rows.length, 'prendas (' + encRows + ' recuperadas de catálogo protegido)');
+        return rows;
+      } catch (err) {
+        log('Aviso subcategoría ' + entry.team + ' (' + entry.source + '):', err.message);
+        return [];
+      }
+    });
+    lockedRows.forEach(function (rows) { allRaw = allRaw.concat(rows); });
 
     state.phase = 'parsing';
     var resolver = parser.buildResolver(sidebar);

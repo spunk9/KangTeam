@@ -578,6 +578,12 @@ async function runBrowserVisualSuite() {
     var productCardLazy = await cdp.evalJs("(function(){ var imgs = Array.from(document.querySelectorAll('#catalog-results .card img, .catalog-team-crest img, .catalog-team-feature-thumb img')); return { total: imgs.length, nonLazy: imgs.filter(function(i){ return i.getAttribute('loading') !== 'lazy'; }).length }; })()");
     assert(productCardLazy && productCardLazy.total > 0 && productCardLazy.nonLazy === 0, 'Tarjetas de producto y cabecera de equipo usan loading="lazy" (' + (productCardLazy ? productCardLazy.total : 0) + ' imágenes, ' + (productCardLazy ? productCardLazy.nonLazy : '?') + ' sin lazy)');
 
+    await cdp.evalJs("location.hash = '#/catalogo?equipo=Juventus&vista=grid'");
+    var juvLoaded = await cdp.waitUntil("document.querySelectorAll('#catalog-results .card').length >= 15 && document.querySelector('#catalog-team-crest img') !== null", 6000);
+    var juvImgReady = await cdp.waitUntil("(function(){ var img = document.querySelector('#catalog-team-crest img'); return !!(img && img.complete && img.naturalWidth > 0); })()", 6000);
+    var juvSrc = await cdp.evalJs("(document.querySelector('#catalog-team-crest img') || {}).src || ''");
+    assert(juvLoaded && juvImgReady && /juventus--white-monochrome/i.test(juvSrc), 'Juventus: catálogo cargado y escudo blanco visible en cabecera (' + juvSrc + ')');
+
     assert(cdp.runtimeExceptions.length === 0, 'Cero errores JS no controlados en navegador real', cdp.runtimeExceptions.join(' | '));
   } finally {
     if (cdp) cdp.close();
@@ -663,6 +669,28 @@ async function runApiAndPrivacySuite() {
       else fpSources[fp] = it.source;
     });
     assert(crossDupCount === 0, 'Cero duplicados entre Minkang y GXGFootball en el catálogo (' + crossDupCount + ' colisiones)');
+
+    var liverpoolCount = items.filter(function (it) { return it && it.team === 'Liverpool'; }).length;
+    assert(liverpoolCount >= 150, 'Liverpool disponible con catálogo completo (' + liverpoolCount + ' prendas)');
+
+    var juvItems = items.filter(function (it) { return it && it.team === 'Juventus'; });
+    assert(juvItems.length >= 16, 'Juventus incluye equipaciones + jugador + entrenamiento GXG (' + juvItems.length + ' prendas)');
+    var juvMinkang = juvItems.filter(function (it) { return it.source === 'minkang'; });
+    var juvMinkangWithSeason = juvMinkang.filter(function (it) { return it.season && it.season !== 'Sin temporada'; });
+    var juvWind = juvMinkang.find(function (it) { return /windbreaker\s+set/i.test(it.title || ''); });
+    var juvLong = juvMinkang.find(function (it) { return /long[-\s]?sleeve/i.test(it.title || ''); });
+    var juvHoodie = juvMinkang.find(function (it) { return /\bhoodie\b/i.test(it.title || ''); });
+    assert(juvMinkang.length >= 6 && juvMinkangWithSeason.length === juvMinkang.length, 'Juventus Minkang conserva título y temporada reales (' + juvMinkangWithSeason.length + '/' + juvMinkang.length + ')');
+    assert(
+      juvWind && pricing.calculate(juvWind, {}).unitPriceCents === 5500 &&
+      juvLong && pricing.calculate(juvLong, {}).unitPriceCents === 2800 &&
+      juvHoodie && pricing.calculate(juvHoodie, {}).unitPriceCents === 5500,
+      'Precios reales en Juventus: Windbreaker Set 55 €, Manga Larga 28 €, Hoodie 55 €'
+    );
+
+    var logosRes = await httpRequest(TEST_PORT, 'GET', '/api/team-logos');
+    var juvLogo = logosRes.json && logosRes.json.logos && logosRes.json.logos['Juventus'];
+    assert(logosRes.status === 200 && /juventus--white-monochrome/i.test(String(juvLogo || '')), 'GET /api/team-logos devuelve escudo Juventus legible sobre fondo oscuro (' + (juvLogo || 'none') + ')');
 
     var sampleGxgf = gxgfItems.find(function (it) { return it && it.cover && /^\d+$/.test(String(it.albumId || '')); });
     if (sampleGxgf) {

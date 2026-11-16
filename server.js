@@ -1033,6 +1033,76 @@ function serveImage(req, res, pathname) {
   });
 }
 
+var logoInFlight = Object.create(null);
+
+function serveTeamLogo(req, res, pathname) {
+  var rel = pathname.slice('/api/logo'.length);
+  if (!/^\/logos\/(?:[a-z0-9-]+\/)?\d+x\d+\/[a-z0-9_-]+\.[a-f0-9]{6,16}\.png$/i.test(rel)) {
+    return sendText(res, 400, 'Ruta de escudo no válida');
+  }
+
+  var diskPath = path.join(IMG_CACHE_DIR, '_logos', rel.replace(/^\/+/, ''));
+  function sendPng(buffer) {
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    res.end(buffer);
+  }
+
+  if (!IS_VERCEL && fs.existsSync(diskPath)) {
+    try { return sendPng(fs.readFileSync(diskPath)); } catch (e) {}
+  }
+
+  if (logoInFlight[rel]) {
+    logoInFlight[rel].then(sendPng).catch(function () { sendText(res, 404, 'Escudo no disponible'); });
+    return;
+  }
+
+  var promise = new Promise(function (resolve, reject) {
+    var reqOut = https.get('https://assets.football-logos.cc' + rel, {
+      timeout: 12000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/png,*/*'
+      }
+    }, function (upRes) {
+      if (upRes.statusCode !== 200 || !/^image\//i.test(String(upRes.headers['content-type'] || ''))) {
+        upRes.resume();
+        return reject(new Error('HTTP ' + upRes.statusCode));
+      }
+      var chunks = [];
+      upRes.on('data', function (c) { chunks.push(c); });
+      upRes.on('end', function () {
+        var buf = Buffer.concat(chunks);
+        if (!buf.length) return reject(new Error('Escudo vacío'));
+        if (!IS_VERCEL) {
+          try {
+            fs.mkdirSync(path.dirname(diskPath), { recursive: true });
+            fs.writeFileSync(diskPath, buf);
+          } catch (e) {}
+        }
+        resolve(buf);
+      });
+    });
+    reqOut.on('timeout', function () { reqOut.destroy(new Error('Timeout escudo')); });
+    reqOut.on('error', reject);
+  }).then(function (buf) {
+    delete logoInFlight[rel];
+    return buf;
+  }).catch(function (err) {
+    delete logoInFlight[rel];
+    throw err;
+  });
+
+  logoInFlight[rel] = promise;
+  promise.then(sendPng).catch(function () {
+    sendText(res, 404, 'Escudo no disponible');
+  });
+}
+
 // ─────────────────────────────────────────────────────────────
 //  Álbumes (galería de cada prenda)
 // ─────────────────────────────────────────────────────────────
@@ -1115,6 +1185,10 @@ async function handle(req, res) {
 
   if (req.method === 'GET' && pathname.indexOf('/img/') === 0) {
     return serveImage(req, res, pathname);
+  }
+
+  if (req.method === 'GET' && pathname.indexOf('/api/logo/') === 0) {
+    return serveTeamLogo(req, res, pathname);
   }
 
   if (pathname === '/api/config' && req.method === 'GET') {

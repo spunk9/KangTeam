@@ -80,7 +80,7 @@
       'Ipswich Town', 'Southampton', 'Leeds United', 'Burnley'
     ]),
     'Serie A': new Set([
-      'AC Milan', 'Inter de Milán', 'Napoli', 'Roma', 'Lazio',
+      'Juventus', 'AC Milan', 'Inter de Milán', 'Napoli', 'Roma', 'Lazio',
       'Fiorentina', 'Atalanta', 'Bologna', 'Torino', 'Como',
       'Parma', 'Cagliari', 'Genoa', 'Hellas Verona', 'Monza',
       'Venezia', 'Sassuolo', 'Pisa', 'Cremonese'
@@ -853,15 +853,19 @@
       .replace(/\b(?:10|12|14|16|18|20|22|24|26|28|30)\s*[-–]\s*(?:10|12|14|16|18|20|22|24|26|28|30)\b/g, ' ')
       .replace(/\b(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)\s*[-–]\s*(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)\b/ig, ' ')
       .replace(/\b(?:two-stars|top quality|best quality|in stock|ready stock|1:1)\b/ig, ' ')
+      .replace(/(\d{2})\s*\/\/+\s*(\d{2})/g, '$1/$2')
       .replace(/\b(2[0-9])(2[0-9])\b/g, function (full, a, b) {
         return parseInt(b, 10) === parseInt(a, 10) + 1 ? a + '/' + b : full;
       })
       .replace(/\bM-U\b/g, 'Manchester United')
+      .replace(/\bUventus\b/ig, 'Juventus')
       .replace(/\bGK-/ig, 'Portero ');
 
     var subTraining = item.subcategory && !/^Niños\s*·/i.test(item.subcategory) ? item.subcategory : 'Conjunto Entrenamiento';
     text = text
       .replace(/\bFull\s+Zip(?:per)?\s+Hooded\s+Windbreaker\s+Set\b/ig, 'Conjunto Cortavientos Capucha')
+      .replace(/\bFull\s+Zip(?:per)?\s+Stand\s+Collar\s+Windbreaker\s+Set\b/ig, 'Conjunto Cortavientos Cuello Alto')
+      .replace(/\bFull\s+Zip(?:per)?\s+Windbreaker\s+Set\b/ig, 'Conjunto Cortavientos')
       .replace(/\bWindbreaker\s+Set\b/ig, 'Conjunto Cortavientos')
       .replace(/\bWindbreaker\b/ig, 'Cortavientos')
       .replace(/\bTraining\s+Suit\s+Set\b/ig, 'Chándal Entrenamiento')
@@ -1129,7 +1133,10 @@
         renderHeroMarquee();
         renderHomeTeams();
         renderTeamsView();
-        if (state.route === 'catalog' && state.view === 'teams') renderCatalog();
+        if (state.route === 'catalog') {
+          updateCatalogIntro();
+          if (state.view === 'teams') renderCatalog();
+        }
       }
     } catch (err) {}
   }
@@ -3528,6 +3535,7 @@
   }
 
   async function fetchAlbumCached(item) {
+    if (!item || item.encrypted) return [];
     var id = item.albumId || item.id;
     var cacheKey = (item.source || 'minkang') + '-' + id;
     if (state.albumCache.has(cacheKey)) return state.albumCache.get(cacheKey);
@@ -3878,6 +3886,10 @@
     var title = cleanTitle(item);
     var fitText = sizeFitHintText(state.selectedSize, item);
     var favActive = isFavorite(item.id);
+    var photoCount = parseInt(item.photos, 10) || 1;
+    var supplierRefHtml = item.encrypted && photoCount > 1
+      ? '<p class="product-supplier-ref"><span>Álbum protegido en proveedor:</span> ' + esc(item.title) + ' · Contiene <strong>' + fmt(photoCount) + ' fotos</strong> en origen (portada de referencia; si buscas otro modelo del álbum consúltanos por WhatsApp).</p>'
+      : '<p class="product-supplier-ref"><span>Ref. proveedor:</span> ' + esc(item.title) + '</p>';
 
     info.innerHTML =
       '<div class="product-info-top">' +
@@ -3891,7 +3903,7 @@
       '</div>' +
       '<h2 id="product-title">' + esc(title) + '</h2>' +
       '<p class="product-team">' + esc(item.team) + ' · ' + esc(item.season) + ' · Tallas ' + esc(item.sizeRange) + '</p>' +
-      '<p class="product-supplier-ref"><span>Ref. proveedor:</span> ' + esc(item.title) + '</p>' +
+      supplierRefHtml +
       '<div class="product-tags">' + tags + '</div>' +
       compareHtml +
       '<div class="product-price-box" id="product-price-box">' + renderPriceBreakdownHtml() + '</div>' +
