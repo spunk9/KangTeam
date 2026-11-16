@@ -1034,6 +1034,56 @@ function serveImage(req, res, pathname) {
 }
 
 var logoInFlight = Object.create(null);
+var logoQueue = [];
+var logoActiveFetches = 0;
+var MAX_LOGO_CONCURRENCY = 6;
+
+function fetchLogoBufferOnce(rel) {
+  return new Promise(function (resolve, reject) {
+    var reqOut = https.get('https://assets.football-logos.cc' + rel, {
+      timeout: 12000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/png,*/*',
+        'Referer': 'https://football-logos.cc/'
+      }
+    }, function (upRes) {
+      if (upRes.statusCode !== 200 || !/^image\//i.test(String(upRes.headers['content-type'] || ''))) {
+        upRes.resume();
+        var err = new Error('HTTP ' + upRes.statusCode);
+        err.statusCode = upRes.statusCode;
+        return reject(err);
+      }
+      var chunks = [];
+      upRes.on('data', function (c) { chunks.push(c); });
+      upRes.on('end', function () {
+        var buf = Buffer.concat(chunks);
+        if (!buf.length) return reject(new Error('Escudo vacío'));
+        resolve(buf);
+      });
+    });
+    reqOut.on('timeout', function () { reqOut.destroy(new Error('Timeout escudo')); });
+    reqOut.on('error', reject);
+  });
+}
+
+function enqueueLogoTask(fn) {
+  return new Promise(function (resolve, reject) {
+    logoQueue.push({ fn: fn, resolve: resolve, reject: reject });
+    drainLogoQueue();
+  });
+}
+
+function drainLogoQueue() {
+  while (logoActiveFetches < MAX_LOGO_CONCURRENCY && logoQueue.length > 0) {
+    var task = logoQueue.shift();
+    logoActiveFetches += 1;
+    Promise.resolve().then(task.fn).then(
+      function (val) { logoActiveFetches -= 1; drainLogoQueue(); task.resolve(val); },
+      function (err) { logoActiveFetches -= 1; drainLogoQueue(); task.reject(err); }
+    );
+  }
+}
 
 function serveTeamLogo(req, res, pathname) {
   var rel = pathname.slice('/api/logo'.length);
@@ -1051,44 +1101,39 @@ function serveTeamLogo(req, res, pathname) {
     });
     res.end(buffer);
   }
+  function sendLogoFail() {
+    res.writeHead(503, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    res.end('Escudo no disponible');
+  }
 
   if (!IS_VERCEL && fs.existsSync(diskPath)) {
     try { return sendPng(fs.readFileSync(diskPath)); } catch (e) {}
   }
 
   if (logoInFlight[rel]) {
-    logoInFlight[rel].then(sendPng).catch(function () { sendText(res, 404, 'Escudo no disponible'); });
+    logoInFlight[rel].then(sendPng).catch(sendLogoFail);
     return;
   }
 
-  var promise = new Promise(function (resolve, reject) {
-    var reqOut = https.get('https://assets.football-logos.cc' + rel, {
-      timeout: 12000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/png,*/*'
-      }
-    }, function (upRes) {
-      if (upRes.statusCode !== 200 || !/^image\//i.test(String(upRes.headers['content-type'] || ''))) {
-        upRes.resume();
-        return reject(new Error('HTTP ' + upRes.statusCode));
-      }
-      var chunks = [];
-      upRes.on('data', function (c) { chunks.push(c); });
-      upRes.on('end', function () {
-        var buf = Buffer.concat(chunks);
-        if (!buf.length) return reject(new Error('Escudo vacío'));
-        if (!IS_VERCEL) {
-          try {
-            fs.mkdirSync(path.dirname(diskPath), { recursive: true });
-            fs.writeFileSync(diskPath, buf);
-          } catch (e) {}
-        }
-        resolve(buf);
-      });
-    });
-    reqOut.on('timeout', function () { reqOut.destroy(new Error('Timeout escudo')); });
-    reqOut.on('error', reject);
+  var promise = enqueueLogoTask(async function () {
+    var buf;
+    try {
+      buf = await fetchLogoBufferOnce(rel);
+    } catch (firstErr) {
+      if (firstErr && firstErr.statusCode === 404) throw firstErr;
+      await new Promise(function (r) { setTimeout(r, 250); });
+      buf = await fetchLogoBufferOnce(rel);
+    }
+    if (!IS_VERCEL) {
+      try {
+        fs.mkdirSync(path.dirname(diskPath), { recursive: true });
+        fs.writeFileSync(diskPath, buf);
+      } catch (e) {}
+    }
+    return buf;
   }).then(function (buf) {
     delete logoInFlight[rel];
     return buf;
@@ -1098,9 +1143,7 @@ function serveTeamLogo(req, res, pathname) {
   });
 
   logoInFlight[rel] = promise;
-  promise.then(sendPng).catch(function () {
-    sendText(res, 404, 'Escudo no disponible');
-  });
+  promise.then(sendPng).catch(sendLogoFail);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1250,7 +1293,10 @@ async function handle(req, res) {
 
   if (pathname === '/api/team-logos' && req.method === 'GET') {
     var logoData = await logos.getTeamLogos(catalog.items, catalog.meta.generatedAt || catalog.items.length);
-    return sendJson(res, 200, logoData, req, { 'Cache-Control': 'public, max-age=3600, s-maxage=3600' });
+    var hasLogos = Boolean(logoData && logoData.matched > 0 && logoData.logos && Object.keys(logoData.logos).length > 0);
+    return sendJson(res, hasLogos ? 200 : 503, logoData, req, {
+      'Cache-Control': hasLogos ? 'public, max-age=3600, s-maxage=3600' : 'no-store'
+    });
   }
 
   if (pathname === '/api/sync' && req.method === 'GET') {

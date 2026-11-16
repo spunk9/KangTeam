@@ -458,6 +458,10 @@ async function runBrowserVisualSuite() {
     assert(desktopCheck && desktopCheck.spotlightTabs >= 2, 'Desktop 1280px: Hero Matchday Spotlight interactivo renderizado (' + (desktopCheck ? desktopCheck.spotlightTabs : 0) + ' pestañas)');
     assert(desktopCheck && desktopCheck.bentoLead && desktopCheck.lightBand, 'Desktop 1280px: Bento de temporadas y banda clara Ivory con descuentos cargados');
 
+    var homeLogosLoaded = await cdp.waitUntil("Array.from(document.querySelectorAll('#home-teams .team-mono.has-logo.is-logo-ready img')).filter(function(i){ return i.complete && i.naturalWidth > 0; }).length >= 10", 8000);
+    var homeLogoStats = await cdp.evalJs("({ total: document.querySelectorAll('#home-teams .team-mono').length, ready: Array.from(document.querySelectorAll('#home-teams .team-mono.has-logo.is-logo-ready img')).filter(function(i){ return i.complete && i.naturalWidth > 0; }).length })");
+    assert(homeLogosLoaded, 'Desktop 1280px: escudos de «Elige tu equipo» cargados en portada (' + (homeLogoStats ? homeLogoStats.ready + '/' + homeLogoStats.total : '?') + ')');
+
     // Interactive Spotlight tab switch & Home Jersey Studio live preview
     await cdp.evalJs("document.querySelectorAll('[data-spotlight-idx]')[1] && document.querySelectorAll('[data-spotlight-idx]')[1].click()");
     var spotlightSwitched = await cdp.waitUntil("document.querySelectorAll('[data-spotlight-idx]')[1].classList.contains('is-active')", 3000);
@@ -560,6 +564,9 @@ async function runBrowserVisualSuite() {
     assert(teamsUxCheck && /244,\s*242,\s*236/.test(teamsUxCheck.chipColor) && /244,\s*242,\s*236/.test(teamsUxCheck.subColor), 'Contraste legible (texto claro sobre fondo oscuro) en Más buscados y divisiones');
     assert(teamsUxCheck && teamsUxCheck.laLigaSubs === 2, 'Equipos: LaLiga separada en 1ª División y 2ª División e históricos');
     assert(teamsUxCheck && teamsUxCheck.otrasInitial === 24 && teamsUxCheck.hasExpandBtn, 'Equipos: Otras ligas plegada a 24 clubes con botón expandir');
+    var spotlightLogosReady = await cdp.waitUntil("Array.from(document.querySelectorAll('#teams-spotlight .team-mono.has-logo.is-logo-ready img')).filter(function(i){ return i.complete && i.naturalWidth > 0; }).length >= 16", 8000);
+    var spotlightLogoCount = await cdp.evalJs("Array.from(document.querySelectorAll('#teams-spotlight .team-mono.has-logo.is-logo-ready img')).filter(function(i){ return i.complete && i.naturalWidth > 0; }).length");
+    assert(spotlightLogosReady, 'Equipos: escudos cargados en tira «Más buscados» (' + spotlightLogoCount + ' visibles)');
     assert(teamsUxCheck && teamsUxCheck.overflow <= 1, 'Móvil 375px: sin desbordamiento horizontal en Equipos (' + (teamsUxCheck ? teamsUxCheck.overflow : '?') + 'px)');
 
     // Test division filter 2ª División -> Cordoba visible, Real Madrid hidden -> reset

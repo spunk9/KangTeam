@@ -735,21 +735,71 @@
     return words.slice(0, 3).map(function (word) { return word.charAt(0); }).join('').toUpperCase();
   }
 
+  function logoProxyUrl(src) {
+    var s = String(src || '');
+    var m = s.match(/^https:\/\/assets\.football-logos\.cc(\/logos\/.+)$/i);
+    return m ? ('/api/logo' + m[1]) : '';
+  }
+
+  window.__ktLogoErr = function (img, mode) {
+    if (!img) return;
+    if (!img.getAttribute('data-logo-proxy')) {
+      var proxy = logoProxyUrl(img.getAttribute('src') || img.src);
+      if (proxy) {
+        img.setAttribute('data-logo-proxy', '1');
+        img.src = proxy;
+        return;
+      }
+    }
+    img.onerror = null;
+    if (mode === 'crest') {
+      var p = img.parentNode;
+      var fb = img.getAttribute('data-fallback');
+      if (p && fb) p.innerHTML = fb;
+      else img.remove();
+      return;
+    }
+    if (mode === 'hide-parent') {
+      if (img.parentNode) img.parentNode.hidden = true;
+      return;
+    }
+    if (mode === 'marquee') {
+      var coverFb = img.getAttribute('data-fallback');
+      img.classList.remove('is-crest');
+      if (coverFb && img.getAttribute('src') !== coverFb) img.src = coverFb;
+      else img.remove();
+      return;
+    }
+    if (img.parentNode) img.parentNode.classList.remove('has-logo', 'is-logo-ready');
+    img.remove();
+  };
+
+  function syncLoadedLogoImgs(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.team-mono.has-logo img').forEach(function (img) {
+      if (img.complete && img.naturalWidth > 0 && img.parentNode) {
+        img.parentNode.classList.add('is-logo-ready');
+      }
+    });
+  }
+
   function teamLogoUrl(name) {
     if (!name || !state.teamLogos) return '';
     return state.teamLogos.get(name) || '';
   }
 
-  function teamMono(name) {
-    var logo = teamLogoUrl(name);
+  function teamMono(name, options) {
+    options = options || {};
+    var logo = options.noLogo ? '' : teamLogoUrl(name);
     var label = '<span class="team-mono-text">' + esc(initials(name)) + '</span>';
     if (!logo) {
       return '<span class="team-mono" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' + label + '</span>';
     }
+    var loadingAttr = options.eager ? '' : ' loading="lazy"';
     return '<span class="team-mono has-logo" style="--mono-bg:' + colorFor(name) + '" aria-hidden="true">' +
-      '<img src="' + esc(logo) + '" alt="" loading="lazy" decoding="async"' +
+      '<img src="' + esc(logo) + '" alt=""' + loadingAttr + ' decoding="async"' +
       ' onload="this.parentNode.classList.add(\'is-logo-ready\')"' +
-      ' onerror="this.parentNode.classList.remove(\'has-logo\');this.remove()">' +
+      ' onerror="window.__ktLogoErr(this,\'mono\')">' +
       label +
       '</span>';
   }
@@ -1122,13 +1172,16 @@
     applyConfig();
   }
 
-  async function loadTeamLogos() {
+  async function loadTeamLogos(attempt) {
+    attempt = attempt || 0;
     try {
       var res = await fetch('/api/team-logos', { headers: { 'Accept': 'application/json' } });
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       var data = await res.json();
       var map = data && data.logos && typeof data.logos === 'object' ? data.logos : {};
-      state.teamLogos = new Map(Object.keys(map).map(function (key) { return [key, map[key]]; }));
+      var keys = Object.keys(map);
+      if (!keys.length) throw new Error('empty-logos');
+      state.teamLogos = new Map(keys.map(function (key) { return [key, map[key]]; }));
       if (!state.loading && state.items.length) {
         renderHeroMarquee();
         renderHomeTeams();
@@ -1137,8 +1190,13 @@
           updateCatalogIntro();
           if (state.view === 'teams') renderCatalog();
         }
+        syncLoadedLogoImgs(document);
       }
-    } catch (err) {}
+    } catch (err) {
+      if (attempt < 2) {
+        setTimeout(function () { loadTeamLogos(attempt + 1); }, 2000 * (attempt + 1));
+      }
+    }
   }
 
   async function loadCatalog() {
@@ -1587,14 +1645,14 @@
       if (crestEl) {
         crestEl.hidden = false;
         crestEl.innerHTML = logo
-          ? '<img src="' + esc(logo) + '" alt="Escudo de ' + esc(teamName) + '" loading="lazy" decoding="async" onerror="var p=this.parentNode,fb=this.getAttribute(\'data-fallback\');if(p&&fb){p.innerHTML=fb;}else{this.remove();}" data-fallback="' + esc(teamMono(teamName)) + '">'
+          ? '<img src="' + esc(logo) + '" alt="Escudo de ' + esc(teamName) + '" loading="lazy" decoding="async" onerror="window.__ktLogoErr(this,\'crest\')" data-fallback="' + esc(teamMono(teamName, { noLogo: true })) + '">'
           : teamMono(teamName);
       }
 
       if (watermarkEl) {
         if (logo) {
           watermarkEl.hidden = false;
-          watermarkEl.innerHTML = '<img src="' + esc(logo) + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.hidden=true">';
+          watermarkEl.innerHTML = '<img src="' + esc(logo) + '" alt="" loading="lazy" decoding="async" onerror="window.__ktLogoErr(this,\'hide-parent\')">';
         } else {
           watermarkEl.hidden = true;
           watermarkEl.innerHTML = '';
@@ -1806,7 +1864,7 @@
       var fallback = coverUrl(team.sample, 'square');
       var src = logo || fallback;
       var cls = logo ? ' class="is-crest"' : '';
-      return '<button type="button" class="marquee-item" data-team-link="' + esc(team.name) + '"><img' + cls + ' src="' + esc(src) + '" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.classList.remove(\'is-crest\');this.src=\'' + esc(fallback) + '\'">' + esc(team.name) + '</button>';
+      return '<button type="button" class="marquee-item" data-team-link="' + esc(team.name) + '"><img' + cls + ' src="' + esc(src) + '" alt="" decoding="async" data-fallback="' + esc(fallback) + '" onerror="window.__ktLogoErr(this,\'marquee\')">' + esc(team.name) + '</button>';
     }).join('');
   }
 
@@ -1882,7 +1940,8 @@
       .filter(function (team) { return team.name !== 'Otros' && team.count > 0; })
       .sort(function (a, b) { return b.count - a.count; })
       .slice(0, 12);
-    container.innerHTML = teams.map(teamCard).join('');
+    container.innerHTML = teams.map(function (t) { return teamCard(t, { eager: true }); }).join('');
+    syncLoadedLogoImgs(container);
   }
 
   function productCard(item) {
@@ -1936,7 +1995,7 @@
     if (team.hasRetro) badges.push('<span class="team-mini-tag">Retro</span>');
     if (options.showDiv && team.division === '2') badges.push('<span class="team-mini-tag is-div2">2ª Div.</span>');
     return '<a class="team-card" href="#/catalogo?equipo=' + enc(team.name) + '">' +
-      teamMono(team.name) +
+      teamMono(team.name, { eager: !!options.eager }) +
       '<div class="team-card-copy"><strong>' + esc(team.name) + '</strong><span>' + fmt(team.count) + ' prendas · ' + esc(topSeasons) + '</span>' +
       (badges.length ? '<div class="team-card-badges">' + badges.join('') + '</div>' : '') +
       '</div>' +
@@ -2110,7 +2169,7 @@
         chips.map(function (team) {
           var isLocal = team.name === 'Cordoba';
           return '<a class="team-spotlight-chip' + (isLocal ? ' is-local' : '') + '" href="#/catalogo?equipo=' + enc(team.name) + '">' +
-            teamMono(team.name) +
+            teamMono(team.name, { eager: true }) +
             '<span>' + esc(team.name) + '</span>' +
             (isLocal ? '<em>Córdoba</em>' : '<b>' + fmt(team.count) + '</b>') +
           '</a>';
