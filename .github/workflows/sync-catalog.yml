@@ -39,6 +39,7 @@ jobs:
           fi
 
       - name: Comprobar cambios reales y publicar sin conflictos
+        id: publish
         shell: bash
         env:
           BRANCH: ${{ github.ref_name }}
@@ -67,23 +68,22 @@ jobs:
               rm -f "$PREV_FILE"
             fi
 
-            HAS_DIFF=$(FRESH_FILE="$FRESH_FILE" PREV_FILE="$PREV_FILE" node <<'NODE'
-          const fs = require('fs');
-          const fresh = JSON.parse(fs.readFileSync(process.env.FRESH_FILE, 'utf8'));
-          if (!process.env.PREV_FILE || !fs.existsSync(process.env.PREV_FILE)) {
-            console.log('yes');
-            process.exit(0);
-          }
-          const prev = JSON.parse(fs.readFileSync(process.env.PREV_FILE, 'utf8'));
-          const sameContent = JSON.stringify(fresh.items) === JSON.stringify(prev.items)
-            && fresh.meta.source === prev.meta.source
-            && JSON.stringify(fresh.meta.sources || []) === JSON.stringify(prev.meta.sources || [])
-            && fresh.meta.store === prev.meta.store
-            && fresh.meta.total === prev.meta.total
-            && fresh.meta.pages === prev.meta.pages;
-          console.log(sameContent ? 'no' : 'yes');
-          NODE
-            )
+            HAS_DIFF=$(FRESH_FILE="$FRESH_FILE" PREV_FILE="$PREV_FILE" node -e '
+              const fs = require("fs");
+              const fresh = JSON.parse(fs.readFileSync(process.env.FRESH_FILE, "utf8"));
+              if (!process.env.PREV_FILE || !fs.existsSync(process.env.PREV_FILE)) {
+                console.log("yes");
+                process.exit(0);
+              }
+              const prev = JSON.parse(fs.readFileSync(process.env.PREV_FILE, "utf8"));
+              const sameContent = JSON.stringify(fresh.items) === JSON.stringify(prev.items)
+                && fresh.meta.source === prev.meta.source
+                && JSON.stringify(fresh.meta.sources || []) === JSON.stringify(prev.meta.sources || [])
+                && fresh.meta.store === prev.meta.store
+                && fresh.meta.total === prev.meta.total
+                && fresh.meta.pages === prev.meta.pages;
+              console.log(sameContent ? "no" : "yes");
+            ')
 
             rm -f "$PREV_FILE"
 
@@ -118,13 +118,16 @@ jobs:
           rm -f "$FRESH_FILE"
           echo "No se pudo publicar data/catalog.json tras 3 intentos."
           exit 1
-        id: publish
 
       - name: Disparar redespliegue Vercel (opcional)
-        if: steps.publish.outputs.pushed == 'true' && secrets.VERCEL_DEPLOY_HOOK_URL != ''
+        if: steps.publish.outputs.pushed == 'true'
         shell: bash
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            echo "Sin VERCEL_DEPLOY_HOOK_URL configurado; Vercel desplegará mediante la integración de GitHub."
+            exit 0
+          fi
           curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL" >/dev/null
           echo "Deploy hook de Vercel disparado."

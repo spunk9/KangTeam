@@ -298,8 +298,9 @@ async function runStaticSuite() {
     /cron:\s*'17 \*\/6 \* \* \*'/.test(syncWorkflow) &&
     /workflow_dispatch:/.test(syncWorkflow) &&
     /node scripts\/sync\.js/.test(syncWorkflow) &&
-    !/npm ci/.test(syncWorkflow),
-    'GitHub Action sync-catalog.yml programada cada 6h, sin dependencia frágil de npm ci y con push seguro'
+    !/npm ci/.test(syncWorkflow) &&
+    !/^\s*if:.*\bsecrets\./m.test(syncWorkflow),
+    'GitHub Action sync-catalog.yml válida (cada 6h, sin npm ci, sin secrets.* en if:)'
   );
 
   checkJson('public/manifest.webmanifest', function (m) {
