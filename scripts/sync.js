@@ -428,6 +428,9 @@ async function runSync(options) {
     if (!items.length && previous && Array.isArray(previous.items) && previous.items.length) {
       throw new Error('La sincronización devolvió 0 prendas; se conserva el catálogo anterior.');
     }
+    if (!pageLimit && !options.force && previous && Array.isArray(previous.items) && previous.items.length > 1000 && items.length < Math.floor(previous.items.length * 0.75)) {
+      throw new Error('Sincronización incompleta (' + items.length + ' vs ' + previous.items.length + ' prendas anteriores); se conserva el catálogo previo.');
+    }
 
     var bySource = {};
     items.forEach(function (it) {

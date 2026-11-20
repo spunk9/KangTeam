@@ -92,8 +92,14 @@ function rebuildCatalogCache(rawText) {
   };
 }
 
+var catalogFileMtimeMs = 0;
+var lastCatalogStatAt = 0;
+var lastAutoSyncAttemptAt = 0;
+var AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
+
 function loadCatalogFromDisk() {
   try {
+    var stat = fs.statSync(CATALOG_FILE);
     var raw = fs.readFileSync(CATALOG_FILE, 'utf8');
     var parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.items)) {
@@ -101,6 +107,7 @@ function loadCatalogFromDisk() {
       catalogById = {};
       parsed.items.forEach(function (item) { catalogById[item.id] = item; });
       rebuildCatalogCache(raw);
+      catalogFileMtimeMs = stat.mtimeMs || Date.now();
       return true;
     }
   } catch (err) {
@@ -109,21 +116,65 @@ function loadCatalogFromDisk() {
   return false;
 }
 
+function maybeReloadCatalogFromDisk() {
+  if (IS_VERCEL) return;
+  var now = Date.now();
+  if (now - lastCatalogStatAt < 60 * 1000) return;
+  lastCatalogStatAt = now;
+  try {
+    var stat = fs.statSync(CATALOG_FILE);
+    if (stat && stat.mtimeMs && stat.mtimeMs !== catalogFileMtimeMs) {
+      if (loadCatalogFromDisk()) {
+        console.log('Catálogo recargado desde disco (' + catalog.items.length + ' prendas).');
+      }
+    }
+  } catch (e) {}
+}
+
 function catalogIsStale() {
   if (!catalog.meta.generatedAt) return true;
-  var age = Date.now() - new Date(catalog.meta.generatedAt).getTime();
+  var ts = new Date(catalog.meta.generatedAt).getTime();
+  if (!isFinite(ts)) return true;
+  var age = Date.now() - ts;
   return age > SYNC_INTERVAL_HOURS * 3600 * 1000;
 }
 
-function refreshIfNeeded() {
+function refreshIfNeeded(forceCheck) {
   if (IS_VERCEL) return;
+  maybeReloadCatalogFromDisk();
   if (syncModule.state.running || !catalogIsStale()) return;
+  var now = Date.now();
+  if (!forceCheck && lastAutoSyncAttemptAt && (now - lastAutoSyncAttemptAt) < AUTO_SYNC_COOLDOWN_MS) return;
+  lastAutoSyncAttemptAt = now;
   console.log('Catálogo desactualizado; sincronizando en segundo plano…');
   syncModule.runSync({}).then(function () {
     loadCatalogFromDisk();
   }).catch(function (err) {
     console.error('Error al sincronizar:', err.message);
   });
+}
+
+function canTriggerGithubSync() {
+  return Boolean(process.env.GITHUB_TOKEN && process.env.GITHUB_REPO);
+}
+
+async function triggerGithubCatalogSync() {
+  var repo = String(process.env.GITHUB_REPO || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
+  var token = String(process.env.GITHUB_TOKEN || '').trim();
+  var ref = String(process.env.GITHUB_WORKFLOW_REF || 'main').trim() || 'main';
+  if (!repo || !token || repo.indexOf('/') === -1) {
+    throw new Error('Configura GITHUB_REPO (ej. usuario/repo) y GITHUB_TOKEN para lanzar la actualización desde Vercel.');
+  }
+  var endpoint = 'https://api.github.com/repos/' + repo + '/actions/workflows/sync-catalog.yml/dispatches';
+  var res = await postJson(endpoint, {
+    Authorization: 'Bearer ' + token,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'KANG-Team-Catalog-Sync'
+  }, { ref: ref }, 12000);
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error('GitHub Actions devolvió HTTP ' + res.status + (res.body ? ': ' + res.body.slice(0, 140) : ''));
+  }
+  return { ok: true, triggered: 'github_actions', repo: repo, ref: ref };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1565,6 +1616,8 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/config' && req.method === 'GET') {
+    maybeReloadCatalogFromDisk();
+    if (!IS_VERCEL && catalogIsStale()) refreshIfNeeded();
     return sendJson(res, 200, {
       store: STORE,
       syncIntervalHours: SYNC_INTERVAL_HOURS,
@@ -1590,10 +1643,12 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/catalog' && req.method === 'GET') {
+    maybeReloadCatalogFromDisk();
     if (!catalog.items.length) {
-      refreshIfNeeded();
+      refreshIfNeeded(true);
       return sendJson(res, 503, { syncing: true, status: syncModule.state }, req);
     }
+    if (!IS_VERCEL && catalogIsStale()) refreshIfNeeded();
     var cacheHdr = 'public, max-age=300, stale-while-revalidate=3600';
     if (catalogCache.etag && req.headers['if-none-match'] === catalogCache.etag) {
       res.writeHead(304, {
@@ -1630,25 +1685,39 @@ async function handle(req, res) {
   }
 
   if (pathname === '/api/sync' && req.method === 'GET') {
+    maybeReloadCatalogFromDisk();
+    if (!IS_VERCEL && catalogIsStale()) refreshIfNeeded();
     return sendJson(res, 200, {
+      ok: true,
       state: syncModule.state,
       updatedAt: catalog.meta.generatedAt,
       total: catalog.meta.total,
-      stale: catalogIsStale()
+      stale: catalogIsStale(),
+      autoSyncHours: SYNC_INTERVAL_HOURS,
+      canRemoteTriggerSync: Boolean(!IS_VERCEL || canTriggerGithubSync())
     }, req);
   }
 
   if (pathname === '/api/sync' && req.method === 'POST') {
-    if (IS_VERCEL) {
-      return sendJson(res, 503, { error: 'En Vercel, sincroniza el catálogo localmente o mediante GitHub Action.' }, req);
-    }
     var syncAuth = isAdminAuthorized(req, parsed);
     if (!syncAuth.ok) {
       return sendJson(res, syncAuth.status, { error: syncAuth.error }, req);
     }
+    if (IS_VERCEL) {
+      if (canTriggerGithubSync()) {
+        try {
+          var ghOut = await triggerGithubCatalogSync();
+          return sendJson(res, 202, Object.assign({ syncing: true, message: 'GitHub Action de sincronización disparada; el catálogo se actualizará en ~2 min.' }, ghOut), req);
+        } catch (ghErr) {
+          return sendJson(res, 502, { error: ghErr.message || 'No se pudo disparar la GitHub Action.' }, req);
+        }
+      }
+      return sendJson(res, 503, { error: 'En Vercel, el catálogo se actualiza automáticamente cada 6h mediante la GitHub Action «Actualizar catálogo» (o añade GITHUB_REPO y GITHUB_TOKEN para lanzarlo desde aquí).' }, req);
+    }
     if (syncModule.state.running) {
       return sendJson(res, 202, { ok: true, syncing: true, state: syncModule.state }, req);
     }
+    lastAutoSyncAttemptAt = Date.now();
     sendJson(res, 202, { ok: true, syncing: true }, req);
     syncModule.runSync({}).then(loadCatalogFromDisk).catch(function (err) {
       console.error('Error de sincronización:', err.message);
@@ -1716,6 +1785,12 @@ async function handle(req, res) {
       storageMode: getStorageMode(),
       isVercel: IS_VERCEL,
       adminConfigured: !!ADMIN_TOKEN,
+      catalogUpdatedAt: catalog.meta.generatedAt,
+      catalogTotal: catalog.items.length,
+      syncIntervalHours: SYNC_INTERVAL_HOURS,
+      catalogStale: catalogIsStale(),
+      syncRunning: Boolean(syncModule.state.running),
+      canRemoteTriggerSync: Boolean(!IS_VERCEL || canTriggerGithubSync()),
       statuses: ORDER_STATUS_LABELS,
       orders: orders,
       stats: stats

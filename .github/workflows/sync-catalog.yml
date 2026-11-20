@@ -16,69 +16,115 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Sincronizar catálogo desde Yupoo
-        run: npm run sync
-
-      - name: Descartar cambios si solo cambió la fecha de generación
+      - name: Sincronizar catálogo desde Yupoo (con reintento automático)
         shell: bash
         run: |
+          set -e
+          if ! node scripts/sync.js; then
+            echo "Primer intento fallido; reintentando en 20s…"
+            sleep 20
+            node scripts/sync.js
+          fi
+
+      - name: Comprobar cambios reales y publicar sin conflictos
+        shell: bash
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -e
+          BRANCH="${BRANCH:-main}"
           if [ ! -f data/catalog.json ]; then
-            echo "No existe data/catalog.json."
-            exit 0
+            echo "No existe data/catalog.json tras la sincronización."
+            exit 1
           fi
-          if ! git cat-file -e HEAD:data/catalog.json 2>/dev/null; then
-            echo "Primer guardado de data/catalog.json en el repositorio."
-            exit 0
-          fi
-          PREV_FILE="${RUNNER_TEMP:-/tmp}/prev-catalog.json"
-          git show HEAD:data/catalog.json > "$PREV_FILE"
-          PREV_FILE="$PREV_FILE" node <<'NODE'
-          const fs = require('fs');
-          const { execFileSync } = require('child_process');
-          const current = JSON.parse(fs.readFileSync('data/catalog.json', 'utf8'));
-          const previous = JSON.parse(fs.readFileSync(process.env.PREV_FILE, 'utf8'));
-          const sameContent = JSON.stringify(current.items) === JSON.stringify(previous.items)
-            && current.meta.source === previous.meta.source
-            && JSON.stringify(current.meta.sources || []) === JSON.stringify(previous.meta.sources || [])
-            && current.meta.store === previous.meta.store
-            && current.meta.total === previous.meta.total
-            && current.meta.pages === previous.meta.pages;
-          if (sameContent) {
-            execFileSync('git', ['checkout', 'HEAD', '--', 'data/catalog.json']);
-            console.log('El catálogo no cambió; no se creará ningún commit.');
-          } else {
-            console.log('Cambios detectados en el catálogo:', previous.meta.total, '->', current.meta.total);
-          }
-          NODE
-          rm -f "$PREV_FILE"
 
-      - name: Publicar cambios del catálogo
-        shell: bash
-        run: |
-          if [ -z "$(git status --porcelain -- data/catalog.json)" ]; then
-            echo "Sin cambios en el catálogo; no se hace nada."
-            exit 0
-          fi
+          FRESH_FILE="${RUNNER_TEMP:-/tmp}/fresh-catalog.json"
+          cp data/catalog.json "$FRESH_FILE"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/catalog.json
-          if git diff --cached --quiet -- data/catalog.json; then
-            echo "Sin cambios que publicar en el catálogo."
-            exit 0
-          fi
-          git commit -m "Actualizar catálogo automáticamente"
-          git pull --rebase origin "${GITHUB_REF_NAME:-main}"
-          git push
+
+          for attempt in 1 2 3; do
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            PREV_FILE="${RUNNER_TEMP:-/tmp}/prev-catalog.json"
+            if [ -f data/catalog.json ]; then
+              cp data/catalog.json "$PREV_FILE"
+            else
+              rm -f "$PREV_FILE"
+            fi
+
+            HAS_DIFF=$(FRESH_FILE="$FRESH_FILE" PREV_FILE="$PREV_FILE" node <<'NODE'
+          const fs = require('fs');
+          const fresh = JSON.parse(fs.readFileSync(process.env.FRESH_FILE, 'utf8'));
+          if (!process.env.PREV_FILE || !fs.existsSync(process.env.PREV_FILE)) {
+            console.log('yes');
+            process.exit(0);
+          }
+          const prev = JSON.parse(fs.readFileSync(process.env.PREV_FILE, 'utf8'));
+          const sameContent = JSON.stringify(fresh.items) === JSON.stringify(prev.items)
+            && fresh.meta.source === prev.meta.source
+            && JSON.stringify(fresh.meta.sources || []) === JSON.stringify(prev.meta.sources || [])
+            && fresh.meta.store === prev.meta.store
+            && fresh.meta.total === prev.meta.total
+            && fresh.meta.pages === prev.meta.pages;
+          console.log(sameContent ? 'no' : 'yes');
+          NODE
+            )
+
+            rm -f "$PREV_FILE"
+
+            if [ "$HAS_DIFF" != "yes" ]; then
+              echo "El catálogo no ha cambiado respecto a origin/$BRANCH; no se crea commit."
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              rm -f "$FRESH_FILE"
+              exit 0
+            fi
+
+            cp "$FRESH_FILE" data/catalog.json
+            git add data/catalog.json
+            if git diff --cached --quiet -- data/catalog.json; then
+              echo "Sin cambios que publicar."
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              rm -f "$FRESH_FILE"
+              exit 0
+            fi
+
+            git commit -m "Actualizar catálogo automáticamente"
+            if git push origin "HEAD:$BRANCH"; then
+              echo "Catálogo publicado correctamente en $BRANCH."
+              echo "pushed=true" >> "$GITHUB_OUTPUT"
+              rm -f "$FRESH_FILE"
+              exit 0
+            fi
+
+            echo "El push falló en el intento $attempt (posible cambio concurrente); reintentando…"
+            sleep 3
+          done
+
+          rm -f "$FRESH_FILE"
+          echo "No se pudo publicar data/catalog.json tras 3 intentos."
+          exit 1
+        id: publish
+
+      - name: Disparar redespliegue Vercel (opcional)
+        if: steps.publish.outputs.pushed == 'true' && secrets.VERCEL_DEPLOY_HOOK_URL != ''
+        shell: bash
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL" >/dev/null
+          echo "Deploy hook de Vercel disparado."

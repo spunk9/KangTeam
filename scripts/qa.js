@@ -293,6 +293,15 @@ async function runStaticSuite() {
     });
   });
 
+  var syncWorkflow = readUtf8('.github/workflows/sync-catalog.yml');
+  assert(
+    /cron:\s*'17 \*\/6 \* \* \*'/.test(syncWorkflow) &&
+    /workflow_dispatch:/.test(syncWorkflow) &&
+    /node scripts\/sync\.js/.test(syncWorkflow) &&
+    !/npm ci/.test(syncWorkflow),
+    'GitHub Action sync-catalog.yml programada cada 6h, sin dependencia frágil de npm ci y con push seguro'
+  );
+
   checkJson('public/manifest.webmanifest', function (m) {
     assert(!!(m.name && m.short_name && m.start_url && m.display === 'standalone'), 'Manifest PWA con nombre y modo standalone');
     var icons = Array.isArray(m.icons) ? m.icons : [];
@@ -853,6 +862,15 @@ async function runApiAndPrivacySuite() {
       waPrep.json.items[0].imageUrl.indexOf('/img') !== -1 &&
       String(waPrep.json.whatsappUrl || '').indexOf('https://wa.me/34699234010') === 0,
       'POST /api/whatsapp-promo/send prepara fotos, enlaces /p/:id y enlace wa.me correctamente'
+    );
+
+    var syncStatus = await httpRequest(TEST_PORT, 'GET', '/api/sync');
+    assert(
+      syncStatus.status === 200 && syncStatus.json && syncStatus.json.ok &&
+      typeof syncStatus.json.autoSyncHours === 'number' &&
+      syncStatus.json.total > 10000 &&
+      Boolean(syncStatus.json.updatedAt),
+      'GET /api/sync informa estado, fecha de actualización y cadencia automática (' + (syncStatus.json ? syncStatus.json.autoSyncHours + 'h' : '?') + ')'
     );
 
     // Run live headless Chromium visual & layout checks against the running QA server

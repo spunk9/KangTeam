@@ -6674,12 +6674,15 @@
         }).join('')
       : '<div class="empty-state"><h3>Sin pedidos en esta vista</h3><p>Cuando lleguen pedidos o ajustes el filtro aparecerán aquí.</p></div>';
 
+    var catUpdated = meta.catalogUpdatedAt ? new Date(meta.catalogUpdatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'pendiente';
+    var catSyncHint = ' · Catálogo: <strong>' + fmt(meta.catalogTotal || (state.catalog && state.catalog.items ? state.catalog.items.length : 0)) + ' prendas</strong> (act. ' + esc(catUpdated) + ' · auto cada ' + esc(String(meta.syncIntervalHours || 6)) + 'h' + (meta.syncRunning ? ' · sincronizando…' : '') + ')';
+
     box.innerHTML =
       '<div class="admin-topbar">' +
-        '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
+        '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + catSyncHint + '</div>' +
         '<div class="admin-topbar-actions">' +
           '<a class="btn btn-whatsapp" href="#/difusion"><svg><use href="#i-whatsapp"/></svg> Difusión WhatsApp</a>' +
-          (!meta.isVercel ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
+          ((!meta.isVercel || meta.canRemoteTriggerSync) ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
           '<button type="button" class="btn btn-outline" id="admin-export-csv">Exportar CSV</button>' +
           '<button type="button" class="btn btn-outline" id="admin-refresh-btn">Actualizar</button>' +
           (state.adminToken ? '<button type="button" class="btn btn-ghost" id="admin-logout-btn">Cerrar sesión</button>' : '') +
