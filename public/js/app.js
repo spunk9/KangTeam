@@ -232,7 +232,30 @@
     adminNeedsToken: false,
     adminDeleteConfirmId: '',
     deferredInstallPrompt: null,
-    analyticsInitialized: false
+    analyticsInitialized: false,
+    promoStudio: {
+      q: '',
+      team: '',
+      season: '',
+      type: '',
+      preset: '',
+      limit: 24,
+      selectedIds: [],
+      template: 'direct',
+      headline: 'NUEVA LLEGADA · KANG TEAM',
+      includePrice: true,
+      includeSizes: true,
+      includeLink: true,
+      includeGallery: false,
+      phone: '',
+      publicBaseUrl: '',
+      customMessage: '',
+      messageDirty: false,
+      serverConfig: null,
+      sending: false,
+      result: null,
+      resultError: ''
+    }
   };
 
   // ── Utilidades ───────────────────────────────────────────
@@ -1437,6 +1460,7 @@
     if (state.route === 'how') return 'Cómo funciona';
     if (state.route === 'track') return 'Seguimiento de pedido';
     if (state.route === 'admin') return 'Gestión de pedidos';
+    if (state.route === 'promo') return 'Difusión WhatsApp';
     return '';
   }
 
@@ -1450,7 +1474,8 @@
       '/como-funciona': 'how',
       '/precios': 'prices',
       '/seguimiento': 'track',
-      '/admin': 'admin'
+      '/admin': 'admin',
+      '/difusion': 'promo'
     };
     state.route = isProductRoute ? (state.route || 'catalog') : (routeKeys[route.path] || 'home');
 
@@ -1534,6 +1559,19 @@
       }
       renderAdminView();
       loadAdminOrders();
+    } else if (route.path === '/difusion') {
+      viewId = 'view-promo';
+      navKey = '';
+      if (!state.adminToken) {
+        try { state.adminToken = sessionStorage.getItem('kang_admin_token') || ''; } catch (e) {}
+      }
+      var preId = route.params.get('id') || '';
+      if (preId && state.promoStudio.selectedIds.indexOf(preId) === -1 && state.promoStudio.selectedIds.length < 10) {
+        state.promoStudio.selectedIds.unshift(preId);
+        savePromoStudioPrefs();
+      }
+      loadPromoServerConfig();
+      renderPromoStudioView();
     } else if (isProductRoute) {
       viewId = state.route === 'catalog' ? 'view-catalog' : 'view-home';
       navKey = state.route === 'catalog' ? 'catalog' : 'home';
@@ -4162,7 +4200,7 @@
   function shareCurrentProduct() {
     var item = state.product;
     if (!item) return;
-    var url = location.origin + location.pathname + '#/producto/' + enc(item.id);
+    var url = location.origin + '/p/' + enc(item.id);
     var title = cleanTitle(item) + ' · ' + item.team;
     if (navigator.share) {
       navigator.share({ title: title, text: title + ' en KANG Team', url: url }).catch(function (err) {
@@ -5910,6 +5948,7 @@
 
     bindTrackEvents();
     bindAdminEvents();
+    bindPromoStudioEvents();
 
     document.addEventListener('click', function (event) {
       var favBtn = event.target.closest('[data-fav-toggle]');
@@ -6144,6 +6183,7 @@
     state.favSet = new Set(state.favorites);
     state.orders = loadOrders();
     state.customer = loadCustomer();
+    loadPromoStudioPrefs();
     state.galleryToken = 0;
 
     initOverlays();
@@ -6638,6 +6678,7 @@
       '<div class="admin-topbar">' +
         '<div class="admin-storage-note">Almacenamiento: <strong>' + esc(storageText) + '</strong>' + (meta.isVercel && meta.storageMode !== 'blob' ? ' · <em>Activa Vercel Blob para guardar pedidos entre despliegues</em>' : '') + '</div>' +
         '<div class="admin-topbar-actions">' +
+          '<a class="btn btn-whatsapp" href="#/difusion"><svg><use href="#i-whatsapp"/></svg> Difusión WhatsApp</a>' +
           (!meta.isVercel ? '<button type="button" class="btn btn-outline" id="admin-sync-btn">Sincronizar catálogo</button>' : '') +
           '<button type="button" class="btn btn-outline" id="admin-export-csv">Exportar CSV</button>' +
           '<button type="button" class="btn btn-outline" id="admin-refresh-btn">Actualizar</button>' +
@@ -6730,6 +6771,894 @@
         renderAdminView();
         var inp = $('#admin-search-input');
         if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+      }
+    });
+  }
+
+  // ── Estudio de Difusión WhatsApp ─────────────────────────
+
+  var promoPrefsStorageKey = 'kang_whatsapp_promo_v1';
+
+  function loadPromoStudioPrefs() {
+    try {
+      var raw = localStorage.getItem(promoPrefsStorageKey);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (!saved || typeof saved !== 'object') return;
+      if (Array.isArray(saved.selectedIds)) {
+        state.promoStudio.selectedIds = saved.selectedIds.filter(Boolean).slice(0, 10);
+      }
+      if (typeof saved.phone === 'string') state.promoStudio.phone = saved.phone;
+      if (typeof saved.publicBaseUrl === 'string') state.promoStudio.publicBaseUrl = saved.publicBaseUrl;
+      if (typeof saved.headline === 'string') state.promoStudio.headline = saved.headline;
+      if (saved.template === 'direct' || saved.template === 'drop' || saved.template === 'pack') {
+        state.promoStudio.template = saved.template;
+      }
+    } catch (e) {}
+  }
+
+  function savePromoStudioPrefs() {
+    try {
+      var ps = state.promoStudio;
+      localStorage.setItem(promoPrefsStorageKey, JSON.stringify({
+        selectedIds: ps.selectedIds.slice(0, 10),
+        phone: ps.phone || '',
+        publicBaseUrl: ps.publicBaseUrl || '',
+        headline: ps.headline || '',
+        template: ps.template || 'direct'
+      }));
+    } catch (e) {}
+  }
+
+  async function loadPromoServerConfig() {
+    if (state.promoStudio.serverConfig) return;
+    try {
+      var res = await fetch('/api/whatsapp-promo/config', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      var cfg = await res.json();
+      state.promoStudio.serverConfig = cfg;
+      if (!state.promoStudio.phone && cfg && cfg.defaultPhone) {
+        state.promoStudio.phone = cfg.defaultPhone;
+      }
+      if (!state.promoStudio.publicBaseUrl && cfg && cfg.publicBaseUrl) {
+        state.promoStudio.publicBaseUrl = cfg.publicBaseUrl;
+      }
+      if (state.route === 'promo') renderPromoStudioView();
+    } catch (e) {}
+  }
+
+  function promoResolvedBaseUrl() {
+    var raw = String(state.promoStudio.publicBaseUrl || '').trim().replace(/\/+$/, '');
+    if (/^https?:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(raw)) return raw;
+    return location.origin;
+  }
+
+  function promoProductUrl(item) {
+    return promoResolvedBaseUrl() + '/p/' + enc(item.id);
+  }
+
+  function promoSelectedItems() {
+    var out = [];
+    state.promoStudio.selectedIds.forEach(function (id) {
+      var it = state.byId.get(id);
+      if (it) out.push(it);
+    });
+    return out;
+  }
+
+  function promoFilteredItems() {
+    var ps = state.promoStudio;
+    var qNorm = ps.q ? expandQueryText(ps.q) : '';
+    var qTokens = qNorm ? qNorm.split(' ').filter(Boolean) : [];
+    return state.items.filter(function (item) {
+      if (ps.team && item.team !== ps.team) return false;
+      if (ps.season && item.seasonGroup !== ps.season) return false;
+      if (ps.type && item.type !== ps.type) return false;
+      if (ps.preset === 'new26' && item.seasonGroup !== '26/27') return false;
+      if (ps.preset === 'retro' && item.seasonGroup !== 'Retro' && (!Array.isArray(item.flags) || item.flags.indexOf('retro') === -1)) return false;
+      if (ps.preset === 'winter' && item.collection !== 'primavera-invierno' && item.type !== 'training' && item.type !== 'jacket' && item.type !== 'hoodie') return false;
+      if (ps.preset === 'player' && (!Array.isArray(item.flags) || item.flags.indexOf('player') === -1)) return false;
+      if (qTokens.length && !textMatchesSearchTokens(item._search || '', qTokens)) return false;
+      return true;
+    });
+  }
+
+  function buildPromoWhatsappMessage(items) {
+    var ps = state.promoStudio;
+    var list = items || promoSelectedItems();
+    if (!list.length) return '';
+    var lines = [];
+    var head = String(ps.headline || '').trim();
+    if (ps.template === 'drop') {
+      lines.push(head || 'NUEVA LLEGADA · KANG TEAM');
+    } else if (ps.template === 'pack') {
+      lines.push(head || 'SELECCIÓN KANG TEAM · DESCUENTO GRUPO');
+    } else if (head) {
+      lines.push(head);
+    }
+
+    if (list.length === 1) {
+      var one = list[0];
+      var onePrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(one)) : '';
+      lines.push('*' + one.team + '* · ' + cleanTitle(one));
+      var meta = [];
+      if (one.season && one.season !== 'Sin temporada') meta.push('Temporada ' + one.season);
+      if (ps.includePrice && onePrice) meta.push('*' + onePrice + '*');
+      if (ps.includeSizes && one.sizeRange) meta.push('Tallas ' + one.sizeRange);
+      if (meta.length) lines.push(meta.join(' · '));
+      if (ps.includeSizes && one.custom) {
+        lines.push('Personalizable con nombre y dorsal (+2 €) y parches (+1 €)');
+      }
+      if (ps.template === 'pack') {
+        lines.push('Descuento grupo desde 5 prendas (-1 € / -2 € / -3 € por ud.)');
+      }
+      lines.push('Recogida gratis en Córdoba · Pago por Bizum o WhatsApp');
+      if (ps.includeLink) {
+        lines.push('Ver fotos y pedir en la web: ' + promoProductUrl(one));
+      }
+      return lines.join('\n');
+    }
+
+    lines.push('');
+    list.forEach(function (it, idx) {
+      var pr = window.KangPricing ? KangPricing.money(itemBasePriceCents(it)) : '';
+      var row = (idx + 1) + '. *' + it.team + '* · ' + cleanTitle(it);
+      if (ps.includePrice && pr) row += ' — *' + pr + '*';
+      if (ps.includeSizes && it.sizeRange) row += ' (' + it.sizeRange + ')';
+      lines.push(row);
+      if (ps.includeLink) lines.push(promoProductUrl(it));
+    });
+    lines.push('');
+    lines.push('Personalizable con dorsal (+2 €) y parches (+1 €) · Descuento grupo desde 5 prendas');
+    lines.push('Recogida gratis en Córdoba · Catálogo completo: ' + promoResolvedBaseUrl());
+    return lines.join('\n');
+  }
+
+  function currentPromoMessage(items) {
+    var ps = state.promoStudio;
+    if (ps.messageDirty && ps.customMessage) return ps.customMessage;
+    return buildPromoWhatsappMessage(items);
+  }
+
+  function promoWhatsappHref(items) {
+    var phone = String(state.promoStudio.phone || (state.config && state.config.store && state.config.store.whatsapp) || '34699234010').replace(/\D/g, '');
+    if (phone.length === 9 && /^[6789]/.test(phone)) phone = '34' + phone;
+    var msg = currentPromoMessage(items);
+    return (phone ? 'https://wa.me/' + phone : 'https://wa.me/') + '?text=' + encodeURIComponent(msg);
+  }
+
+  function loadCanvasImage(src) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error('img-load')); };
+      img.src = src;
+    });
+  }
+
+  function drawCoverImage(ctx, img, x, y, w, h) {
+    var iw = img.naturalWidth || img.width || 1;
+    var ih = img.naturalHeight || img.height || 1;
+    var scale = Math.max(w / iw, h / ih);
+    var dw = iw * scale;
+    var dh = ih * scale;
+    var dx = x + (w - dw) / 2;
+    var dy = y + (h - dh) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
+  function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+    var words = String(text || '').split(/\s+/);
+    var line = '';
+    var lines = [];
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? (line + ' ' + words[i]) : words[i];
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = words[i];
+        if (lines.length >= maxLines) break;
+      } else {
+        line = test;
+      }
+    }
+    if (line && lines.length < maxLines) lines.push(line);
+    lines.forEach(function (ln, idx) {
+      ctx.fillText(ln, x, y + idx * lineHeight);
+    });
+    return lines.length;
+  }
+
+  async function renderPromoPosterCanvas() {
+    var canvas = $('#promo-poster-canvas');
+    if (!canvas) return;
+    var items = promoSelectedItems();
+    var w = 1080;
+    var h = 1350;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#0a0c0f';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle top Volt bar
+    ctx.fillStyle = '#d9ff3f';
+    ctx.fillRect(0, 0, w, 14);
+
+    if (!items.length) {
+      ctx.fillStyle = '#9aa0ab';
+      ctx.font = '600 32px "Plus Jakarta Sans", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Selecciona una o varias prendas', w / 2, h / 2 - 16);
+      ctx.fillStyle = '#6f7582';
+      ctx.font = '500 24px "Plus Jakarta Sans", Arial, sans-serif';
+      ctx.fillText('Aquí verás la tarjeta lista para WhatsApp', w / 2, h / 2 + 28);
+      ctx.textAlign = 'left';
+      return;
+    }
+
+    var mediaX = 48;
+    var mediaY = 128;
+    var mediaW = w - 96;
+    var mediaH = 830;
+
+    // Header brand line
+    ctx.fillStyle = '#f4f2ec';
+    ctx.font = '800 44px "Barlow Condensed", Arial, sans-serif';
+    ctx.fillText('KANG', 48, 86);
+    var kangW = ctx.measureText('KANG').width;
+    ctx.fillStyle = '#d9ff3f';
+    ctx.fillText('TEAM', 48 + kangW + 8, 86);
+
+    ctx.fillStyle = '#a7abb4';
+    ctx.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(items.length === 1 ? (items[0].season || 'CATÁLOGO OFICIAL') : (items.length + ' PRENDAS SELECCIONADAS'), w - 48, 82);
+    ctx.textAlign = 'left';
+
+    var tiles = items.slice(0, 4);
+    var loadedImgs = await Promise.all(tiles.map(function (it) {
+      return loadCanvasImage(coverUrl(it, 'medium')).catch(function () { return null; });
+    }));
+
+    ctx.fillStyle = '#141821';
+    ctx.fillRect(mediaX, mediaY, mediaW, mediaH);
+
+    if (tiles.length === 1) {
+      if (loadedImgs[0]) drawCoverImage(ctx, loadedImgs[0], mediaX, mediaY, mediaW, mediaH);
+    } else if (tiles.length === 2) {
+      var gap2 = 14;
+      var cw2 = (mediaW - gap2) / 2;
+      if (loadedImgs[0]) drawCoverImage(ctx, loadedImgs[0], mediaX, mediaY, cw2, mediaH);
+      if (loadedImgs[1]) drawCoverImage(ctx, loadedImgs[1], mediaX + cw2 + gap2, mediaY, cw2, mediaH);
+    } else {
+      var gap4 = 14;
+      var cw4 = (mediaW - gap4) / 2;
+      var ch4 = (mediaH - gap4) / 2;
+      for (var t = 0; t < tiles.length; t++) {
+        var col = t % 2;
+        var row = Math.floor(t / 2);
+        var tx = mediaX + col * (cw4 + gap4);
+        var ty = mediaY + row * (ch4 + gap4);
+        if (loadedImgs[t]) drawCoverImage(ctx, loadedImgs[t], tx, ty, cw4, ch4);
+        var tPrice = window.KangPricing ? KangPricing.money(itemBasePriceCents(tiles[t])) : '';
+        if (tPrice && state.promoStudio.includePrice) {
+          ctx.fillStyle = 'rgba(10,12,15,0.86)';
+          ctx.fillRect(tx + 14, ty + ch4 - 56, 152, 42);
+          ctx.fillStyle = '#d9ff3f';
+          ctx.font = '800 24px "Plus Jakarta Sans", Arial, sans-serif';
+          ctx.fillText(tPrice, tx + 28, ty + ch4 - 27);
+        }
+      }
+    }
+
+    // Bottom scrim inside media
+    var grad = ctx.createLinearGradient(0, mediaY + mediaH - 140, 0, mediaY + mediaH);
+    grad.addColorStop(0, 'rgba(10,12,15,0)');
+    grad.addColorStop(1, 'rgba(10,12,15,0.72)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(mediaX, mediaY + mediaH - 140, mediaW, 140);
+
+    // Price badge on bottom-right of media when single item
+    var primary = items[0];
+    var priceText = window.KangPricing ? KangPricing.money(itemBasePriceCents(primary)) : '';
+    if (items.length === 1 && state.promoStudio.includePrice && priceText) {
+      ctx.fillStyle = '#d9ff3f';
+      ctx.fillRect(w - 48 - 250, mediaY + mediaH - 96, 250, 96);
+      ctx.fillStyle = '#0a0c0f';
+      ctx.font = '800 50px "Barlow Condensed", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(priceText, w - 48 - 125, mediaY + mediaH - 32);
+      ctx.textAlign = 'left';
+    }
+
+    // Footer info block
+    var infoY = mediaY + mediaH + 56;
+    ctx.fillStyle = '#d9ff3f';
+    ctx.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif';
+    var kicker = items.length === 1
+      ? (primary.team + (primary.season && primary.season !== 'Sin temporada' ? ' · ' + primary.season : '')).toUpperCase()
+      : (state.promoStudio.headline || 'SELECCIÓN DESTACADA').toUpperCase();
+    ctx.fillText(kicker.slice(0, 46), 48, infoY);
+
+    ctx.fillStyle = '#f4f2ec';
+    ctx.font = '800 44px "Plus Jakarta Sans", Arial, sans-serif';
+    var mainHeading = items.length === 1
+      ? cleanTitle(primary)
+      : items.map(function (it) { return it.team; }).filter(function (v, idx, arr) { return arr.indexOf(v) === idx; }).slice(0, 3).join(' · ');
+    var usedLines = drawWrappedText(ctx, mainHeading, 48, infoY + 56, w - 96, 52, 2);
+
+    ctx.fillStyle = '#a7abb4';
+    ctx.font = '600 24px "Plus Jakarta Sans", Arial, sans-serif';
+    var subInfo = items.length === 1
+      ? ('Tallas ' + (primary.sizeRange || 'S-2XL') + (primary.custom ? ' · Personalizable (+2 € dorsal)' : '') + ' · Recogida gratis Córdoba')
+      : ('Descuento grupo desde 5 prendas · Personalizable con dorsal · Córdoba');
+    ctx.fillText(subInfo.slice(0, 68), 48, infoY + 56 + usedLines * 52 + 12);
+
+    // Bottom URL bar
+    ctx.fillStyle = '#151923';
+    ctx.fillRect(48, h - 104, w - 96, 64);
+    ctx.fillStyle = '#f4f2ec';
+    ctx.font = '700 24px "Plus Jakarta Sans", Arial, sans-serif';
+    var displayUrl = promoResolvedBaseUrl().replace(/^https?:\/\//i, '');
+    ctx.fillText('Pide en la web: ' + displayUrl, 72, h - 64);
+    ctx.fillStyle = '#d9ff3f';
+    ctx.textAlign = 'right';
+    ctx.fillText('WHATSAPP ' + (state.promoStudio.phone || '34699234010'), w - 72, h - 64);
+    ctx.textAlign = 'left';
+  }
+
+  function canvasToJpegBlob(canvas) {
+    return new Promise(function (resolve, reject) {
+      if (!canvas || !canvas.toBlob) return reject(new Error('Canvas no disponible'));
+      canvas.toBlob(function (blob) {
+        if (!blob) return reject(new Error('No se pudo generar la imagen'));
+        resolve(blob);
+      }, 'image/jpeg', 0.92);
+    });
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  }
+
+  async function downloadPromoPoster() {
+    var items = promoSelectedItems();
+    if (!items.length) {
+      toast('Selecciona primero al menos una prenda', 'error');
+      return;
+    }
+    try {
+      await renderPromoPosterCanvas();
+      var canvas = $('#promo-poster-canvas');
+      var blob = await canvasToJpegBlob(canvas);
+      var slug = normalize(items[0].team || 'kangteam').replace(/\s+/g, '-').slice(0, 24) || 'promo';
+      triggerBlobDownload(blob, 'kangteam-promo-' + slug + '.jpg');
+      toast('Tarjeta promocional descargada');
+    } catch (err) {
+      toast('No se pudo generar la tarjeta JPG', 'error');
+    }
+  }
+
+  async function fetchPromoPhotoFiles(items, includeGallery) {
+    var files = [];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var urls = [coverUrl(item, 'medium')];
+      if (includeGallery && items.length <= 3 && (item.albumId || item.id)) {
+        try {
+          var extras = (await fetchAlbumCached(item) || []).slice(0, 4);
+          extras.forEach(function (p) {
+            var u = photoUrl(p, 'medium', item.source);
+            if (u && urls.indexOf(u) === -1) urls.push(u);
+          });
+        } catch (e) {}
+      }
+      for (var uIdx = 0; uIdx < urls.length; uIdx++) {
+        if (files.length >= 10) break;
+        try {
+          var res = await fetch(urls[uIdx]);
+          if (!res.ok) continue;
+          var blob = await res.blob();
+          var slug = normalize((item.team || 'prenda') + '-' + item.id).replace(/\s+/g, '-').slice(0, 32);
+          files.push(new File([blob], 'kangteam-' + slug + (uIdx ? ('-' + (uIdx + 1)) : '') + '.jpg', { type: blob.type || 'image/jpeg' }));
+        } catch (e) {}
+      }
+    }
+    return files;
+  }
+
+  async function downloadPromoOriginalPhotos() {
+    var items = promoSelectedItems();
+    if (!items.length) {
+      toast('Selecciona primero al menos una prenda', 'error');
+      return;
+    }
+    toast('Preparando fotos del catálogo…');
+    var files = await fetchPromoPhotoFiles(items, state.promoStudio.includeGallery);
+    if (!files.length) {
+      toast('No se pudieron descargar las fotos', 'error');
+      return;
+    }
+    for (var i = 0; i < files.length; i++) {
+      triggerBlobDownload(files[i], files[i].name);
+      if (i < files.length - 1) await new Promise(function (r) { setTimeout(r, 180); });
+    }
+    toast(files.length === 1 ? 'Foto descargada' : (files.length + ' fotos descargadas'));
+  }
+
+  async function sharePromoToWhatsapp(mode) {
+    var items = promoSelectedItems();
+    if (!items.length) {
+      toast('Selecciona primero al menos una prenda', 'error');
+      return;
+    }
+    var text = currentPromoMessage(items);
+    try {
+      var files = [];
+      if (mode === 'poster') {
+        await renderPromoPosterCanvas();
+        var canvas = $('#promo-poster-canvas');
+        var blob = await canvasToJpegBlob(canvas);
+        files = [new File([blob], 'kangteam-promo.jpg', { type: 'image/jpeg' })];
+      } else {
+        files = await fetchPromoPhotoFiles(items, state.promoStudio.includeGallery);
+      }
+
+      if (files.length && navigator.share && (!navigator.canShare || navigator.canShare({ files: files }))) {
+        await navigator.share({
+          title: 'Promoción KANG Team',
+          text: text,
+          files: files
+        });
+        toast('Fotos y texto listos para enviar en WhatsApp');
+        return;
+      }
+
+      // Desktop fallback: copy text + download images + open WhatsApp Web/App link
+      await copyText(text).catch(function () {});
+      for (var i = 0; i < files.length; i++) {
+        triggerBlobDownload(files[i], files[i].name);
+        if (i < files.length - 1) await new Promise(function (r) { setTimeout(r, 160); });
+      }
+      var link = document.createElement('a');
+      link.href = promoWhatsappHref(items);
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast('Texto copiado, fotos descargadas y WhatsApp abierto');
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      toast('No se pudo compartir automáticamente; usa los botones de descarga y copia', 'error');
+    }
+  }
+
+  async function sendPromoViaServer() {
+    var items = promoSelectedItems();
+    var ps = state.promoStudio;
+    if (!items.length) {
+      toast('Selecciona primero al menos una prenda', 'error');
+      return;
+    }
+    ps.sending = true;
+    ps.result = null;
+    ps.resultError = '';
+    renderPromoStudioView();
+    try {
+      var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+      if (state.adminToken) headers['x-admin-token'] = state.adminToken;
+      var res = await fetch('/api/whatsapp-promo/send', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          itemIds: items.map(function (it) { return it.id; }),
+          phone: ps.phone,
+          headline: ps.headline,
+          message: currentPromoMessage(items),
+          includePrice: ps.includePrice,
+          includeSizes: ps.includeSizes,
+          includeLink: ps.includeLink,
+          includeGallery: ps.includeGallery,
+          publicBaseUrl: promoResolvedBaseUrl()
+        })
+      });
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (res.status === 401) {
+        ps.resultError = 'Introduce tu ADMIN_TOKEN para autorizar el envío automático desde servidor.';
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(extractApiError(data, 'Error ' + res.status + ' al enviar por WhatsApp'));
+      }
+      ps.result = data;
+      if (data && data.delivery && data.delivery.dispatched) {
+        toast('Promoción enviada a tu WhatsApp (' + data.delivery.channel + ')');
+      } else {
+        toast('Enlace y fotos preparados · configura un canal API para envío 100% automático');
+      }
+    } catch (err) {
+      ps.resultError = err.message || 'Error al enviar por WhatsApp';
+      toast(ps.resultError, 'error');
+    } finally {
+      ps.sending = false;
+      renderPromoStudioView();
+    }
+  }
+
+  function renderPromoStudioView() {
+    var box = $('#promo-studio-content');
+    if (!box) return;
+    if (!state.items.length) {
+      box.innerHTML = '<div class="empty-state"><h3>Cargando catálogo…</h3><p>En unos segundos podrás elegir las prendas para promocionar en WhatsApp.</p></div>';
+      return;
+    }
+
+    var ps = state.promoStudio;
+    if (!ps.phone && state.config && state.config.store && state.config.store.whatsapp) {
+      ps.phone = state.config.store.whatsapp;
+    }
+
+    var selected = promoSelectedItems();
+    var filtered = promoFilteredItems();
+    var visible = filtered.slice(0, ps.limit || 24);
+    var msgText = currentPromoMessage(selected);
+    var waHref = promoWhatsappHref(selected);
+
+    var teamOptions = Array.from(state.teams.values())
+      .filter(function (t) { return t.name !== 'Otros'; })
+      .sort(function (a, b) { return b.count - a.count; })
+      .slice(0, 120)
+      .map(function (t) {
+        return '<option value="' + esc(t.name) + '"' + (ps.team === t.name ? ' selected' : '') + '>' + esc(t.name) + ' (' + fmt(t.count) + ')</option>';
+      }).join('');
+
+    var seasonOptions = SEASON_ORDER.filter(function (s) { return state.seasons.has(s); }).map(function (s) {
+      return '<option value="' + esc(s) + '"' + (ps.season === s ? ' selected' : '') + '>' + esc(seasonLabel(s)) + '</option>';
+    }).join('');
+
+    var typeOptions = Object.keys(TYPE_LABELS).filter(function (t) { return state.types.has(t); }).map(function (t) {
+      return '<option value="' + esc(t) + '"' + (ps.type === t ? ' selected' : '') + '>' + esc(TYPE_LABELS[t]) + '</option>';
+    }).join('');
+
+    var presets = [
+      ['', 'Todo'],
+      ['new26', 'Nueva 26/27'],
+      ['player', 'Jugador'],
+      ['retro', 'Retro'],
+      ['winter', 'Chándals / Invierno']
+    ];
+
+    var cardsHtml = visible.length
+      ? visible.map(function (item) {
+          var selIdx = ps.selectedIds.indexOf(item.id);
+          var isSel = selIdx !== -1;
+          var priceText = window.KangPricing ? KangPricing.money(itemBasePriceCents(item)) : '';
+          return '<article class="promo-pick-card' + (isSel ? ' is-selected' : '') + '">' +
+            '<div class="promo-pick-media" data-promo-toggle="' + esc(item.id) + '">' +
+              '<img src="' + esc(coverUrl(item, 'small')) + '" alt="' + esc(cleanTitle(item)) + '" loading="lazy" decoding="async">' +
+              (isSel ? '<span class="promo-pick-order">' + (selIdx + 1) + '</span>' : '') +
+            '</div>' +
+            '<div class="promo-pick-body">' +
+              '<span class="promo-pick-kicker">' + esc(item.team) + ' · ' + esc(item.season || 'Catálogo') + '</span>' +
+              '<h3 class="promo-pick-title">' + esc(cleanTitle(item)) + '</h3>' +
+              '<div class="promo-pick-foot">' +
+                '<strong class="promo-pick-price">' + esc(priceText) + '</strong>' +
+                '<button type="button" class="promo-pick-toggle' + (isSel ? ' is-selected' : '') + '" data-promo-toggle="' + esc(item.id) + '">' + (isSel ? 'En lote ✓' : '+ Añadir') + '</button>' +
+              '</div>' +
+            '</div>' +
+          '</article>';
+        }).join('')
+      : '<div class="empty-state"><h3>Sin prendas con ese filtro</h3><p>Prueba con otro equipo, temporada o limpia la búsqueda.</p></div>';
+
+    var selectedHtml = selected.length
+      ? '<div class="promo-selected-strip">' + selected.map(function (item) {
+          var pr = window.KangPricing ? KangPricing.money(itemBasePriceCents(item)) : '';
+          return '<div class="promo-selected-row">' +
+            '<img src="' + esc(coverUrl(item, 'small')) + '" alt="' + esc(cleanTitle(item)) + '" loading="lazy" decoding="async">' +
+            '<div class="promo-selected-info"><strong>' + esc(item.team + ' · ' + cleanTitle(item)) + '</strong><span>' + esc(pr) + ' · Tallas ' + esc(item.sizeRange || 'S-2XL') + '</span></div>' +
+            '<button type="button" class="promo-selected-remove" data-promo-remove="' + esc(item.id) + '" aria-label="Quitar prenda"><svg><use href="#i-close"/></svg></button>' +
+          '</div>';
+        }).join('') + '</div>'
+      : '<div class="promo-empty-selection">Pulsa en cualquier prenda de la izquierda (hasta 10) para preparar sus fotos, tarjeta promocional y enlace directo para tu WhatsApp.</div>';
+
+    var cfg = ps.serverConfig || {};
+    var activeChannels = [];
+    if (cfg.cloudApi) activeChannels.push('WhatsApp Cloud API (envía fotos + texto)');
+    if (cfg.webhook) activeChannels.push('Webhook WhatsApp (envía fotos + texto)');
+    if (cfg.callmebot) activeChannels.push('CallMeBot (envía texto + vista previa web)');
+
+    var serverStatusHtml = activeChannels.length
+      ? '<p class="promo-server-status">Canal servidor activo: <strong>' + esc(activeChannels.join(' · ')) + '</strong></p>'
+      : '<p class="promo-server-status">Envío directo desde tu móvil o navegador listo ahora mismo. Para que el servidor empuje fotos automáticamente sin abrir el navegador, configura un canal en variables de entorno.</p>';
+
+    var serverResultHtml = '';
+    if (ps.resultError) {
+      serverResultHtml = '<div class="promo-server-result is-error">' + esc(ps.resultError) + '</div>';
+    } else if (ps.result) {
+      var del = ps.result.delivery || {};
+      if (del.dispatched) {
+        serverResultHtml = '<div class="promo-server-result is-ok"><strong>Enviado a tu WhatsApp</strong> (' + esc(del.channel) + ')' + (del.photosSent ? ' · ' + del.photosSent + ' foto(s) enviadas.' : ' · Mensaje con vista previa enviado.') + '</div>';
+      } else {
+        var errs = Array.isArray(del.errors) && del.errors.length ? (' · ' + del.errors.join(' | ')) : '';
+        serverResultHtml = '<div class="promo-server-result">Lote preparado con ' + (ps.result.items ? ps.result.items.length : 0) + ' prenda(s) y enlace con vista previa.' + (del.configured ? (' No se completó el envío automático' + esc(errs)) : ' Añade Meta WhatsApp Cloud API, Webhook o CallMeBot en el servidor para envío automático.') + '</div>';
+      }
+    }
+
+    var tokenFieldHtml = (cfg.requiresAdminToken && !state.adminToken)
+      ? '<label class="field"><span>Token de administrador (solo para envío servidor)</span><input type="password" id="promo-admin-token" placeholder="ADMIN_TOKEN" autocomplete="current-password"></label>'
+      : '';
+
+    box.innerHTML =
+      '<div class="promo-studio-grid">' +
+        '<div class="promo-picker-pane">' +
+          '<div class="promo-picker-head">' +
+            '<h2>1. Indica qué ropa quieres promocionar</h2>' +
+            '<span class="promo-picker-meta"><strong>' + fmt(filtered.length) + '</strong> prendas · <strong>' + selected.length + '/10</strong> en lote</span>' +
+          '</div>' +
+          '<div class="promo-picker-filters">' +
+            '<label class="searchbox"><svg><use href="#i-search"/></svg><input type="search" id="promo-search-input" placeholder="Buscar equipo, prenda, temporada (ej. Juventus chándal)…" value="' + esc(ps.q) + '"></label>' +
+            '<select id="promo-team-select" aria-label="Filtrar por equipo"><option value="">Todos los equipos</option>' + teamOptions + '</select>' +
+            '<select id="promo-season-select" aria-label="Filtrar por temporada"><option value="">Todas las temporadas</option>' + seasonOptions + '</select>' +
+            '<select id="promo-type-select" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option>' + typeOptions + '</select>' +
+          '</div>' +
+          '<div class="promo-presets-row">' +
+            '<div class="promo-presets">' + presets.map(function (p) {
+              return '<button type="button" class="promo-preset-btn' + (ps.preset === p[0] ? ' is-active' : '') + '" data-promo-preset="' + esc(p[0]) + '">' + esc(p[1]) + '</button>';
+            }).join('') + '</div>' +
+            (selected.length ? '<button type="button" class="btn btn-ghost btn-sm" id="promo-clear-selection">Vaciar lote</button>' : '') +
+          '</div>' +
+          '<div class="promo-picker-grid">' + cardsHtml + '</div>' +
+          (filtered.length > visible.length ? '<div class="promo-load-more"><button type="button" class="btn btn-outline" id="promo-load-more">Mostrar más prendas (' + fmt(filtered.length - visible.length) + ')</button></div>' : '') +
+        '</div>' +
+
+        '<aside class="promo-composer-pane" aria-label="Configurar envío a WhatsApp">' +
+          '<div class="promo-composer-head">' +
+            '<h2>2. Fotos, texto y envío</h2>' +
+            '<span class="promo-picker-meta"><strong>' + selected.length + '</strong> / 10</span>' +
+          '</div>' +
+          selectedHtml +
+          '<div class="promo-poster-box">' +
+            '<div class="promo-poster-head"><strong>Tarjeta visual para Estados / WhatsApp</strong><span>1080 × 1350 JPG</span></div>' +
+            '<canvas class="promo-poster-canvas" id="promo-poster-canvas" width="1080" height="1350"></canvas>' +
+          '</div>' +
+          '<div class="promo-template-tabs" role="tablist" aria-label="Estilo del mensaje">' +
+            '<button type="button" class="' + (ps.template === 'direct' ? 'is-active' : '') + '" data-promo-tpl="direct">Directo</button>' +
+            '<button type="button" class="' + (ps.template === 'drop' ? 'is-active' : '') + '" data-promo-tpl="drop">Novedad</button>' +
+            '<button type="button" class="' + (ps.template === 'pack' ? 'is-active' : '') + '" data-promo-tpl="pack">Lote grupo</button>' +
+          '</div>' +
+          '<label class="field"><span>Titular promocional</span><input type="text" id="promo-headline-input" placeholder="Ej: ¡Recién llegadas 26/27!" value="' + esc(ps.headline) + '"></label>' +
+          '<div class="promo-checks-grid">' +
+            '<label class="promo-check"><input type="checkbox" id="promo-opt-price"' + (ps.includePrice ? ' checked' : '') + '> Mostrar precio</label>' +
+            '<label class="promo-check"><input type="checkbox" id="promo-opt-sizes"' + (ps.includeSizes ? ' checked' : '') + '> Tallas y dorsal</label>' +
+            '<label class="promo-check"><input type="checkbox" id="promo-opt-link"' + (ps.includeLink ? ' checked' : '') + '> Enlace directo web</label>' +
+            '<label class="promo-check"><input type="checkbox" id="promo-opt-gallery"' + (ps.includeGallery ? ' checked' : '') + '> + Fotos galería</label>' +
+          '</div>' +
+          '<div class="promo-fields-two">' +
+            '<label class="field"><span>Tu WhatsApp (prefijo país)</span><input type="tel" id="promo-phone-input" placeholder="34699234010" value="' + esc(ps.phone) + '"></label>' +
+            '<label class="field"><span>URL pública web</span><input type="url" id="promo-baseurl-input" placeholder="' + esc(location.origin) + '" value="' + esc(ps.publicBaseUrl) + '"></label>' +
+          '</div>' +
+          '<label class="field"><span>Mensaje listo para WhatsApp (con vista previa de foto)</span>' +
+            '<textarea class="promo-msg-textarea" id="promo-msg-textarea" placeholder="Selecciona al menos una prenda…">' + esc(msgText) + '</textarea>' +
+          '</label>' +
+          '<div class="promo-actions-stack">' +
+            '<button type="button" class="btn btn-whatsapp btn-block" id="promo-share-photos"><svg><use href="#i-whatsapp"/></svg> Enviar fotos + texto a mi WhatsApp</button>' +
+            '<div class="promo-actions-row">' +
+              '<button type="button" class="btn btn-primary" id="promo-share-poster"><svg><use href="#i-share"/></svg> Compartir tarjeta</button>' +
+              '<a class="btn btn-outline" id="promo-open-wa" href="' + esc(waHref) + '" target="_blank" rel="noopener"><svg><use href="#i-whatsapp"/></svg> Abrir chat WA</a>' +
+            '</div>' +
+            '<div class="promo-actions-row">' +
+              '<button type="button" class="btn btn-outline" id="promo-download-poster">Descargar tarjeta</button>' +
+              '<button type="button" class="btn btn-outline" id="promo-download-photos">Descargar fotos</button>' +
+            '</div>' +
+            '<button type="button" class="btn btn-ghost btn-block" id="promo-copy-msg">Copiar texto con enlace a la web</button>' +
+          '</div>' +
+          '<div class="promo-server-box">' +
+            '<div class="promo-server-title"><strong>Envío automático desde servidor</strong><span>API WhatsApp</span></div>' +
+            serverStatusHtml +
+            tokenFieldHtml +
+            '<button type="button" class="btn btn-outline btn-block" id="promo-send-server"' + (ps.sending ? ' disabled' : '') + '>' + (ps.sending ? 'Enviando a WhatsApp…' : 'Enviar automáticamente a mi WhatsApp') + '</button>' +
+            serverResultHtml +
+            '<details class="promo-setup-guide">' +
+              '<summary>Cómo activar el envío automático de fotos</summary>' +
+              '<ul>' +
+                '<li><strong>Meta WhatsApp Cloud API (envía fotos + texto):</strong> configura <code>WHATSAPP_CLOUD_TOKEN</code> y <code>WHATSAPP_PHONE_NUMBER_ID</code> en las variables de entorno del servidor.</li>' +
+                '<li><strong>Webhook / Evolution API / n8n / Make:</strong> configura <code>WHATSAPP_WEBHOOK_URL</code> (y opcional <code>WHATSAPP_WEBHOOK_TOKEN</code>); recibirá JSON con todas las fotos y enlaces <code>/p/:id</code>.</li>' +
+                '<li><strong>CallMeBot (texto + vista previa rica):</strong> configura <code>CALLMEBOT_PHONE</code> y <code>CALLMEBOT_APIKEY</code>.</li>' +
+                '<li><strong>Dominio público fijo:</strong> añade <code>PUBLIC_BASE_URL</code> (ej. tu dominio Vercel) para que WhatsApp muestre siempre la foto y precio al pegar el enlace.</li>' +
+              '</ul>' +
+            '</details>' +
+          '</div>' +
+        '</aside>' +
+      '</div>';
+
+    renderPromoPosterCanvas();
+  }
+
+  function bindPromoStudioEvents() {
+    var box = $('#promo-studio-content');
+    if (!box) return;
+    box.addEventListener('click', function (event) {
+      var toggleEl = event.target.closest('[data-promo-toggle]');
+      if (toggleEl) {
+        var id = toggleEl.getAttribute('data-promo-toggle') || '';
+        var list = state.promoStudio.selectedIds;
+        var idx = list.indexOf(id);
+        if (idx !== -1) {
+          list.splice(idx, 1);
+        } else {
+          if (list.length >= 10) {
+            toast('Máximo 10 prendas por lote promocional', 'error');
+            return;
+          }
+          list.push(id);
+        }
+        state.promoStudio.messageDirty = false;
+        state.promoStudio.result = null;
+        savePromoStudioPrefs();
+        renderPromoStudioView();
+        return;
+      }
+      var remEl = event.target.closest('[data-promo-remove]');
+      if (remEl) {
+        var remId = remEl.getAttribute('data-promo-remove') || '';
+        state.promoStudio.selectedIds = state.promoStudio.selectedIds.filter(function (x) { return x !== remId; });
+        state.promoStudio.messageDirty = false;
+        savePromoStudioPrefs();
+        renderPromoStudioView();
+        return;
+      }
+      var presetBtn = event.target.closest('[data-promo-preset]');
+      if (presetBtn) {
+        state.promoStudio.preset = presetBtn.getAttribute('data-promo-preset') || '';
+        state.promoStudio.limit = 24;
+        renderPromoStudioView();
+        return;
+      }
+      var tplBtn = event.target.closest('[data-promo-tpl]');
+      if (tplBtn) {
+        state.promoStudio.template = tplBtn.getAttribute('data-promo-tpl') || 'direct';
+        state.promoStudio.messageDirty = false;
+        savePromoStudioPrefs();
+        renderPromoStudioView();
+        return;
+      }
+      if (event.target.closest('#promo-clear-selection')) {
+        state.promoStudio.selectedIds = [];
+        state.promoStudio.messageDirty = false;
+        state.promoStudio.result = null;
+        savePromoStudioPrefs();
+        renderPromoStudioView();
+        return;
+      }
+      if (event.target.closest('#promo-load-more')) {
+        state.promoStudio.limit = (state.promoStudio.limit || 24) + 24;
+        renderPromoStudioView();
+        return;
+      }
+      if (event.target.closest('#promo-share-photos')) {
+        sharePromoToWhatsapp('photos');
+        return;
+      }
+      if (event.target.closest('#promo-share-poster')) {
+        sharePromoToWhatsapp('poster');
+        return;
+      }
+      if (event.target.closest('#promo-download-poster')) {
+        downloadPromoPoster();
+        return;
+      }
+      if (event.target.closest('#promo-download-photos')) {
+        downloadPromoOriginalPhotos();
+        return;
+      }
+      if (event.target.closest('#promo-copy-msg')) {
+        var txt = currentPromoMessage();
+        if (!txt) {
+          toast('Selecciona primero al menos una prenda', 'error');
+          return;
+        }
+        copyText(txt).then(function () {
+          toast('Texto promocional y enlace copiados');
+        }).catch(function () {
+          toast('No se pudo copiar el texto', 'error');
+        });
+        return;
+      }
+      if (event.target.closest('#promo-send-server')) {
+        sendPromoViaServer();
+      }
+    });
+
+    box.addEventListener('change', function (event) {
+      var target = event.target;
+      if (!target) return;
+      if (target.id === 'promo-team-select') {
+        state.promoStudio.team = target.value || '';
+        state.promoStudio.limit = 24;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-season-select') {
+        state.promoStudio.season = target.value || '';
+        state.promoStudio.limit = 24;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-type-select') {
+        state.promoStudio.type = target.value || '';
+        state.promoStudio.limit = 24;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-opt-price') {
+        state.promoStudio.includePrice = !!target.checked;
+        state.promoStudio.messageDirty = false;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-opt-sizes') {
+        state.promoStudio.includeSizes = !!target.checked;
+        state.promoStudio.messageDirty = false;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-opt-link') {
+        state.promoStudio.includeLink = !!target.checked;
+        state.promoStudio.messageDirty = false;
+        renderPromoStudioView();
+      } else if (target.id === 'promo-opt-gallery') {
+        state.promoStudio.includeGallery = !!target.checked;
+      }
+    });
+
+    box.addEventListener('input', function (event) {
+      var target = event.target;
+      if (!target) return;
+      if (target.id === 'promo-search-input') {
+        state.promoStudio.q = target.value || '';
+        state.promoStudio.limit = 24;
+        renderPromoStudioView();
+        var sInp = $('#promo-search-input');
+        if (sInp) { sInp.focus(); sInp.setSelectionRange(sInp.value.length, sInp.value.length); }
+      } else if (target.id === 'promo-headline-input') {
+        state.promoStudio.headline = target.value || '';
+        state.promoStudio.messageDirty = false;
+        savePromoStudioPrefs();
+        var ta = $('#promo-msg-textarea');
+        if (ta) ta.value = currentPromoMessage();
+        var waLink = $('#promo-open-wa');
+        if (waLink) waLink.href = promoWhatsappHref();
+        renderPromoPosterCanvas();
+      } else if (target.id === 'promo-phone-input') {
+        state.promoStudio.phone = target.value || '';
+        savePromoStudioPrefs();
+        var waL = $('#promo-open-wa');
+        if (waL) waL.href = promoWhatsappHref();
+        renderPromoPosterCanvas();
+      } else if (target.id === 'promo-baseurl-input') {
+        state.promoStudio.publicBaseUrl = target.value || '';
+        state.promoStudio.messageDirty = false;
+        savePromoStudioPrefs();
+        var taUrl = $('#promo-msg-textarea');
+        if (taUrl) taUrl.value = currentPromoMessage();
+        var waUrl = $('#promo-open-wa');
+        if (waUrl) waUrl.href = promoWhatsappHref();
+        renderPromoPosterCanvas();
+      } else if (target.id === 'promo-msg-textarea') {
+        state.promoStudio.customMessage = target.value || '';
+        state.promoStudio.messageDirty = true;
+        var waTxt = $('#promo-open-wa');
+        if (waTxt) waTxt.href = promoWhatsappHref();
+      } else if (target.id === 'promo-admin-token') {
+        state.adminToken = (target.value || '').trim();
+        try { sessionStorage.setItem('kang_admin_token', state.adminToken); } catch (e) {}
       }
     });
   }

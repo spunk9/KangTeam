@@ -288,7 +288,7 @@ async function runStaticSuite() {
 
   checkJson('vercel.json', function (v) {
     var sources = (v.rewrites || []).map(function (r) { return r.source; });
-    ['/api/promo/validate', '/api/orders/track', '/api/admin/orders', '/api/admin/orders/:id'].forEach(function (route) {
+    ['/api/promo/validate', '/api/orders/track', '/api/admin/orders', '/api/admin/orders/:id', '/api/whatsapp-promo/config', '/api/whatsapp-promo/send', '/p/:id'].forEach(function (route) {
       assert(sources.indexOf(route) !== -1, 'Rewrite presente en vercel.json: ' + route);
     });
   });
@@ -591,6 +591,28 @@ async function runBrowserVisualSuite() {
     var juvSrc = await cdp.evalJs("(document.querySelector('#catalog-team-crest img') || {}).src || ''");
     assert(juvLoaded && juvImgReady && /juventus--white-monochrome/i.test(juvSrc), 'Juventus: catálogo cargado y escudo blanco visible en cabecera (' + juvSrc + ')');
 
+    // Difusión WhatsApp Studio (#/difusion) — Mobile 375px + Desktop 1280px
+    await cdp.evalJs("location.hash = '#/difusion'");
+    var promoLoaded = await cdp.waitUntil("document.querySelector('#view-promo:not([hidden])') !== null && document.querySelectorAll('#promo-studio-content .promo-pick-card').length > 0", 6000);
+    assert(promoLoaded, 'Difusión WhatsApp (#/difusion) cargada con selector de prendas');
+
+    await cdp.evalJs("document.querySelector('#promo-studio-content [data-promo-toggle]').click()");
+    var promoSelected = await cdp.waitUntil("document.querySelector('#promo-msg-textarea') && document.querySelector('#promo-msg-textarea').value.indexOf('/p/') !== -1 && document.querySelector('#promo-poster-canvas') !== null", 5000);
+    assert(promoSelected, 'Difusión WhatsApp genera mensaje con enlace /p/:id y tarjeta visual al seleccionar prenda');
+
+    var mobilePromoOverflow = await cdp.evalJs("document.documentElement.scrollWidth - window.innerWidth");
+    assert(mobilePromoOverflow <= 1, 'Móvil 375px: Difusión WhatsApp sin desbordamiento horizontal (' + mobilePromoOverflow + 'px)');
+
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await sleep(160);
+    var desktopPromoOverflow = await cdp.evalJs("document.documentElement.scrollWidth - window.innerWidth");
+    assert(desktopPromoOverflow <= 1, 'Desktop 1280px: Difusión WhatsApp sin desbordamiento horizontal (' + desktopPromoOverflow + 'px)');
+
     assert(cdp.runtimeExceptions.length === 0, 'Cero errores JS no controlados en navegador real', cdp.runtimeExceptions.join(' | '));
   } finally {
     if (cdp) cdp.close();
@@ -792,6 +814,46 @@ async function runApiAndPrivacySuite() {
       var afterDelTrack = await httpRequest(TEST_PORT, 'GET', '/api/orders/track?id=' + encodeURIComponent(createdOrder.id) + '&phone4=5678');
       assert(afterDelTrack.status === 404, 'Pedido eliminado devuelve HTTP 404 en seguimiento');
     }
+
+    // Difusión WhatsApp API & OpenGraph /p/:id checks
+    var sharePage = await httpRequest(TEST_PORT, 'GET', '/p/' + encodeURIComponent(sampleItem.id));
+    assert(
+      sharePage.status === 200 &&
+      /property="og:title"/.test(sharePage.text) &&
+      /property="og:image"/.test(sharePage.text) &&
+      sharePage.text.indexOf('#/producto/' + encodeURIComponent(sampleItem.id)) !== -1,
+      'GET /p/:id sirve página OpenGraph con foto, precio y redirección al producto'
+    );
+
+    var waCfg = await httpRequest(TEST_PORT, 'GET', '/api/whatsapp-promo/config');
+    assert(
+      waCfg.status === 200 && waCfg.json && waCfg.json.ok &&
+      typeof waCfg.json.cloudApi === 'boolean' &&
+      waCfg.json.defaultPhone === '34699234010',
+      'GET /api/whatsapp-promo/config devuelve configuración de canales WhatsApp'
+    );
+
+    var waUnauth = await httpRequest(TEST_PORT, 'POST', '/api/whatsapp-promo/send', { itemIds: [sampleItem.id] });
+    assert(waUnauth.status === 401, 'POST /api/whatsapp-promo/send sin token admin bloqueado (HTTP 401)');
+
+    var waEmpty = await httpRequest(TEST_PORT, 'POST', '/api/whatsapp-promo/send', { itemIds: [] }, { 'X-Admin-Token': 'qa-admin-token-check' });
+    assert(waEmpty.status === 400, 'POST /api/whatsapp-promo/send sin prendas rechazado (HTTP 400)');
+
+    var waPrep = await httpRequest(
+      TEST_PORT,
+      'POST',
+      '/api/whatsapp-promo/send',
+      { itemIds: [sampleItem.id], phone: '34699234010', includePrice: true, includeLink: true },
+      { 'X-Admin-Token': 'qa-admin-token-check' }
+    );
+    assert(
+      waPrep.status === 200 && waPrep.json && waPrep.json.ok &&
+      Array.isArray(waPrep.json.items) && waPrep.json.items.length === 1 &&
+      waPrep.json.items[0].productUrl.indexOf('/p/') !== -1 &&
+      waPrep.json.items[0].imageUrl.indexOf('/img') !== -1 &&
+      String(waPrep.json.whatsappUrl || '').indexOf('https://wa.me/34699234010') === 0,
+      'POST /api/whatsapp-promo/send prepara fotos, enlaces /p/:id y enlace wa.me correctamente'
+    );
 
     // Run live headless Chromium visual & layout checks against the running QA server
     await runBrowserVisualSuite();

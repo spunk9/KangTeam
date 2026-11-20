@@ -29,6 +29,18 @@
       "destination": "/api/handler?__api=/api/admin/orders/:id"
     },
     {
+      "source": "/api/whatsapp-promo/config",
+      "destination": "/api/handler?__api=/api/whatsapp-promo/config"
+    },
+    {
+      "source": "/api/whatsapp-promo/send",
+      "destination": "/api/handler?__api=/api/whatsapp-promo/send"
+    },
+    {
+      "source": "/p/:id",
+      "destination": "/api/handler?__api=/p/:id"
+    },
+    {
       "source": "/img/:source/:folder/:hash/:filename",
       "destination": "/api/img?source=:source&folder=:folder&hash=:hash&filename=:filename"
     },

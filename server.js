@@ -950,6 +950,314 @@ async function notifyOrder(order) {
   return result;
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Difusión promocional WhatsApp + Vista previa OpenGraph /p/:id
+// ─────────────────────────────────────────────────────────────
+
+function resolvePublicBaseUrl(req, overrideUrl) {
+  var candidates = [overrideUrl, process.env.PUBLIC_BASE_URL];
+  for (var i = 0; i < candidates.length; i++) {
+    var raw = String(candidates[i] || '').trim().replace(/\/+$/, '');
+    if (/^https?:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(raw)) return raw;
+  }
+  var proto = String((req && req.headers && req.headers['x-forwarded-proto']) || 'http').split(',')[0].trim();
+  if (proto !== 'https' && proto !== 'http') proto = 'http';
+  var host = String((req && req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || ('localhost:' + PORT)).split(',')[0].trim();
+  return proto + '://' + host;
+}
+
+function itemCoverPath(item, size) {
+  if (!item || !item.cover) return '/og-cover.png';
+  var prefix = (item.source && item.source !== 'minkang') ? ('/img/' + item.source) : '/img';
+  return prefix + item.cover + '/' + (size || 'medium') + '.jpg';
+}
+
+function cleanPromoTitle(item) {
+  var title = String((item && item.title) || '').trim();
+  if (!title) return (item && item.team) || 'Prenda deportiva';
+  return title
+    .replace(/\bsize\s*\d{1,2}\s*[-–]\s*\d{1,2}\b/ig, '')
+    .replace(/\b(?:XXS|XS|S|M|L|XL|2XL|3XL|4XL|5XL)\s*[-–]\s*(?:XXS|XS|S|M|L|XL|2XL|3XL|4XL|5XL)\b/ig, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function normalizeWhatsappPhone(raw) {
+  var digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 9 && /^[6789]/.test(digits)) digits = '34' + digits;
+  return digits;
+}
+
+function getWhatsappPromoConfig() {
+  return {
+    ok: true,
+    cloudApi: Boolean(process.env.WHATSAPP_CLOUD_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+    webhook: Boolean(process.env.WHATSAPP_WEBHOOK_URL),
+    callmebot: Boolean(process.env.CALLMEBOT_PHONE && process.env.CALLMEBOT_APIKEY),
+    defaultPhone: STORE.whatsapp || '',
+    publicBaseUrl: String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, ''),
+    requiresAdminToken: Boolean(ADMIN_TOKEN || IS_VERCEL)
+  };
+}
+
+function buildPromoItemCaption(entry, opts) {
+  opts = opts || {};
+  var lines = [];
+  if (opts.headline) lines.push(opts.headline);
+  lines.push('*' + entry.team + '* · ' + entry.cleanTitle);
+  var details = [];
+  if (entry.season && entry.season !== 'Sin temporada') details.push(entry.season);
+  if (opts.includePrice !== false) details.push('*' + entry.priceText + '*');
+  if (opts.includeSizes !== false && entry.sizeRange) details.push('Tallas ' + entry.sizeRange);
+  if (details.length) lines.push(details.join(' · '));
+  if (opts.includeSizes !== false && entry.custom) {
+    lines.push('Personalizable con nombre y dorsal (+2 €) y parches (+1 €)');
+  }
+  lines.push('Recogida gratis en Córdoba · Descuento grupo desde 5 prendas');
+  if (opts.includeLink !== false) {
+    lines.push('Ver prenda en la web: ' + entry.productUrl);
+  }
+  return lines.join('\n');
+}
+
+function serveProductSharePage(req, res, productId) {
+  var cleanId = decodeURIComponent(String(productId || '').trim());
+  var item = catalogById[cleanId];
+  var baseUrl = resolvePublicBaseUrl(req, '');
+  if (!item) {
+    res.writeHead(302, { 'Location': '/#/catalogo' });
+    return res.end();
+  }
+  var calc = pricing.calculate(item, {});
+  var priceText = pricing.money(calc.basePriceCents);
+  var cleanTitle = cleanPromoTitle(item);
+  var ogTitle = (item.team && cleanTitle.toLowerCase().indexOf(item.team.toLowerCase()) === -1 ? item.team + ' · ' : '') + cleanTitle + ' · ' + priceText;
+  var descParts = [];
+  if (item.season && item.season !== 'Sin temporada') descParts.push('Temporada ' + item.season);
+  if (item.sizeRange) descParts.push('Tallas ' + item.sizeRange);
+  descParts.push(item.custom ? 'Personalizable con nombre y dorsal' : 'Disponible en catálogo');
+  descParts.push('Recogida gratis en Córdoba · ' + STORE.name);
+  var ogDesc = descParts.join(' · ');
+  var ogImg = baseUrl + itemCoverPath(item, 'medium');
+  var shareUrl = baseUrl + '/p/' + encodeURIComponent(item.id);
+  var appUrl = '/#/producto/' + encodeURIComponent(item.id);
+
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(ogTitle) + ' | ' + escapeHtml(STORE.name) + '</title>' +
+    '<meta name="description" content="' + escapeHtml(ogDesc) + '">' +
+    '<meta property="og:type" content="product">' +
+    '<meta property="og:site_name" content="' + escapeHtml(STORE.name) + '">' +
+    '<meta property="og:title" content="' + escapeHtml(ogTitle) + '">' +
+    '<meta property="og:description" content="' + escapeHtml(ogDesc) + '">' +
+    '<meta property="og:image" content="' + escapeHtml(ogImg) + '">' +
+    '<meta property="og:url" content="' + escapeHtml(shareUrl) + '">' +
+    '<meta name="twitter:card" content="summary_large_image">' +
+    '<meta name="twitter:title" content="' + escapeHtml(ogTitle) + '">' +
+    '<meta name="twitter:description" content="' + escapeHtml(ogDesc) + '">' +
+    '<meta name="twitter:image" content="' + escapeHtml(ogImg) + '">' +
+    '<meta http-equiv="refresh" content="0;url=' + escapeHtml(appUrl) + '">' +
+    '<script>window.location.replace(' + JSON.stringify(appUrl) + ');</script>' +
+    '</head><body style="background:#0a0c0f;color:#f4f2ec;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center">' +
+    '<div><h1 style="font-size:20px;margin:0 0 8px">' + escapeHtml(ogTitle) + '</h1>' +
+    '<p style="color:#a7abb4;margin:0 0 18px">' + escapeHtml(ogDesc) + '</p>' +
+    '<a href="' + escapeHtml(appUrl) + '" style="display:inline-block;padding:12px 20px;border-radius:10px;background:#d9ff3f;color:#0b0d10;font-weight:700;text-decoration:none">Abrir prenda en ' + escapeHtml(STORE.name) + '</a></div>' +
+    '</body></html>';
+
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'public, max-age=600',
+    'X-Content-Type-Options': 'nosniff'
+  });
+  res.end(html);
+}
+
+async function dispatchWhatsappPromo(req, body) {
+  var rawIds = Array.isArray(body && body.itemIds) ? body.itemIds : [];
+  var uniqueIds = [];
+  rawIds.forEach(function (id) {
+    var s = String(id || '').trim();
+    if (s && uniqueIds.indexOf(s) === -1) uniqueIds.push(s);
+  });
+  if (!uniqueIds.length) throw new Error('Selecciona al menos una prenda para enviar.');
+  if (uniqueIds.length > 10) throw new Error('Máximo 10 prendas por envío promocional.');
+
+  var baseUrl = resolvePublicBaseUrl(req, body && body.publicBaseUrl);
+  var phone = normalizeWhatsappPhone((body && body.phone) || STORE.whatsapp);
+  if (phone && (phone.length < 9 || phone.length > 15)) {
+    throw new Error('Número de WhatsApp no válido (usa prefijo de país, ej. 34699234010).');
+  }
+
+  var headline = sanitizeShort(body && body.headline, 180);
+  var customMessage = sanitizeShort(body && body.message, 3500);
+  var includePrice = body.includePrice !== false;
+  var includeSizes = body.includeSizes !== false;
+  var includeLink = body.includeLink !== false;
+  var includeGallery = Boolean(body && body.includeGallery);
+
+  var prepared = [];
+  for (var i = 0; i < uniqueIds.length; i++) {
+    var item = catalogById[uniqueIds[i]];
+    if (!item) throw new Error('Prenda no encontrada en el catálogo: ' + uniqueIds[i]);
+    var calc = pricing.calculate(item, {});
+    var cleanTitle = cleanPromoTitle(item);
+    var coverImg = baseUrl + itemCoverPath(item, 'medium');
+    var productUrl = baseUrl + '/p/' + encodeURIComponent(item.id);
+    var galleryUrls = [coverImg];
+
+    if (includeGallery && uniqueIds.length <= 3 && item.albumId && /^\d+$/.test(String(item.albumId))) {
+      try {
+        var alb = await getAlbum(String(item.albumId), item.source);
+        var imgs = (alb && Array.isArray(alb.images) ? alb.images : []).slice(0, 4);
+        var imgPrefix = (item.source && item.source !== 'minkang') ? ('/img/' + item.source) : '/img';
+        imgs.forEach(function (p) {
+          if (!p) return;
+          var cleanP = String(p).replace(/^https?:\/\/photo\.yupoo\.com/i, '');
+          if (cleanP.charAt(0) !== '/') cleanP = '/' + cleanP;
+          if (!/\.(jpg|jpeg|png|webp)$/i.test(cleanP)) cleanP += '/medium.jpg';
+          else cleanP = cleanP.replace(/\/[^/]+\.(jpg|jpeg|png|webp)$/i, '/medium.jpg');
+          var full = baseUrl + imgPrefix + cleanP;
+          if (galleryUrls.indexOf(full) === -1) galleryUrls.push(full);
+        });
+      } catch (e) {}
+    }
+
+    var entry = {
+      id: item.id,
+      team: item.team || 'Club',
+      title: item.title || '',
+      cleanTitle: cleanTitle,
+      season: item.season || '',
+      sizeRange: item.sizeRange || 'S-2XL',
+      custom: Boolean(item.custom),
+      priceCents: calc.basePriceCents,
+      priceText: pricing.money(calc.basePriceCents),
+      imageUrl: coverImg,
+      galleryUrls: galleryUrls,
+      productUrl: productUrl
+    };
+    entry.caption = buildPromoItemCaption(entry, {
+      headline: i === 0 ? headline : '',
+      includePrice: includePrice,
+      includeSizes: includeSizes,
+      includeLink: includeLink
+    });
+    prepared.push(entry);
+  }
+
+  var finalMessage = customMessage || (prepared.length === 1
+    ? prepared[0].caption
+    : ([headline || ('NOVEDADES ' + STORE.name.toUpperCase())].concat(prepared.map(function (it, idx) {
+        return (idx + 1) + '. *' + it.team + '* · ' + it.cleanTitle +
+          (includePrice ? ' (' + it.priceText + ')' : '') +
+          (includeLink ? '\n' + it.productUrl : '');
+      })).concat(['', 'Recogida gratis en Córdoba · Descuento grupo desde 5 prendas'])).join('\n'));
+
+  var whatsappUrl = (phone ? 'https://wa.me/' + phone : 'https://wa.me/') + '?text=' + encodeURIComponent(finalMessage);
+  var cfg = getWhatsappPromoConfig();
+  var reqChannel = String((body && body.channel) || 'auto').toLowerCase();
+  var delivery = {
+    dispatched: false,
+    channel: '',
+    photosSent: 0,
+    configured: cfg.cloudApi || cfg.webhook || cfg.callmebot,
+    errors: []
+  };
+
+  if ((reqChannel === 'auto' || reqChannel === 'cloud') && cfg.cloudApi) {
+    if (!phone) {
+      delivery.errors.push('WhatsApp Cloud API requiere un teléfono destino con prefijo de país.');
+    } else {
+      var cloudEndpoint = 'https://graph.facebook.com/v20.0/' + encodeURIComponent(process.env.WHATSAPP_PHONE_NUMBER_ID) + '/messages';
+      var cloudHeaders = { Authorization: 'Bearer ' + process.env.WHATSAPP_CLOUD_TOKEN };
+      var sentCount = 0;
+      for (var c = 0; c < prepared.length; c++) {
+        var targetItem = prepared[c];
+        var photoList = includeGallery ? targetItem.galleryUrls.slice(0, 4) : [targetItem.imageUrl];
+        for (var pIdx = 0; pIdx < photoList.length; pIdx++) {
+          var imgCaption = pIdx === 0 ? (prepared.length === 1 && customMessage ? customMessage : targetItem.caption) : '';
+          try {
+            var cloudRes = await postJson(cloudEndpoint, cloudHeaders, {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: phone,
+              type: 'image',
+              image: imgCaption ? { link: photoList[pIdx], caption: imgCaption.slice(0, 1024) } : { link: photoList[pIdx] }
+            }, 15000);
+            if (cloudRes.status >= 200 && cloudRes.status < 300) {
+              sentCount += 1;
+            } else {
+              delivery.errors.push('WhatsApp Cloud (' + targetItem.id + '): HTTP ' + cloudRes.status + ' ' + cloudRes.body.slice(0, 160));
+            }
+          } catch (cloudErr) {
+            delivery.errors.push('WhatsApp Cloud (' + targetItem.id + '): ' + cloudErr.message);
+          }
+        }
+      }
+      if (sentCount > 0) {
+        delivery.dispatched = true;
+        delivery.channel = 'cloud';
+        delivery.photosSent = sentCount;
+      }
+    }
+  }
+
+  if (!delivery.dispatched && (reqChannel === 'auto' || reqChannel === 'webhook') && cfg.webhook) {
+    try {
+      var hookHeaders = {};
+      if (process.env.WHATSAPP_WEBHOOK_TOKEN) {
+        hookHeaders.Authorization = 'Bearer ' + process.env.WHATSAPP_WEBHOOK_TOKEN;
+      }
+      var hookRes = await postJson(process.env.WHATSAPP_WEBHOOK_URL, hookHeaders, {
+        event: 'whatsapp_promo',
+        store: STORE.name,
+        to: phone,
+        message: finalMessage,
+        whatsappUrl: whatsappUrl,
+        items: prepared
+      }, 15000);
+      if (hookRes.status >= 200 && hookRes.status < 300) {
+        delivery.dispatched = true;
+        delivery.channel = 'webhook';
+        delivery.photosSent = prepared.reduce(function (acc, it) { return acc + (includeGallery ? it.galleryUrls.length : 1); }, 0);
+      } else {
+        delivery.errors.push('Webhook WhatsApp: HTTP ' + hookRes.status + ' ' + hookRes.body.slice(0, 160));
+      }
+    } catch (hookErr) {
+      delivery.errors.push('Webhook WhatsApp: ' + hookErr.message);
+    }
+  }
+
+  if (!delivery.dispatched && (reqChannel === 'auto' || reqChannel === 'callmebot') && cfg.callmebot) {
+    try {
+      var cmTarget = 'https://api.callmebot.com/whatsapp.php?phone=' +
+        encodeURIComponent(process.env.CALLMEBOT_PHONE) +
+        '&text=' + encodeURIComponent(finalMessage) +
+        '&apikey=' + encodeURIComponent(process.env.CALLMEBOT_APIKEY);
+      var cmRes = await getUrl(cmTarget, 15000);
+      if (cmRes.status >= 200 && cmRes.status < 300) {
+        delivery.dispatched = true;
+        delivery.channel = 'callmebot';
+        delivery.photosSent = 0;
+      } else {
+        delivery.errors.push('CallMeBot: HTTP ' + cmRes.status);
+      }
+    } catch (cmErr) {
+      delivery.errors.push('CallMeBot: ' + cmErr.message);
+    }
+  }
+
+  return {
+    ok: true,
+    phone: phone,
+    baseUrl: baseUrl,
+    message: finalMessage,
+    whatsappUrl: whatsappUrl,
+    items: prepared,
+    delivery: delivery
+  };
+}
+
 function rateLimited(ip) {
   var now = Date.now();
   var windowMs = 10 * 60 * 1000;
@@ -1224,7 +1532,11 @@ function serveStatic(req, res, pathname) {
 async function handle(req, res) {
   var parsed = urlLib.parse(req.url, true);
   var apiOverride = parsed.query && typeof parsed.query.__api === 'string' ? parsed.query.__api : '';
-  var pathname = (apiOverride && apiOverride.indexOf('/api/') === 0) ? apiOverride : (parsed.pathname || '/');
+  var pathname = (apiOverride && (apiOverride.indexOf('/api/') === 0 || apiOverride.indexOf('/p/') === 0)) ? apiOverride : (parsed.pathname || '/');
+
+  if (req.method === 'GET' && pathname.indexOf('/p/') === 0) {
+    return serveProductSharePage(req, res, pathname.slice('/p/'.length));
+  }
 
   if (req.method === 'GET' && pathname.indexOf('/img/') === 0) {
     return serveImage(req, res, pathname);
@@ -1232,6 +1544,24 @@ async function handle(req, res) {
 
   if (req.method === 'GET' && pathname.indexOf('/api/logo/') === 0) {
     return serveTeamLogo(req, res, pathname);
+  }
+
+  if (pathname === '/api/whatsapp-promo/config' && req.method === 'GET') {
+    return sendJson(res, 200, getWhatsappPromoConfig(), req);
+  }
+
+  if (pathname === '/api/whatsapp-promo/send' && req.method === 'POST') {
+    var promoAuth = isAdminAuthorized(req, parsed);
+    if (!promoAuth.ok) return sendJson(res, promoAuth.status, { error: promoAuth.error }, req);
+    try {
+      var wpRaw = await readBody(req, 64 * 1024);
+      var wpBody = JSON.parse(wpRaw || '{}');
+      var wpOut = await dispatchWhatsappPromo(req, wpBody);
+      return sendJson(res, 200, wpOut, req);
+    } catch (wpErr) {
+      var wpStatus = /Selecciona|Máximo|no válido|no encontrada/i.test(wpErr.message || '') ? 400 : 500;
+      return sendJson(res, wpStatus, { error: wpErr.message || 'No se pudo preparar el envío de WhatsApp' }, req);
+    }
   }
 
   if (pathname === '/api/config' && req.method === 'GET') {
